@@ -1,0 +1,528 @@
+:root {
+  color: #1e2525;
+  background: #f5f7f2;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --ink: #1e2525;
+  --muted: #66716c;
+  --line: #d9ded4;
+  --panel: #ffffff;
+  --panel-strong: #edf5ee;
+  --green: #16784f;
+  --green-dark: #0d5137;
+  --amber: #b46b1d;
+  --coral: #b84d38;
+  --blue: #236589;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1360px;
+  margin: 0 auto 18px;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.topbar p,
+.notice-band p,
+.deepclean-copy p,
+.footer {
+  color: var(--muted);
+}
+
+.credit-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  white-space: nowrap;
+}
+
+.notice-band,
+.account-band,
+.deepclean-band {
+  max-width: 1360px;
+  margin: 0 auto 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
+.account-band,
+.notice-band {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.account-band {
+  justify-content: space-between;
+  background: var(--panel);
+}
+
+.account-band .panel-header {
+  margin-bottom: 4px;
+}
+
+.account-band button,
+.auth-controls button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 12px;
+  background: #1e2525;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.auth-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-controls input {
+  min-height: 40px;
+  width: min(280px, 52vw);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 12px;
+}
+
+.account-status {
+  color: var(--blue);
+  font-size: 14px;
+}
+
+.workspace-grid {
+  max-width: 1360px;
+  margin: 0 auto 18px;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(300px, 0.8fr) minmax(280px, 1fr);
+  gap: 18px;
+}
+
+.tool-panel,
+.plan-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 16px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.panel-header h2 {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.drop-zone,
+.output-frame {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px dashed #b8c2b8;
+  border-radius: 8px;
+  background: #fafbf8;
+  overflow: hidden;
+}
+
+.drop-zone {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.drop-zone span,
+.output-frame span {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.drop-zone img,
+.output-frame img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.file-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+}
+
+.field span,
+.check-row,
+.range-field span {
+  color: #44504a;
+  font-size: 14px;
+}
+
+.field input,
+select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.range-field input {
+  padding: 0;
+  min-height: 28px;
+  accent-color: var(--green);
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  min-height: 40px;
+  border: 0;
+  background: #ffffff;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.segmented button.active {
+  background: #dceee2;
+  color: var(--green-dark);
+  font-weight: 700;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+}
+
+.primary-action,
+.download-button,
+.deepclean-controls button,
+.plan-card a,
+.plan-card span,
+.footer button,
+.inline-warning button {
+  min-height: 42px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primary-action {
+  width: 100%;
+  background: var(--green);
+  color: white;
+  font-weight: 700;
+}
+
+.primary-action:disabled,
+.download-button.disabled,
+.deepclean-controls button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.download-button {
+  width: 100%;
+  margin-top: 12px;
+  background: #1e2525;
+  color: white;
+  font-weight: 700;
+}
+
+.report-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.metric {
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fbfcfa;
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.metric strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.inline-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--amber);
+  font-size: 14px;
+}
+
+.inline-warning button {
+  padding: 0 10px;
+  background: #fff6e8;
+  color: #7a4713;
+  border-color: #efc58d;
+}
+
+.error-text {
+  color: var(--coral);
+  margin-top: 10px;
+}
+
+.deepclean-band {
+  display: grid;
+  grid-template-columns: 1fr minmax(320px, 520px);
+  gap: 16px;
+  padding: 16px;
+}
+
+.deepclean-controls {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.deepclean-controls button {
+  padding: 0 14px;
+  color: white;
+  background: var(--blue);
+}
+
+.deepclean-status {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.pricing-grid {
+  max-width: 1360px;
+  margin: 0 auto 18px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.plan-card {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plan-card h3 {
+  font-size: 16px;
+}
+
+.plan-card strong {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 24px;
+}
+
+.plan-card p {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.plan-card a,
+.plan-card span {
+  padding: 0 12px;
+  color: var(--green-dark);
+  background: #e6f3e9;
+  border-color: #c6dfcc;
+  white-space: nowrap;
+}
+
+.footer {
+  max-width: 1360px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.footer button {
+  padding: 0 12px;
+  background: #ffffff;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1100px) {
+  .workspace-grid,
+  .deepclean-band,
+  .pricing-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .workspace-grid .tool-panel:last-child,
+  .deepclean-status {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    padding: 14px;
+  }
+
+  .topbar,
+  .account-band,
+  .footer,
+  .notice-band {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace-grid,
+  .deepclean-band,
+  .pricing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .deepclean-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-card {
+    align-items: center;
+  }
+
+  h1 {
+    font-size: 28px;
+  }
+}

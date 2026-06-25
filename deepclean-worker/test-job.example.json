@@ -1,0 +1,11 @@
+{
+  "input": {
+    "job_id": "00000000-0000-4000-8000-000000000000",
+    "profile": "standard",
+    "output_mode": "sealed",
+    "input_url": "https://example.com/signed-input-url",
+    "output_path": "user-id/job-id/output.jpg",
+    "webhook_url": "https://your-project.supabase.co/functions/v1/deepclean-webhook",
+    "webhook_secret": "same-value-as-DEEPCLEAN_WEBHOOK_SECRET"
+  }
+}

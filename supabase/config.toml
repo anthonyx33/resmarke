@@ -1,0 +1,13 @@
+project_id = "resmarke"
+
+[functions.create-deepclean-job]
+verify_jwt = true
+
+[functions.dispatch-deepclean-job]
+verify_jwt = true
+
+[functions.spend-privacy-credit]
+verify_jwt = true
+
+[functions.deepclean-webhook]
+verify_jwt = false
