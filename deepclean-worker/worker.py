@@ -319,24 +319,30 @@ def quality_check(input_path, output_path):
 
 
 def finalize_output(cleaned_path, output_path, output_mode, creator_id):
+    # Preserve the creator's native resolution. The engine already restored the
+    # cleaned image to the original size; here we just cap the final export
+    # (keeps JPEGs sane on huge inputs) and apply the Fibonacci-88 seal at that
+    # size. The seal's 8x8 block distribution works at any dimension.
+    MAX_FINAL = 2048
     image = Image.open(cleaned_path).convert("RGB")
-    canvas = Image.new("RGB", (1800, 1800), (247, 248, 244))
-    image.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
-    x = (1800 - image.width) // 2
-    y = (1800 - image.height) // 2
-    canvas.paste(image, (x, y))
+    if max(image.width, image.height) > MAX_FINAL:
+        image.thumbnail((MAX_FINAL, MAX_FINAL), Image.Resampling.LANCZOS)
 
     if output_mode in ("sealed", "sealed-stamped"):
-        apply_fibonacci_88(canvas, creator_id)
+        apply_fibonacci_88(image, creator_id)
 
     if output_mode == "sealed-stamped":
-        draw = ImageDraw.Draw(canvas)
+        draw = ImageDraw.Draw(image)
         label = "ResMarke"
-        box = (1428, 1718, 1768, 1772)
+        w, h = image.size
+        bw = min(340, w - 64)
+        bh = min(54, h - 32)
+        margin = 32
+        box = (w - bw - margin, h - bh - margin, w - margin, h - margin)
         draw.rounded_rectangle(box, radius=8, fill=(30, 37, 37))
-        draw.text((1460, 1734), label, fill=(255, 255, 255), font=ImageFont.load_default())
+        draw.text((box[0] + 32, box[1] + 18), label, fill=(255, 255, 255), font=ImageFont.load_default())
 
-    canvas.save(output_path, format="JPEG", quality=88, optimize=True)
+    image.save(output_path, format="JPEG", quality=88, optimize=True)
 
 
 def apply_fibonacci_88(image, creator_id):

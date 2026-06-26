@@ -231,24 +231,8 @@ custom-node pack that didn't load, or a model file with the wrong name — all 1
 filenames in `bootstrap_models.py` already match the workflow exactly, so a name
 mismatch means someone edited the workflow after export.
 
-**Output is always 1800×1800, not the original size**
-This is current behavior, not a bug: `finalize_output()` places the cleaned
-image on a 1800×1800 canvas (letterboxed) and applies the Fibonacci-88 seal. So
-the "restore to original resolution" in the engine stage is currently
-overruled by finalize. If you want true native-resolution output, `finalize_output`
-in `worker.py` needs to change (the seal works at any size). Decide before
-beta — see the open question below.
-
----
-
-## Open question to resolve before beta
-
-**Output dimensions.** `finalize_output()` forces a 1800×1800 JPEG. Your
-"restore to original resolution" optimization runs in the engine but is then
-re-cropped. Two options:
-- **A (current):** keep 1800×1800 canvas — consistent card-like output, seal
-  embeds uniformly. Restore-to-original only marginally sharpens the 1800 result.
-- **B:** preserve the cleaned image's native resolution (cap ~2048), seal at that
-  size — true "original size back" experience, but variable output dimensions.
-
-This is a product call, not a code fix — flag it before you ship the beta.
+**Output dimensions look wrong**
+Output preserves the creator's native resolution, capped at 2048 px max and
+sealed with Fibonacci-88 at that size (no letterboxing). If an output is
+unexpectedly small, check `report.engine.output_resolution` — the cap is
+`MAX_FINAL = 2048` in `finalize_output()`; raise it if you ship larger.
