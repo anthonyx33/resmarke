@@ -6,6 +6,7 @@ import {
   Cpu,
   Download,
   Fingerprint,
+  Gauge,
   ImageOff,
   Loader2,
   Lock,
@@ -18,7 +19,7 @@ import {
   Wallet
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { hasSupabaseConfig } from "./lib/config";
+import { config, hasSupabaseConfig } from "./lib/config";
 import {
   grantLocalPrivacyCredits,
   readLocalCredits,
@@ -42,6 +43,11 @@ import {
   type DeepCleanOutputMode,
   type DeepCleanProfile
 } from "./lib/deepcleanClient";
+import {
+  getAdminRunpodEndpoint,
+  updateAdminRunpodEndpoint,
+  type AdminRunpodEndpoint
+} from "./lib/adminRunpodClient";
 import { supabase } from "./lib/supabase";
 
 type ProcessingState = "idle" | "processing" | "done" | "error";
@@ -85,10 +91,21 @@ export default function App() {
   const deepCleanPollRef = useRef<number | null>(null);
   const [authEmail, setAuthEmail] = useState("");
   const [userId, setUserId] = useState<string>("");
+  const [userEmail, setUserEmail] = useState<string>("");
   const [authStatus, setAuthStatus] = useState("");
+  const [adminEndpoint, setAdminEndpoint] = useState<AdminRunpodEndpoint | null>(null);
+  const [adminIdleTimeout, setAdminIdleTimeout] = useState(300);
+  const [adminWorkersMin, setAdminWorkersMin] = useState(0);
+  const [adminWorkersMax, setAdminWorkersMax] = useState(1);
+  const [adminStatus, setAdminStatus] = useState("");
+  const [adminBusy, setAdminBusy] = useState(false);
 
   // Tool works without sign-in (accounts come later). Sign-in upgrades to Supabase credits.
   const canProcess = !!file && state !== "processing" && credits.privacyCredits > 0;
+  const isAdminUi =
+    !!userEmail &&
+    config.adminEmails.length > 0 &&
+    config.adminEmails.includes(userEmail.toLowerCase());
 
   const outputName = useMemo(() => {
     const ext = outputFormat === "png" ? "png" : outputFormat === "webp" ? "webp" : "jpg";
@@ -114,17 +131,23 @@ export default function App() {
     supabase.auth.getSession().then(({ data }) => {
       const user = data.session?.user;
       setUserId(user?.id ?? "");
+      setUserEmail(user?.email ?? "");
       if (user) void refreshSupabaseCredits(user.id);
     });
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       const user = session?.user;
       setUserId(user?.id ?? "");
+      setUserEmail(user?.email ?? "");
       if (user) void refreshSupabaseCredits(user.id);
     });
 
     return () => data.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (isAdminUi) void refreshAdminEndpoint();
+  }, [isAdminUi]);
 
   async function refreshSupabaseCredits(nextUserId: string) {
     if (!supabase) return;
@@ -160,6 +183,8 @@ export default function App() {
     if (!supabase) return;
     await supabase.auth.signOut();
     setUserId("");
+    setUserEmail("");
+    setAdminEndpoint(null);
     setCredits(readLocalCredits());
     setAuthStatus("Signed out.");
   }
@@ -330,6 +355,55 @@ export default function App() {
 
     void tick();
     deepCleanPollRef.current = window.setInterval(tick, 3500);
+  }
+
+  async function refreshAdminEndpoint() {
+    if (!isAdminUi) return;
+    setAdminBusy(true);
+    setAdminStatus("Reading RunPod endpoint...");
+    try {
+      const endpoint = await getAdminRunpodEndpoint();
+      setAdminEndpoint(endpoint);
+      setAdminIdleTimeout(endpoint.idleTimeout);
+      setAdminWorkersMin(endpoint.workersMin);
+      setAdminWorkersMax(endpoint.workersMax);
+      setAdminStatus("RunPod endpoint loaded.");
+    } catch (nextError) {
+      setAdminStatus(nextError instanceof Error ? nextError.message : "Could not load endpoint.");
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function applyAdminPreset(preset: "sleep" | "warm-window" | "keep-warm" | "manual") {
+    if (!isAdminUi) return;
+    setAdminBusy(true);
+    const labels = {
+      sleep: "Sleep mode",
+      "warm-window": "Warm window",
+      "keep-warm": "Keep warm",
+      manual: "Manual settings"
+    };
+    setAdminStatus(`Applying ${labels[preset]}...`);
+    try {
+      const endpoint = await updateAdminRunpodEndpoint({
+        preset,
+        idleTimeout: adminIdleTimeout,
+        workersMin: adminWorkersMin,
+        workersMax: adminWorkersMax
+      });
+      setAdminEndpoint(endpoint);
+      setAdminIdleTimeout(endpoint.idleTimeout);
+      setAdminWorkersMin(endpoint.workersMin);
+      setAdminWorkersMax(endpoint.workersMax);
+      setAdminStatus(
+        `${labels[preset]} applied: active ${endpoint.workersMin}, max ${endpoint.workersMax}, idle ${endpoint.idleTimeout}s.`
+      );
+    } catch (nextError) {
+      setAdminStatus(nextError instanceof Error ? nextError.message : "Could not update endpoint.");
+    } finally {
+      setAdminBusy(false);
+    }
   }
 
   function resetAll() {
@@ -744,6 +818,119 @@ export default function App() {
                 </a>
               ) : null}
             </div>
+
+            {isAdminUi ? (
+              <div className="admin-panel">
+                <div className="deepclean-head">
+                  <Gauge size={20} aria-hidden="true" />
+                  <h3>Admin GPU standby</h3>
+                  <span className="tag">Private</span>
+                </div>
+                <p className="desc">
+                  Control RunPod worker cost for your personal/admin sessions. Sleep mode shuts the
+                  worker down quickly; warm window keeps it ready briefly after a job; keep warm
+                  holds one active worker until you switch it off.
+                </p>
+
+                <div className="admin-metrics">
+                  <Metric label="Endpoint" value={adminEndpoint?.name ?? "Not loaded"} />
+                  <Metric label="Active" value={String(adminEndpoint?.workersMin ?? "—")} />
+                  <Metric label="Max" value={String(adminEndpoint?.workersMax ?? "—")} />
+                  <Metric
+                    label="Idle timeout"
+                    value={
+                      typeof adminEndpoint?.idleTimeout === "number"
+                        ? `${adminEndpoint.idleTimeout}s`
+                        : "—"
+                    }
+                  />
+                </div>
+
+                <div className="deepclean-controls admin-controls">
+                  <label className="field">
+                    <span>Idle timeout</span>
+                    <input
+                      className="input"
+                      type="number"
+                      min={5}
+                      max={3600}
+                      value={adminIdleTimeout}
+                      onChange={(event) => setAdminIdleTimeout(Number(event.target.value))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Active workers</span>
+                    <select
+                      className="select"
+                      value={adminWorkersMin}
+                      onChange={(event) => setAdminWorkersMin(Number(event.target.value))}
+                    >
+                      <option value={0}>0 · scale to zero</option>
+                      <option value={1}>1 · keep warm</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Max workers</span>
+                    <select
+                      className="select"
+                      value={adminWorkersMax}
+                      onChange={(event) => setAdminWorkersMax(Number(event.target.value))}
+                    >
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                    </select>
+                  </label>
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    disabled={adminBusy}
+                    onClick={refreshAdminEndpoint}
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="admin-actions">
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    disabled={adminBusy}
+                    onClick={() => applyAdminPreset("sleep")}
+                  >
+                    Sleep now
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    disabled={adminBusy}
+                    onClick={() => applyAdminPreset("warm-window")}
+                  >
+                    Warm window
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    disabled={adminBusy}
+                    onClick={() => applyAdminPreset("keep-warm")}
+                  >
+                    Keep warm
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    disabled={adminBusy}
+                    onClick={() => applyAdminPreset("manual")}
+                  >
+                    Apply manual
+                  </button>
+                </div>
+
+                <p className="deepclean-status">
+                  {adminStatus || "Admin controls are available for this signed-in account."}
+                </p>
+              </div>
+            ) : null}
           </section>
         )}
 

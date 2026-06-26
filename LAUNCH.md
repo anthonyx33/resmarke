@@ -38,6 +38,7 @@ VITE_SUPABASE_ANON_KEY=
 VITE_STRIPE_TRIAL_LINK=
 VITE_STRIPE_PRO_LINK=
 VITE_STRIPE_PRO_PLUS_LINK=
+VITE_ADMIN_EMAILS=your-admin-email@example.com
 ```
 
 ## 2. Supabase Setup
@@ -73,6 +74,7 @@ supabase functions deploy create-deepclean-job
 supabase functions deploy dispatch-deepclean-job
 supabase functions deploy get-deepclean-job
 supabase functions deploy cancel-deepclean-job
+supabase functions deploy admin-runpod-endpoint
 supabase functions deploy deepclean-webhook --no-verify-jwt
 ```
 
@@ -82,6 +84,7 @@ Set Supabase secrets:
 supabase secrets set RUNPOD_API_KEY=...
 supabase secrets set RUNPOD_ENDPOINT_ID=...
 supabase secrets set DEEPCLEAN_WEBHOOK_SECRET=use-a-long-random-string
+supabase secrets set ADMIN_EMAILS=your-admin-email@example.com
 ```
 
 Supabase automatically provides `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions.

@@ -15,5 +15,8 @@ verify_jwt = true
 [functions.cancel-deepclean-job]
 verify_jwt = true
 
+[functions.admin-runpod-endpoint]
+verify_jwt = true
+
 [functions.deepclean-webhook]
 verify_jwt = false

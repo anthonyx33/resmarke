@@ -888,6 +888,41 @@ html[data-theme="dark"] .card {
   color: var(--text-muted);
 }
 
+.admin-panel {
+  position: relative;
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 22px;
+  box-shadow: var(--shadow-card);
+}
+
+.admin-panel p.desc {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 760px;
+}
+
+.admin-metrics {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.admin-controls {
+  grid-template-columns: 1fr 1fr 1fr auto;
+}
+
+.admin-actions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 /* ---------------- Features ---------------- */
 
 .features {
@@ -1319,6 +1354,14 @@ html {
     grid-template-columns: 1fr;
   }
 
+  .admin-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-controls {
+    grid-template-columns: 1fr;
+  }
+
   .section {
     padding: 60px 0;
   }
@@ -1348,5 +1391,9 @@ html {
   .promo,
   .cta-band {
     padding: 40px 22px;
+  }
+
+  .admin-metrics {
+    grid-template-columns: 1fr;
   }
 }
