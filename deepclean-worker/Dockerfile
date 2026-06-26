@@ -36,10 +36,12 @@ WORKDIR /app/ComfyUI/custom_nodes
 RUN for repo in \
     "https://github.com/city96/ComfyUI-GGUF.git ComfyUI-GGUF" \
     "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git ComfyUI-Impact-Pack" \
+    "https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git ComfyUI-Impact-Subpack" \
     "https://github.com/rgthree/rgthree-comfy.git rgthree-comfy" \
     "https://github.com/Fannovel16/comfyui_controlnet_aux.git comfyui_controlnet_aux" \
     "https://github.com/kijai/ComfyUI-KJNodes.git ComfyUI-KJNodes" \
     "https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch.git ComfyUI-Inpaint-CropAndStitch" \
+    "https://github.com/BadCafeCode/masquerade-nodes-comfyui.git masquerade-nodes-comfyui" \
     "https://github.com/ClownsharkBatwing/RES4LYF.git RES4LYF" \
     ; do \
         set -- $repo; \

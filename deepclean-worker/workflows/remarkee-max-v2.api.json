@@ -1,0 +1,762 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 175980638202027,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "sgm_uniform",
+      "denoise": [
+        "595",
+        0
+      ],
+      "model": [
+        "552",
+        0
+      ],
+      "positive": [
+        "9",
+        0
+      ],
+      "negative": [
+        "10",
+        0
+      ],
+      "latent_image": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "6": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "564",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "8": {
+    "inputs": {
+      "pixels": [
+        "11",
+        0
+      ],
+      "vae": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "9": {
+    "inputs": {
+      "text": "ultra clear and smoothe skin, spotless skin",
+      "clip": [
+        "564",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "10": {
+    "inputs": {
+      "text": "moles, freckes, high detail skin",
+      "clip": [
+        "564",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "input.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "12": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "61": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "62": {
+    "inputs": {
+      "filename_prefix": "RemarkeeMax",
+      "images": [
+        "574",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "401": {
+    "inputs": {
+      "name": "qwen_image_canny_diffsynth_controlnet.safetensors"
+    },
+    "class_type": "ModelPatchLoader",
+    "_meta": {
+      "title": "ModelPatchLoader"
+    }
+  },
+  "516": {
+    "inputs": {
+      "model_name": "bbox/yolov8n-face.pt"
+    },
+    "class_type": "UltralyticsDetectorProvider",
+    "_meta": {
+      "title": "UltralyticsDetectorProvider"
+    }
+  },
+  "520": {
+    "inputs": {
+      "image": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "Get Image Size",
+    "_meta": {
+      "title": "Get Image Size"
+    }
+  },
+  "523": {
+    "inputs": {
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 64,
+      "temporal_overlap": 8,
+      "pixels": [
+        "534",
+        1
+      ],
+      "vae": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "VAEEncodeTiled",
+    "_meta": {
+      "title": "VAE Encode (Tiled)"
+    }
+  },
+  "534": {
+    "inputs": {
+      "downscale_algorithm": "bicubic",
+      "upscale_algorithm": "bicubic",
+      "preresize": false,
+      "preresize_mode": "ensure minimum resolution",
+      "preresize_min_width": 1024,
+      "preresize_min_height": 1024,
+      "preresize_max_width": 16384,
+      "preresize_max_height": 16384,
+      "mask_fill_holes": true,
+      "mask_expand_pixels": 0,
+      "mask_invert": false,
+      "mask_blend_pixels": 24,
+      "mask_hipass_filter": 0.1,
+      "extend_for_outpainting": false,
+      "extend_up_factor": 1,
+      "extend_down_factor": 1,
+      "extend_left_factor": 1,
+      "extend_right_factor": 1,
+      "context_from_mask_extend_factor": 1,
+      "output_resize_to_target_size": true,
+      "output_target_width": 1024,
+      "output_target_height": 1024,
+      "output_padding": "32",
+      "device_mode": "cpu (compatible)",
+      "image": [
+        "568",
+        0
+      ],
+      "mask": [
+        "554",
+        0
+      ]
+    },
+    "class_type": "InpaintCropImproved",
+    "_meta": {
+      "title": "✂️ Inpaint Crop"
+    }
+  },
+  "541": {
+    "inputs": {
+      "downscale_algorithm": "bilinear",
+      "upscale_algorithm": "lanczos",
+      "preresize": true,
+      "preresize_mode": "ensure minimum resolution",
+      "preresize_min_width": 768,
+      "preresize_min_height": 768,
+      "preresize_max_width": 16384,
+      "preresize_max_height": 16384,
+      "mask_fill_holes": true,
+      "mask_expand_pixels": 0,
+      "mask_invert": false,
+      "mask_blend_pixels": 32,
+      "mask_hipass_filter": 0.1,
+      "extend_for_outpainting": false,
+      "extend_up_factor": 1,
+      "extend_down_factor": 1,
+      "extend_left_factor": 1,
+      "extend_right_factor": 1,
+      "context_from_mask_extend_factor": 1,
+      "output_resize_to_target_size": true,
+      "output_target_width": 768,
+      "output_target_height": 768,
+      "output_padding": "32",
+      "device_mode": "cpu (compatible)",
+      "image": [
+        "568",
+        0
+      ],
+      "mask": [
+        "554",
+        0
+      ]
+    },
+    "class_type": "InpaintCropImproved",
+    "_meta": {
+      "title": "✂️ Inpaint Crop"
+    }
+  },
+  "542": {
+    "inputs": {
+      "threshold": 0.35,
+      "dilation": 8,
+      "bbox_detector": [
+        "516",
+        0
+      ],
+      "image": [
+        "61",
+        0
+      ]
+    },
+    "class_type": "BboxDetectorCombined_v2",
+    "_meta": {
+      "title": "BboxDetectorCombined_v2 (mask for output crop)"
+    }
+  },
+  "543": {
+    "inputs": {
+      "threshold": 0.25,
+      "dilation": 4,
+      "bbox_detector": [
+        "516",
+        0
+      ],
+      "image": [
+        "576",
+        0
+      ]
+    },
+    "class_type": "BboxDetectorCombined_v2",
+    "_meta": {
+      "title": "BboxDetectorCombined_v2 (mask for reference crop)"
+    }
+  },
+  "545": {
+    "inputs": {
+      "images": [
+        "541",
+        1
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Preview Image"
+    }
+  },
+  "551": {
+    "inputs": {
+      "low_threshold": 0.05,
+      "high_threshold": 0.25,
+      "image": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "Canny",
+    "_meta": {
+      "title": "Canny (global structure)"
+    }
+  },
+  "552": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "6",
+        0
+      ],
+      "model_patch": [
+        "401",
+        0
+      ],
+      "vae": [
+        "12",
+        0
+      ],
+      "image": [
+        "551",
+        0
+      ]
+    },
+    "class_type": "QwenImageDiffsynthControlnet",
+    "_meta": {
+      "title": "QwenImageDiffsynthControlnet (global structure)"
+    }
+  },
+  "553": {
+    "inputs": {
+      "combined": false,
+      "crop_factor": 2.5,
+      "bbox_fill": false,
+      "drop_size": 2,
+      "contour_fill": true,
+      "mask": [
+        "543",
+        0
+      ]
+    },
+    "class_type": "MaskToSEGS",
+    "_meta": {
+      "title": "MASK to SEGS"
+    }
+  },
+  "554": {
+    "inputs": {
+      "segs": [
+        "553",
+        0
+      ]
+    },
+    "class_type": "ImpactSEGSToMaskBatch",
+    "_meta": {
+      "title": "SEGS to Mask Batch"
+    }
+  },
+  "555": {
+    "inputs": {
+      "combined": false,
+      "crop_factor": 1,
+      "bbox_fill": false,
+      "drop_size": 10,
+      "contour_fill": false,
+      "mask": [
+        "542",
+        0
+      ]
+    },
+    "class_type": "MaskToSEGS",
+    "_meta": {
+      "title": "MASK to SEGS"
+    }
+  },
+  "556": {
+    "inputs": {
+      "segs": [
+        "555",
+        0
+      ]
+    },
+    "class_type": "ImpactSEGSToMaskBatch",
+    "_meta": {
+      "title": "SEGS to Mask Batch"
+    }
+  },
+  "564": {
+    "inputs": {
+      "PowerLoraLoaderHeaderWidget": {
+        "type": "PowerLoraLoaderHeaderWidget"
+      },
+      "lora_1": {
+        "on": true,
+        "lora": "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors",
+        "strength": 0.8
+      },
+      "➕ Add Lora": "",
+      "model": [
+        "605",
+        0
+      ],
+      "clip": [
+        "608",
+        0
+      ]
+    },
+    "class_type": "Power Lora Loader (rgthree)",
+    "_meta": {
+      "title": "Power Lora Loader (rgthree)"
+    }
+  },
+  "568": {
+    "inputs": {
+      "width": [
+        "520",
+        0
+      ],
+      "height": [
+        "520",
+        1
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "resize",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 1,
+      "device": "cpu",
+      "image": [
+        "61",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "574": {
+    "inputs": {
+      "feather": 10,
+      "alpha": 255,
+      "image": [
+        "568",
+        0
+      ],
+      "segs": [
+        "592",
+        0
+      ]
+    },
+    "class_type": "SEGSPaste",
+    "_meta": {
+      "title": "SEGSPaste"
+    }
+  },
+  "575": {
+    "inputs": {
+      "image": [
+        "568",
+        0
+      ]
+    },
+    "class_type": "Get Image Size",
+    "_meta": {
+      "title": "Get Image Size"
+    }
+  },
+  "576": {
+    "inputs": {
+      "width": [
+        "575",
+        0
+      ],
+      "height": [
+        "575",
+        1
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 1,
+      "device": "cpu",
+      "image": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "581": {
+    "inputs": {
+      "text": "blurry, ugly, bad quality,",
+      "clip": [
+        "607",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "582": {
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "583": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "607",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "592": {
+    "inputs": {
+      "guide_size": 768,
+      "guide_size_for": true,
+      "max_size": 1024,
+      "seed": 796407097428128,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "res_2s",
+      "scheduler": "bong_tangent",
+      "denoise": 0.1,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "refiner_ratio": 0.2,
+      "batch_size": 1,
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 20,
+      "adaptive_denoise": true,
+      "adaptive_mode": "largest_face",
+      "adaptive_ratio": 0.03,
+      "adaptive_denoise_min": 0.05,
+      "adaptive_denoise_max": 0.28,
+      "image": [
+        "576",
+        0
+      ],
+      "segs": [
+        "613",
+        0
+      ],
+      "model": [
+        "606",
+        0
+      ],
+      "clip": [
+        "607",
+        0
+      ],
+      "vae": [
+        "582",
+        0
+      ],
+      "positive": [
+        "583",
+        0
+      ],
+      "negative": [
+        "581",
+        0
+      ]
+    },
+    "class_type": "SEGSDetailerModelSwap",
+    "_meta": {
+      "title": "Remarkee Max Facedetailer (Legacy)"
+    }
+  },
+  "595": {
+    "inputs": {
+      "adaptive_level": 6,
+      "denoise_min": 0.08,
+      "denoise_max": 0.15,
+      "image": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "RemarkeeMax-AdaptiveDenoise",
+    "_meta": {
+      "title": "Remarkee Max Adaptive Denoise"
+    }
+  },
+  "605": {
+    "inputs": {
+      "unet_name": "qwen-image-2512-Q4_K_M.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF)"
+    }
+  },
+  "606": {
+    "inputs": {
+      "unet_name": "z_image_turbo-Q4_K_M.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF)"
+    }
+  },
+  "607": {
+    "inputs": {
+      "clip_name": "Qwen_3_4b-imatrix-IQ4_XS.gguf",
+      "type": "lumina2"
+    },
+    "class_type": "CLIPLoaderGGUF",
+    "_meta": {
+      "title": "CLIPLoader (GGUF)"
+    }
+  },
+  "608": {
+    "inputs": {
+      "clip_name": "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+      "type": "lumina2"
+    },
+    "class_type": "CLIPLoaderGGUF",
+    "_meta": {
+      "title": "CLIPLoader (GGUF)"
+    }
+  },
+  "610": {
+    "inputs": {
+      "max_faces": 10,
+      "min_confidence": 0.5,
+      "resolution": 1024,
+      "image": [
+        "576",
+        0
+      ]
+    },
+    "class_type": "MediaPipe-FaceMeshPreprocessor",
+    "_meta": {
+      "title": "MediaPipe Face Mesh (face only)"
+    }
+  },
+  "611": {
+    "inputs": {
+      "crop_factor": 1.2,
+      "bbox_fill": false,
+      "crop_min_size": 32,
+      "drop_size": 8,
+      "dilation": 1,
+      "face": true,
+      "mouth": false,
+      "left_eyebrow": false,
+      "left_eye": false,
+      "left_pupil": false,
+      "right_eyebrow": false,
+      "right_eye": false,
+      "right_pupil": false,
+      "image": [
+        "610",
+        0
+      ]
+    },
+    "class_type": "MediaPipeFaceMeshToSEGS",
+    "_meta": {
+      "title": "Face Mesh To SEGS (strict face)"
+    }
+  },
+  "612": {
+    "inputs": {
+      "model_name": "sam_vit_b_01ec64.pth",
+      "device_mode": "AUTO"
+    },
+    "class_type": "SAMLoader",
+    "_meta": {
+      "title": "SAMLoader (multi-face fallback path)"
+    }
+  },
+  "613": {
+    "inputs": {
+      "bbox_threshold": 0.2,
+      "bbox_dilation": 0,
+      "crop_factor": 2.5,
+      "drop_size": 1,
+      "sub_threshold": 0.93,
+      "sub_dilation": 0,
+      "sub_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "post_dilation": 0,
+      "bbox_detector": [
+        "516",
+        0
+      ],
+      "image": [
+        "576",
+        0
+      ],
+      "sam_model_opt": [
+        "612",
+        0
+      ]
+    },
+    "class_type": "ImpactSimpleDetectorSEGS",
+    "_meta": {
+      "title": "Simple Detector (SEGS) - SAM refined faces"
+    }
+  },
+  "615": {
+    "inputs": {
+      "rgthree_comparer": {
+        "images": []
+      },
+      "image_a": [
+        "574",
+        0
+      ],
+      "image_b": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "Image Comparer (rgthree)",
+    "_meta": {
+      "title": "Image Comparer (rgthree)"
+    }
+  }
+}

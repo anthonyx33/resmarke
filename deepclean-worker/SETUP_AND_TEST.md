@@ -27,7 +27,7 @@ The workflow ships in `deepclean-worker/workflows/remarkee-max-v2.0.json`
 (editor format). ComfyUI's `/prompt` API needs the **API format**.
 
 1. Run ComfyUI locally with all 8 custom-node packs + the 10 models installed.
-   The pack list (7 public packs + the vendored Remarkee Max pack) is in the
+   The pack list (9 public packs + the vendored Remarkee Max pack) is in the
    `Dockerfile` clone block; the model list + download URLs are in
    `bootstrap_models.py`. Easiest: use a RunPod pod with the ComfyUI template,
    drop `custom_nodes/RemarkeeMax/` into `custom_nodes/`, clone the other 7
@@ -207,6 +207,14 @@ and our `max` output side by side. Faces and text are where differences show.
 
 **`workflow template missing` / `warmed: false`**
 You skipped step 1. Export `remarkee-max-v2.api.json`, rebuild, redeploy.
+
+**`Get Image Size` missing**
+Install `masquerade-nodes-comfyui`. The workflow also includes a KJNodes node
+with the same display name, so having KJNodes alone is not enough.
+
+**`UltralyticsDetectorProvider` missing**
+Install `ComfyUI-Impact-Subpack`. Newer Impact Pack releases keep this detector
+provider in the separate subpack.
 
 **RES4LYF / `res_2s` sampler not found → face path fails**
 RES4LYF is the most fragile install. If its `pip install` failed during the
