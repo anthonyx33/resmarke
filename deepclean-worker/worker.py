@@ -12,12 +12,12 @@ import requests
 import runpod
 from PIL import Image, ImageDraw, ImageFont
 
-# The cleaning engine is ComfyUI running the Synthid-Bypass v2 workflow, started
+# The cleaning engine is ComfyUI running the Remarkee Max workflow, started
 # as a localhost service by start.sh (see comfyui_client.py). The workflow
 # template is the API-format export at DEEPCLEAN_WORKFLOW (default
-# /app/workflows/synthid-bypass-v2.api.json — see workflows/README.md).
+# /app/workflows/remarkee-max-v2.api.json — see workflows/EXPORT.md).
 TEMPLATE_PATH = Path(
-    os.environ.get("DEEPCLEAN_WORKFLOW", "/app/workflows/synthid-bypass-v2.api.json")
+    os.environ.get("DEEPCLEAN_WORKFLOW", "/app/workflows/remarkee-max-v2.api.json")
 )
 
 # Profiles drive the python-side optimizations (resolution cap + restore-to-
@@ -162,7 +162,7 @@ def upload_output(storage_path, path):
 
 
 # ---------------------------------------------------------------------------
-# Engine: ComfyUI + Synthid-Bypass v2 workflow
+# Engine: ComfyUI + Remarkee Max workflow
 # ---------------------------------------------------------------------------
 
 def run_deepclean(input_path, output_path, profile):
@@ -227,7 +227,7 @@ def run_deepclean_comfyui(input_path, output_path, profile):
     return {
         "profile": profile,
         "method": "comfyui",
-        "engine": "synthid-bypass-v2",
+        "engine": "remarkee-max-v2",
         "params": public_profile_config(cfg),
         "seed": seed,
         "process_resolution": [proc_w, proc_h],
@@ -271,7 +271,7 @@ def warmup(profile):
         "profile": profile,
         "warmed": warmed,
         "warmup_error": err,
-        "engine": "synthid-bypass-v2",
+        "engine": "remarkee-max-v2",
         "runtime_ms": int((time.time() - started) * 1000),
         "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
         "engine_version": engine_version(),
@@ -437,10 +437,10 @@ def identify_image(path):
 def engine_version():
     if TEMPLATE_PATH.exists():
         try:
-            return f"comfyui+synthid-bypass-v2 template={sha256_file(TEMPLATE_PATH)[:12]}"
+            return f"comfyui+remarkee-max-v2 template={sha256_file(TEMPLATE_PATH)[:12]}"
         except Exception:
             pass
-    return "comfyui+synthid-bypass-v2 template=missing"
+    return "comfyui+remarkee-max-v2 template=missing"
 
 
 def tail(text, limit=2000):

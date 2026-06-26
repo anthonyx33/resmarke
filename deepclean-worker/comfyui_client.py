@@ -1,6 +1,6 @@
 """Thin client for the localhost ComfyUI service.
 
-The DeepClean engine is ComfyUI running the Synthid-Bypass v2 workflow. This
+The Remarkee Max engine is ComfyUI running the Remarkee Max workflow. This
 module talks to ComfyUI's HTTP API (http://127.0.0.1:8188 by default):
 
     upload_image(path) -> filename        POST /upload/image
@@ -13,7 +13,7 @@ module talks to ComfyUI's HTTP API (http://127.0.0.1:8188 by default):
 
 The workflow template is the **API format** (flat {node_id: {class_type, inputs}}),
 exported once from ComfyUI's UI via "Save (API Format)" — see
-workflows/README.md. We only mutate fields with stable, well-known API input
+workflows/EXPORT.md. We only mutate fields with stable, well-known API input
 names (LoadImage.image, KSampler.seed); the workflow's own AdaptiveDenoise node
 continues to drive per-resolution denoise untouched.
 """

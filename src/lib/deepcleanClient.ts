@@ -25,7 +25,7 @@ export async function createDeepCleanJob(params: {
   outputMode: DeepCleanOutputMode;
 }): Promise<DeepCleanJob> {
   if (!supabase) {
-    throw new Error("Supabase is not configured for DeepClean jobs.");
+    throw new Error("Supabase is not configured for Remarkee Max jobs.");
   }
 
   const { data, error } = await supabase.functions.invoke("create-deepclean-job", {
@@ -45,10 +45,10 @@ export async function createDeepCleanJob(params: {
 
 export async function uploadDeepCleanInput(job: DeepCleanJob, file: File): Promise<void> {
   if (!supabase) {
-    throw new Error("Supabase is not configured for DeepClean jobs.");
+    throw new Error("Supabase is not configured for Remarkee Max jobs.");
   }
   if (!job.inputPath || !job.uploadToken) {
-    throw new Error("DeepClean job is missing signed upload details.");
+    throw new Error("Remarkee Max job is missing signed upload details.");
   }
 
   const { error } = await supabase.storage
@@ -62,7 +62,7 @@ export async function uploadDeepCleanInput(job: DeepCleanJob, file: File): Promi
 
 export async function dispatchDeepCleanJob(jobId: string): Promise<void> {
   if (!supabase) {
-    throw new Error("Supabase is not configured for DeepClean jobs.");
+    throw new Error("Supabase is not configured for Remarkee Max jobs.");
   }
 
   const { error } = await supabase.functions.invoke("dispatch-deepclean-job", {
@@ -74,7 +74,7 @@ export async function dispatchDeepCleanJob(jobId: string): Promise<void> {
 
 export async function getDeepCleanJob(jobId: string): Promise<DeepCleanJob> {
   if (!supabase) {
-    throw new Error("Supabase is not configured for DeepClean jobs.");
+    throw new Error("Supabase is not configured for Remarkee Max jobs.");
   }
 
   const { data, error } = await supabase.functions.invoke("get-deepclean-job", {
@@ -87,7 +87,7 @@ export async function getDeepCleanJob(jobId: string): Promise<DeepCleanJob> {
 
 export async function cancelDeepCleanJob(jobId: string): Promise<void> {
   if (!supabase) {
-    throw new Error("Supabase is not configured for DeepClean jobs.");
+    throw new Error("Supabase is not configured for Remarkee Max jobs.");
   }
 
   const { error } = await supabase.functions.invoke("cancel-deepclean-job", {

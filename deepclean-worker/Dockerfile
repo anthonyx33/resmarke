@@ -28,7 +28,7 @@ RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /app/Comfy
     && cd /app/ComfyUI \
     && pip install --no-cache-dir -r requirements.txt
 
-# --- Custom node packs required by Synthid-Bypass v2 ---
+# --- Custom node packs required by Remarkee Max ---
 WORKDIR /app/ComfyUI/custom_nodes
 RUN for repo in \
     "https://github.com/city96/ComfyUI-GGUF.git ComfyUI-GGUF" \

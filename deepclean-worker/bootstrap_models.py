@@ -1,11 +1,11 @@
-"""Idempotently download the 10 Synthid-Bypass v2 model files onto the
+"""Idempotently download the 10 Remarkee Max model files onto the
 persistent RunPod network volume so cold starts load from disk.
 
 Run once at container start (see start.sh). Skips any file already present.
 Re-running is cheap and safe. Set HF_TOKEN in the environment for any private
 gated repos (none of the v2 files are gated, but the var is honored if set).
 
-Files + directories come straight from the Synthid-Bypass README §8.
+Files + directories come straight from the Remarkee Max model list.
 """
 import os
 import sys

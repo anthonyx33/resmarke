@@ -110,10 +110,10 @@ where user_id = 'USER_UUID';
 
 ## 4. Build DeepClean GPU Image
 
-The image now ships **ComfyUI + the Synthid-Bypass v2 custom nodes** as the
+The image now ships **ComfyUI + the Remarkee Max custom nodes** as the
 cleaning engine (it no longer uses the `remove-ai-watermarks` SDXL pipeline).
 Before building, complete the one-time workflow export in
-`deepclean-worker/workflows/EXPORT.md` so `synthid-bypass-v2.api.json` exists —
+`deepclean-worker/workflows/EXPORT.md` so `remarkee-max-v2.api.json` exists —
 the worker will refuse to run without it.
 
 Local Docker path:
@@ -139,13 +139,13 @@ Container disk should be `60 GB+`.
 Create RunPod Serverless endpoint:
 
 - Image: `ghcr.io/YOUR_GITHUB_USER/resmarke-deepclean:latest`
-- GPU: 24 GB VRAM class (RTX 3090/4090, L4, A5000) — matches the Synthid-Bypass
+- GPU: 24 GB VRAM class (RTX 3090/4090, L4, A5000) — matches the Remarkee Max
   Q4_K_M GGUF setup. 40 GB+ (A6000/L40S) lets both Qwen + Z-Image stay resident.
 - Concurrency: `1`
 - Timeout: `240s` for standard beta; `300s` for strong; `420s` if exposing max
 - Container disk: `60 GB+`
 - Network volume: mount one at `/runpod-volume`. The first boot downloads the 10
-  Synthid-Bypass model files (~10 GB) into `/runpod-volume/ComfyUI/models/` via
+  Remarkee Max model files (~10 GB) into `/runpod-volume/ComfyUI/models/` via
   `bootstrap_models.py`; later boots skip the download.
 
 For lowest cost during beta:
@@ -175,7 +175,7 @@ HF_TOKEN=...
 # Optional overrides (defaults shown):
 # COMFYUI_BASE=/runpod-volume/ComfyUI
 # COMFYUI_URL=http://127.0.0.1:8188
-# DEEPCLEAN_WORKFLOW=/app/workflows/synthid-bypass-v2.api.json
+# DEEPCLEAN_WORKFLOW=/app/workflows/remarkee-max-v2.api.json
 ```
 
 `DEEPCLEAN_PRELOAD=1` runs a small image through the workflow at boot so Qwen

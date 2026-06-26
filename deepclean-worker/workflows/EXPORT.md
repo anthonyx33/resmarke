@@ -1,22 +1,22 @@
-# Synthid-Bypass v2 workflow — API-format export (one-time)
+# Remarkee Max workflow — API-format export (one-time)
 
 The cleaning engine is ComfyUI running this workflow. ComfyUI's `/prompt`
 endpoint requires the **API format** (a flat `{node_id: {class_type, inputs}}`
 object), not the editor/UI format that ships in the repo.
 
-`synthid-bypass-v2.0.json` checked in here is the **editor format** (straight
+`remarkee-max-v2.0.json` checked in here is the **editor format** (straight
 from `00quebec/Synthid-Bypass`) — useful as a reference and to load by hand, but
 the worker does not consume it directly.
 
 ## One-time export
 
 Run ComfyUI locally with all the v2 custom nodes + models installed (see the
-Synthid-Bypass README §7–8), then:
+upstream workflow repo README §7–8), then:
 
-1. Drag `synthid-bypass-v2.0.json` onto the ComfyUI canvas.
+1. Drag `remarkee-max-v2.0.json` onto the ComfyUI canvas.
 2. Fix any missing-model / missing-node errors until the graph is green.
 3. **Menu → Save (API Format)** → save as
-   `deepclean-worker/workflows/synthid-bypass-v2.api.json`.
+   `deepclean-worker/workflows/remarkee-max-v2.api.json`.
 
 That `.api.json` file is the template the worker mutates per job (`worker.py`
 `TEMPLATE_PATH`, overridable via `DEEPCLEAN_WORKFLOW`). Commit it.
@@ -35,7 +35,7 @@ Z-Image face detailer, the 4-step Lightning KSampler — runs as-authored.
 
 ## Fast-follows that need this template
 
-Once `synthid-bypass-v2.api.json` exists, two optimizations land on top of it
+Once `remarkee-max-v2.api.json` exists, two optimizations land on top of it
 (both are stubbed in `worker.py` `PROFILE_CONFIG`):
 
 - **Conditional face path** — for the `standard` profile, set `mode = 4` (bypass)

@@ -16,13 +16,13 @@ If Docker is not installed locally, push this repo to GitHub and run the include
 Create a RunPod Serverless endpoint with:
 
 - Container image: your published `resmarke-deepclean` image.
-- GPU: 24 GB VRAM class (RTX 3090/4090, L4, A5000) — matches the Synthid-Bypass
+- GPU: 24 GB VRAM class (RTX 3090/4090, L4, A5000) — matches the Remarkee Max
   Q4_K_M GGUF setup. 40 GB+ (A6000/L40S) keeps both Qwen + Z-Image resident.
 - Concurrency: `1`.
 - Timeout: `240` for `standard`, `300` for `strong`, `420` for `max`.
 - Container disk: at least `60 GB`.
 - Network volume: mount one at `/runpod-volume`. First boot downloads the 10
-  Synthid-Bypass model files (~10 GB) into `/runpod-volume/ComfyUI/models/`;
+  Remarkee Max model files (~10 GB) into `/runpod-volume/ComfyUI/models/`;
   later boots skip the download.
 
 ### Scaling mode
@@ -54,10 +54,10 @@ HF_TOKEN=...
 # Optional overrides (defaults shown):
 # COMFYUI_BASE=/runpod-volume/ComfyUI
 # COMFYUI_URL=http://127.0.0.1:8188
-# DEEPCLEAN_WORKFLOW=/app/workflows/synthid-bypass-v2.api.json
+# DEEPCLEAN_WORKFLOW=/app/workflows/remarkee-max-v2.api.json
 ```
 
-The engine is **ComfyUI running the Synthid-Bypass v2 workflow** (Qwen Image
+The engine is **ComfyUI running the Remarkee Max workflow** (Qwen Image
 global redraw + Z-Image Turbo face cleanup, Q4_K_M GGUF). `start.sh` launches
 ComfyUI as a localhost service on `127.0.0.1:8188`, waits for it, then starts
 the RunPod handler; the handler talks to ComfyUI via `comfyui_client.py`.
@@ -66,7 +66,7 @@ the first job pays the model-load cost. `DEEPCLEAN_PRELOAD=1` warms the models
 at boot.
 
 Before the worker can process jobs, you must export the API-format workflow
-once — see `workflows/EXPORT.md` — so `workflows/synthid-bypass-v2.api.json`
+once — see `workflows/EXPORT.md` — so `workflows/remarkee-max-v2.api.json`
 exists (the worker refuses to run without it).
 
 The job payload supplies the webhook URL and webhook secret.

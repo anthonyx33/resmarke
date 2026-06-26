@@ -1,6 +1,6 @@
 # DeepClean (ComfyUI engine) — Setup & Testing Guide
 
-The DeepClean worker now runs the **Synthid-Bypass v2 ComfyUI workflow** (the
+The DeepClean worker now runs the **Remarkee Max ComfyUI workflow** (the
 exact engine twotensors.ai uses): Qwen Image global redraw + Z-Image Turbo face
 cleanup, Q4_K_M GGUF, on a 24 GB GPU. This guide gets it built, deployed, and
 verified end-to-end.
@@ -23,21 +23,21 @@ verified end-to-end.
 
 This is the one manual step. The worker **will not run** without it.
 
-The workflow ships in `deepclean-worker/workflows/synthid-bypass-v2.0.json`
+The workflow ships in `deepclean-worker/workflows/remarkee-max-v2.0.json`
 (editor format). ComfyUI's `/prompt` API needs the **API format**.
 
 1. Run ComfyUI locally with all 8 v2 custom-node packs + the 10 models installed
-   (follow the Synthid-Bypass repo README §7–8). Easiest: use a RunPod pod with
+   (follow the upstream workflow repo README §7–8). Easiest: use a RunPod pod with
    the ComfyUI template, clone `00quebec/Synthid-Bypass` into `custom_nodes/`,
    and download the models per its README.
-2. Open the ComfyUI UI, drag `synthid-bypass-v2.0.json` onto the canvas.
+2. Open the ComfyUI UI, drag `remarkee-max-v2.0.json` onto the canvas.
 3. Resolve every red/missing-node / missing-model error until the graph loads
    green. The face path needs RES4LYF's `res_2s` sampler — confirm that node
    pack loaded (it is the most common point of failure; see Troubleshooting).
 4. **Menu (top-right gear) → Save (API Format)** → save as
-   `deepclean-worker/workflows/synthid-bypass-v2.api.json`.
+   `deepclean-worker/workflows/remarkee-max-v2.api.json`.
 5. Commit it. The worker reads this file at `DEEPCLEAN_WORKFLOW` (default
-   `/app/workflows/synthid-bypass-v2.api.json`, baked into the image).
+   `/app/workflows/remarkee-max-v2.api.json`, baked into the image).
 
 Verify the file is the flat API format — it should be a JSON object whose values
 look like `"<id>": {"class_type": "LoadImage", "inputs": {"image": "..."}}`,
@@ -98,7 +98,7 @@ HF_TOKEN=...                # optional, public models
 # Optional overrides (defaults shown):
 # COMFYUI_BASE=/runpod-volume/ComfyUI
 # COMFYUI_URL=http://127.0.0.1:8188
-# DEEPCLEAN_WORKFLOW=/app/workflows/synthid-bypass-v2.api.json
+# DEEPCLEAN_WORKFLOW=/app/workflows/remarkee-max-v2.api.json
 ```
 
 Then copy the endpoint ID into Supabase:
@@ -144,7 +144,7 @@ In the RunPod endpoint **test console**, run:
 { "input": { "action": "warmup", "profile": "standard" } }
 ```
 
-Expect a response with `"warmed": true` and `"engine": "synthid-bypass-v2"`.
+Expect a response with `"warmed": true` and `"engine": "remarkee-max-v2"`.
 If `"warmed": false`, read `warmup_error` — most often it means the API-format
 workflow is missing or a node failed to load (Troubleshooting).
 
@@ -204,7 +204,7 @@ and our `max` output side by side. Faces and text are where differences show.
 ## 8. Troubleshooting
 
 **`workflow template missing` / `warmed: false`**
-You skipped step 1. Export `synthid-bypass-v2.api.json`, rebuild, redeploy.
+You skipped step 1. Export `remarkee-max-v2.api.json`, rebuild, redeploy.
 
 **RES4LYF / `res_2s` sampler not found → face path fails**
 RES4LYF is the most fragile install. If its `pip install` failed during the

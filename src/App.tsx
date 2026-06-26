@@ -327,12 +327,12 @@ export default function App() {
       return;
     }
     if (hasSupabaseConfig && !userId) {
-      setDeepCleanStatus("Sign in before queueing a GPU DeepClean job.");
+      setDeepCleanStatus("Sign in before queueing a Remarkee Max job.");
       return;
     }
 
     let createdJob: DeepCleanJob | null = null;
-    setDeepCleanStatus("Creating DeepClean job...");
+    setDeepCleanStatus("Creating Remarkee Max job...");
     try {
       const job = await createDeepCleanJob({
         file,
@@ -353,7 +353,7 @@ export default function App() {
         await cancelDeepCleanJob(createdJob.id).catch(() => undefined);
       }
       setDeepCleanStatus(
-        nextError instanceof Error ? nextError.message : "DeepClean is not configured yet."
+        nextError instanceof Error ? nextError.message : "Remarkee Max is not configured yet."
       );
     }
   }
@@ -374,14 +374,14 @@ export default function App() {
         } else if (job.status === "failed") {
           if (deepCleanPollRef.current) window.clearInterval(deepCleanPollRef.current);
           deepCleanPollRef.current = null;
-          setDeepCleanStatus(job.failureReason || "DeepClean failed and the credit was released.");
+          setDeepCleanStatus(job.failureReason || "Remarkee Max failed and the credit was released.");
           if (userId) void refreshSupabaseCredits(userId);
         } else {
           setDeepCleanStatus(`GPU job status: ${job.status}.`);
         }
       } catch (nextError) {
         setDeepCleanStatus(
-          nextError instanceof Error ? nextError.message : "Could not refresh DeepClean job."
+          nextError instanceof Error ? nextError.message : "Could not refresh Remarkee Max job."
         );
       }
     };
@@ -824,11 +824,11 @@ export default function App() {
               </div>
             </div>
 
-            {/* DeepClean GPU */}
+            {/* Remarkee Max */}
             <div className="deepclean">
               <div className="deepclean-head">
                 <Cloud size={20} aria-hidden="true" />
-                <h3>DeepClean GPU</h3>
+                <h3>Remarkee Max</h3>
                 <span className="tag">
                   <Cpu size={11} aria-hidden="true" /> Beta
                 </span>
@@ -881,18 +881,18 @@ export default function App() {
               <p className="deepclean-status">
                 {hasSupabaseConfig
                   ? deepCleanStatus || "Connected. Queue a job to run it on the GPU worker."
-                  : "Set Supabase env vars to enable DeepClean."}
+                  : "Set Supabase env vars to enable Remarkee Max."}
               </p>
               {deepCleanJob &&
               ["processing", "completed", "failed"].includes(deepCleanJob.status) ? (
                 <div className="deepclean-result">
                   <div className="output-frame">
                     {deepCleanJob.outputUrl ? (
-                      <img src={deepCleanJob.outputUrl} alt="DeepClean result preview" />
+                      <img src={deepCleanJob.outputUrl} alt="Remarkee Max result preview" />
                     ) : deepCleanJob.status === "failed" ? (
                       <div className="output-empty">
                         <ImageOff size={26} aria-hidden="true" />
-                        <span>{deepCleanJob.failureReason || "DeepClean failed."}</span>
+                        <span>{deepCleanJob.failureReason || "Remarkee Max failed."}</span>
                       </div>
                     ) : (
                       <div className="output-empty">
@@ -903,7 +903,7 @@ export default function App() {
                   </div>
 
                   <div className="deepclean-result-info">
-                    <div className="card-label">DeepClean result</div>
+                    <div className="card-label">Remarkee Max result</div>
                     {deepCleanJob.status === "completed" ? (
                       <>
                         <div className="report-grid">
@@ -922,7 +922,7 @@ export default function App() {
                         <a
                           className="btn btn-primary btn-block deepclean-download"
                           href={deepCleanJob.outputUrl}
-                          download="resmarke-deepclean.jpg"
+                          download="remarkee-max.jpg"
                         >
                           <Download size={18} aria-hidden="true" /> Download result
                         </a>
@@ -930,7 +930,7 @@ export default function App() {
                     ) : deepCleanJob.status === "failed" ? (
                       <p className="error-text">
                         {deepCleanJob.failureReason ||
-                          "DeepClean failed; your credit was released."}
+                          "Remarkee Max failed; your credit was released."}
                       </p>
                     ) : (
                       <p className="deepclean-status">Hang tight — regenerating on the GPU…</p>
@@ -1105,15 +1105,15 @@ export default function App() {
               </div>
             </section>
 
-            {/* DeepClean promo */}
+            {/* Remarkee Max promo */}
             <section className="section">
               <div className="promo">
                 <span className="tag">
-                  <Cpu size={11} aria-hidden="true" /> DeepClean GPU · Beta
+                  <Cpu size={11} aria-hidden="true" /> Remarkee Max · Beta
                 </span>
                 <h3>Go deeper with GPU regeneration</h3>
                 <p>
-                  For stubborn, deeply embedded watermarks, DeepClean runs an optional cloud GPU
+                  For stubborn, deeply embedded watermarks, Remarkee Max runs an optional cloud GPU
                   pass that regenerates the image — far beyond what a browser can do. You only pay
                   after a job completes successfully.
                 </p>
@@ -1166,7 +1166,7 @@ export default function App() {
                   period="month"
                   features={[
                     "500 exports / month",
-                    "DeepClean GPU credits",
+                    "Remarkee Max credits",
                     "Everything in Pro"
                   ]}
                   cta="Choose Pro+"
@@ -1185,7 +1185,7 @@ export default function App() {
               <div className="faq">
                 <FaqItem
                   q="Are my images uploaded anywhere?"
-                  a="No. Privacy-Max runs entirely in your browser — your images never leave your device. DeepClean GPU is a separate, optional cloud feature you explicitly opt into."
+                  a="No. Privacy-Max runs entirely in your browser — your images never leave your device. Remarkee Max is a separate, optional cloud feature you explicitly opt into."
                 />
                 <FaqItem
                   q="What exactly does ResMarke remove?"
