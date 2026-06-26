@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { throwSupabaseFunctionError } from "./supabaseFunctionError";
 
 export type AdminRunpodEndpoint = {
   id: string;
@@ -21,7 +22,7 @@ export async function getAdminRunpodEndpoint(): Promise<AdminRunpodEndpoint> {
     body: { action: "status" }
   });
 
-  if (error) throw error;
+  if (error) await throwSupabaseFunctionError(error);
   return data.endpoint as AdminRunpodEndpoint;
 }
 
@@ -40,6 +41,6 @@ export async function updateAdminRunpodEndpoint(params: {
     }
   });
 
-  if (error) throw error;
+  if (error) await throwSupabaseFunctionError(error);
   return data.endpoint as AdminRunpodEndpoint;
 }

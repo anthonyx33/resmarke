@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { throwSupabaseFunctionError } from "./supabaseFunctionError";
 
 export type DeepCleanProfile = "standard" | "strong" | "max";
 export type DeepCleanOutputMode = "stripped" | "sealed" | "sealed-stamped";
@@ -38,7 +39,7 @@ export async function createDeepCleanJob(params: {
     }
   });
 
-  if (error) throw error;
+  if (error) await throwSupabaseFunctionError(error);
   return data as DeepCleanJob;
 }
 
@@ -56,7 +57,7 @@ export async function uploadDeepCleanInput(job: DeepCleanJob, file: File): Promi
       contentType: file.type || "application/octet-stream"
     });
 
-  if (error) throw error;
+  if (error) await throwSupabaseFunctionError(error);
 }
 
 export async function dispatchDeepCleanJob(jobId: string): Promise<void> {
@@ -80,7 +81,7 @@ export async function getDeepCleanJob(jobId: string): Promise<DeepCleanJob> {
     body: { job_id: jobId }
   });
 
-  if (error) throw error;
+  if (error) await throwSupabaseFunctionError(error);
   return data as DeepCleanJob;
 }
 
@@ -93,5 +94,5 @@ export async function cancelDeepCleanJob(jobId: string): Promise<void> {
     body: { job_id: jobId }
   });
 
-  if (error) throw error;
+  if (error) await throwSupabaseFunctionError(error);
 }
