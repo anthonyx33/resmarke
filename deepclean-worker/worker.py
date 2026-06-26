@@ -24,7 +24,7 @@ TEMPLATE_PATH = Path(
 # original + timeout). The ComfyUI workflow's own AdaptiveDenoise node still
 # scales denoise per resolution inside the graph.
 #
-# TODO(v2): `face_path` is not yet wired into the graph — bypassing the
+# TODO(v2): `face_path` is not yet wired into the graph — skipping the
 # Z-Image/SAM/MediaPipe/RES4LYF face subgraph requires the API-format template
 # to be exported first so we can identify the face-path node IDs. v1 runs the
 # full v2 workflow for every profile (correct, just not yet face-conditional).
@@ -176,10 +176,11 @@ def run_deepclean_comfyui(input_path, output_path, profile):
     started = time.time()
 
     # --- Preprocess: normalize to RGB + cap to process_cap (lossless PNG). ---
-    # SynthID is resolution-dependent (remove-ai-watermarks only certifies at
-    # <=1536; reverse-SynthID-gpu confirms a resolution-dependent carrier), so
-    # processing a 4K image costs 4x compute for no removal gain. We cap, run
-    # the bypass, then restore to the original size in postprocess.
+    # Hidden AI watermarks are resolution-dependent (remove-ai-watermarks only
+    # certifies at <=1536; public reverse-engineering research confirms a
+    # resolution-dependent carrier), so processing a 4K image costs 4x compute
+    # for no removal gain. We cap, run the regeneration pass, then restore to
+    # the original size in postprocess.
     source = Image.open(input_path).convert("RGB")
     orig_w, orig_h = source.size
     cap = cfg["process_cap"]

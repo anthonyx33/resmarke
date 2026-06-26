@@ -29,6 +29,9 @@ RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git /app/Comfy
     && pip install --no-cache-dir -r requirements.txt
 
 # --- Custom node packs required by Remarkee Max ---
+# The Remarkee Max adaptive-denoise + face-detailer nodes are vendored in this
+# repo (custom_nodes/RemarkeeMax) — no upstream clone. The packs below are
+# public ComfyUI community node packs the workflow depends on.
 WORKDIR /app/ComfyUI/custom_nodes
 RUN for repo in \
     "https://github.com/city96/ComfyUI-GGUF.git ComfyUI-GGUF" \
@@ -38,7 +41,6 @@ RUN for repo in \
     "https://github.com/kijai/ComfyUI-KJNodes.git ComfyUI-KJNodes" \
     "https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch.git ComfyUI-Inpaint-CropAndStitch" \
     "https://github.com/ClownsharkBatwing/RES4LYF.git RES4LYF" \
-    "https://github.com/00quebec/Synthid-Bypass.git Synthid-Bypass" \
     ; do \
         set -- $repo; \
         echo "[docker] cloning $1 -> $2"; \
@@ -58,6 +60,7 @@ COPY bootstrap_models.py /app/bootstrap_models.py
 COPY comfyui_client.py /app/comfyui_client.py
 COPY worker.py /app/worker.py
 COPY workflows /app/workflows
+COPY custom_nodes/RemarkeeMax /app/ComfyUI/custom_nodes/RemarkeeMax
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 

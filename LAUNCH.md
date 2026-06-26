@@ -219,5 +219,5 @@ select * from public.credit_ledger order by created_at desc limit 10;
 - Launch Privacy-Max publicly first.
 - Keep DeepClean behind beta wording until 300-image bakeoff.
 - Charge DeepClean only on successful worker completion.
-- Do not claim guaranteed SynthID removal forever.
+- Do not claim guaranteed hidden-watermark removal forever.
 - Say: "advanced hidden watermark reduction" and "charged only when processing succeeds."

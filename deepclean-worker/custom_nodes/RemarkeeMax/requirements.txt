@@ -1,0 +1,2 @@
+# No extra pip dependencies for this node pack.
+# Requires ComfyUI core + ComfyUI-Impact-Pack (installed in the worker image).

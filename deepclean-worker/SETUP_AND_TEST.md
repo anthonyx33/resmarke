@@ -26,10 +26,12 @@ This is the one manual step. The worker **will not run** without it.
 The workflow ships in `deepclean-worker/workflows/remarkee-max-v2.0.json`
 (editor format). ComfyUI's `/prompt` API needs the **API format**.
 
-1. Run ComfyUI locally with all 8 v2 custom-node packs + the 10 models installed
-   (follow the upstream workflow repo README §7–8). Easiest: use a RunPod pod with
-   the ComfyUI template, clone `00quebec/Synthid-Bypass` into `custom_nodes/`,
-   and download the models per its README.
+1. Run ComfyUI locally with all 8 custom-node packs + the 10 models installed.
+   The pack list (7 public packs + the vendored Remarkee Max pack) is in the
+   `Dockerfile` clone block; the model list + download URLs are in
+   `bootstrap_models.py`. Easiest: use a RunPod pod with the ComfyUI template,
+   drop `custom_nodes/RemarkeeMax/` into `custom_nodes/`, clone the other 7
+   packs, and download the models into the dirs `bootstrap_models.py` specifies.
 2. Open the ComfyUI UI, drag `remarkee-max-v2.0.json` onto the canvas.
 3. Resolve every red/missing-node / missing-model error until the graph loads
    green. The face path needs RES4LYF's `res_2s` sampler — confirm that node
@@ -158,9 +160,8 @@ workflow is missing or a node failed to load (Troubleshooting).
    set deepclean_credits = 10
    where user_id = 'YOUR_UUID';
    ```
-2. In the app, upload a **known SynthID image** — use the repo's own proof set:
-   `00quebec/Synthid-Bypass` → `comparison/before/12.png` (a real Nano Banana
-   Pro output). This is the ground-truth positive.
+2. In the app, upload a **known watermarked AI image** (e.g. a Gemini / Nano Banana
+   output) as the ground-truth positive to test removal against.
 3. Pick profile `standard`, output mode `stripped` (no seal, easiest to inspect).
 4. Queue the job. Poll `get-deepclean-job` until `status = completed`.
 5. Inspect the `report` in the database:
@@ -172,7 +173,7 @@ workflow is missing or a node failed to load (Troubleshooting).
           report->'identify_after' as after
    from public.deepclean_jobs order by created_at desc limit 1;
    ```
-   - `identify_before` should flag SynthID (C2PA/Google issuer).
+   - `identify_before` should flag a hidden watermark (C2PA/Google issuer).
    - `identify_after` should read clean (or at least: watermark disrupted).
    - `quality.psnr` should pass the gate (≥18, typically 25–40 for a good
      redraw; too low = over-denoised, too high = under-cleaned).
@@ -196,7 +197,8 @@ The key efficiency claim to verify: a **4K input** should process at 1536 (or
 runtime, **not 4× slower**. If a 4K job takes 4× as long, the cap isn't applied
 (check `process_resolution` in the report).
 
-Fidelity compare: run the same input through twotensors.ai ("Remove Synthid" on)
+Fidelity compare: optionally run the same input through another hidden-watermark
+remover
 and our `max` output side by side. Faces and text are where differences show.
 
 ---
@@ -209,7 +211,7 @@ You skipped step 1. Export `remarkee-max-v2.api.json`, rebuild, redeploy.
 **RES4LYF / `res_2s` sampler not found → face path fails**
 RES4LYF is the most fragile install. If its `pip install` failed during the
 image build (check build log for `WARN: requirements install failed for RES4LYF`),
-the `Synthid-Bypass-Facedetailer` node won't register and the workflow errors.
+the face-detailer pass (`SEGSDetailerModelSwap`) errors at runtime.
 Rebuild and watch that line. RES4LYF sometimes needs a specific ComfyUI commit.
 
 **First cold start hits the boot timeout**
