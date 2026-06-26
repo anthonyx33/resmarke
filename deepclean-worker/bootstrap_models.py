@@ -45,23 +45,43 @@ FILES = [
 ]
 
 CHUNK = 1024 * 1024  # 1 MiB
+CONNECT_TIMEOUT = 30
+READ_TIMEOUT = 300
 
 
-def download(url: str, dest: Path, retries: int = 4) -> None:
-    headers = {"User-Agent": "resmarke-deepclean-bootstrap/1.0"}
+def download(url: str, dest: Path, retries: int = 20) -> None:
+    base_headers = {"User-Agent": "resmarke-deepclean-bootstrap/1.0"}
     token = os.environ.get("HF_TOKEN")
     if token and "huggingface.co" in url:
-        headers["Authorization"] = f"Bearer {token}"
+        base_headers["Authorization"] = f"Bearer {token}"
 
     for attempt in range(1, retries + 1):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_suffix(dest.suffix + ".part")
+        resume_from = tmp.stat().st_size if tmp.exists() else 0
+        headers = dict(base_headers)
+        if resume_from:
+            headers["Range"] = f"bytes={resume_from}-"
+            print(f"  {dest.name}: resuming from {resume_from//1048576}MiB", flush=True)
+
         try:
-            with requests.get(url, headers=headers, stream=True, timeout=60) as resp:
+            with requests.get(
+                url,
+                headers=headers,
+                stream=True,
+                timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
+            ) as resp:
                 resp.raise_for_status()
-                total = int(resp.headers.get("Content-Length", 0))
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                tmp = dest.with_suffix(dest.suffix + ".part")
-                written = 0
-                with tmp.open("wb") as fh:
+                if resume_from and resp.status_code != 206:
+                    print(f"  {dest.name}: server ignored resume; restarting", flush=True)
+                    resume_from = 0
+                    tmp.unlink(missing_ok=True)
+
+                content_length = int(resp.headers.get("Content-Length", 0))
+                total = _total_size(resp, resume_from, content_length)
+                written = resume_from
+                mode = "ab" if resume_from else "wb"
+                with tmp.open(mode) as fh:
                     for chunk in resp.iter_content(chunk_size=CHUNK):
                         if chunk:
                             fh.write(chunk)
@@ -69,6 +89,10 @@ def download(url: str, dest: Path, retries: int = 4) -> None:
                             if total and written % (50 * CHUNK) == 0:
                                 pct = written * 100 // total
                                 print(f"  {dest.name}: {pct}% ({written//1048576}MiB)", flush=True)
+                if total and written != total:
+                    raise RuntimeError(
+                        f"incomplete download ({written//1048576}MiB of {total//1048576}MiB)"
+                    )
                 tmp.replace(dest)
                 print(f"  {dest.name}: done ({written//1048576}MiB)", flush=True)
                 return
@@ -77,6 +101,17 @@ def download(url: str, dest: Path, retries: int = 4) -> None:
             if attempt == retries:
                 raise
             time.sleep(5 * attempt)
+
+
+def _total_size(resp: requests.Response, resume_from: int, content_length: int) -> int:
+    content_range = resp.headers.get("Content-Range", "")
+    if "/" in content_range:
+        total_part = content_range.rsplit("/", 1)[-1]
+        if total_part.isdigit():
+            return int(total_part)
+    if resume_from and content_length:
+        return resume_from + content_length
+    return content_length
 
 
 def main() -> int:
