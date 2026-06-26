@@ -11,12 +11,17 @@ PORT="${COMFYUI_PORT:-8188}"
 echo "[deepclean:start] seeding model volume at ${COMFY_BASE}"
 python /app/bootstrap_models.py
 
+mkdir -p "${COMFY_BASE}/models"
+if [ -e /app/ComfyUI/models ] && [ ! -L /app/ComfyUI/models ]; then
+    rm -rf /app/ComfyUI/models
+fi
+ln -sfn "${COMFY_BASE}/models" /app/ComfyUI/models
+
 echo "[deepclean:start] launching ComfyUI on 127.0.0.1:${PORT}"
 cd /app/ComfyUI
 python main.py \
     --listen 127.0.0.1 \
     --port "${PORT}" \
-    --base-path "${COMFY_BASE}" \
     --preview-method none \
     --disable-metadata &
 
