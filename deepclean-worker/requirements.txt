@@ -2,4 +2,13 @@ runpod==1.7.13
 requests>=2.32,<3
 Pillow>=10,<13
 numpy>=2,<3
-remove-ai-watermarks[gpu]==0.12.1
+
+# The cleaning engine is ComfyUI running the Synthid-Bypass v2 workflow
+# (installed via the Docker image, not pip). The deps below are only for the
+# RunPod handler glue and the before/after watermark report.
+
+# Kept ONLY for its `identify` subcommand (before/after watermark inventory in
+# the webhook report). NOT used as the cleaning engine. If this conflicts with
+# ComfyUI's pinned torch/diffusers at build time, drop it and stub
+# identify_image() in worker.py — the webhook still works without it.
+remove-ai-watermarks>=0.12,<1

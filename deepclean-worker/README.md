@@ -16,10 +16,14 @@ If Docker is not installed locally, push this repo to GitHub and run the include
 Create a RunPod Serverless endpoint with:
 
 - Container image: your published `resmarke-deepclean` image.
-- GPU: A40/A6000/L40S class, 48 GB preferred for the first bakeoff.
+- GPU: 24 GB VRAM class (RTX 3090/4090, L4, A5000) — matches the Synthid-Bypass
+  Q4_K_M GGUF setup. 40 GB+ (A6000/L40S) keeps both Qwen + Z-Image resident.
 - Concurrency: `1`.
-- Timeout: `240` seconds for `standard`, `300` seconds if you expose `strong`.
-- Container disk: at least `50 GB`; use more if model caches are baked into the image or volume.
+- Timeout: `240` for `standard`, `300` for `strong`, `420` for `max`.
+- Container disk: at least `60 GB`.
+- Network volume: mount one at `/runpod-volume`. First boot downloads the 10
+  Synthid-Bypass model files (~10 GB) into `/runpod-volume/ComfyUI/models/`;
+  later boots skip the download.
 
 ### Scaling mode
 
@@ -43,17 +47,27 @@ Fast warm-model service:
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
 DEEPCLEAN_OUTPUT_BUCKET=deepclean-outputs
-DEEPCLEAN_ENGINE_MODE=python
 DEEPCLEAN_PRELOAD=1
 DEEPCLEAN_PRELOAD_PROFILE=standard
-DEEPCLEAN_DEVICE=cuda
-DEEPCLEAN_MODEL=
 DEEPCLEAN_SEED=0
 HF_TOKEN=...
+# Optional overrides (defaults shown):
+# COMFYUI_BASE=/runpod-volume/ComfyUI
+# COMFYUI_URL=http://127.0.0.1:8188
+# DEEPCLEAN_WORKFLOW=/app/workflows/synthid-bypass-v2.api.json
 ```
 
-`DEEPCLEAN_ENGINE_MODE=python` uses the in-process `InvisibleEngine` and reuses it across jobs. Set
-`DEEPCLEAN_ENGINE_MODE=cli` only as a temporary fallback/debug mode.
+The engine is **ComfyUI running the Synthid-Bypass v2 workflow** (Qwen Image
+global redraw + Z-Image Turbo face cleanup, Q4_K_M GGUF). `start.sh` launches
+ComfyUI as a localhost service on `127.0.0.1:8188`, waits for it, then starts
+the RunPod handler; the handler talks to ComfyUI via `comfyui_client.py`.
+ComfyUI keeps Qwen + the Canny controlnet resident in VRAM across jobs, so only
+the first job pays the model-load cost. `DEEPCLEAN_PRELOAD=1` warms the models
+at boot.
+
+Before the worker can process jobs, you must export the API-format workflow
+once — see `workflows/EXPORT.md` — so `workflows/synthid-bypass-v2.api.json`
+exists (the worker refuses to run without it).
 
 The job payload supplies the webhook URL and webhook secret.
 
@@ -72,4 +86,4 @@ Warmup-only payload for the RunPod test console:
 }
 ```
 
-The first warmup can take minutes if model files are not cached. Later warmups on the same worker should return quickly and report `"cached": true`.
+The first warmup can take minutes (downloading the 10 model files on first boot, then loading Qwen into VRAM). Later warmups on the same worker return quickly and report `"warmed": true`.

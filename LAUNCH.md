@@ -110,6 +110,12 @@ where user_id = 'USER_UUID';
 
 ## 4. Build DeepClean GPU Image
 
+The image now ships **ComfyUI + the Synthid-Bypass v2 custom nodes** as the
+cleaning engine (it no longer uses the `remove-ai-watermarks` SDXL pipeline).
+Before building, complete the one-time workflow export in
+`deepclean-worker/workflows/EXPORT.md` so `synthid-bypass-v2.api.json` exists —
+the worker will refuse to run without it.
+
 Local Docker path:
 
 ```bash
@@ -125,15 +131,22 @@ No-local-Docker path:
 3. Run the `DeepClean Worker Image` workflow.
 4. Use `ghcr.io/YOUR_GITHUB_USER/resmarke-deepclean:latest` as the RunPod image.
 
+The image is larger than the old SDXL image (ComfyUI + 8 custom node packs).
+Container disk should be `60 GB+`.
+
 ## 5. RunPod Serverless Endpoint
 
 Create RunPod Serverless endpoint:
 
 - Image: `ghcr.io/YOUR_GITHUB_USER/resmarke-deepclean:latest`
-- GPU: A40/A6000/L40S, 48 GB preferred for bakeoff
+- GPU: 24 GB VRAM class (RTX 3090/4090, L4, A5000) — matches the Synthid-Bypass
+  Q4_K_M GGUF setup. 40 GB+ (A6000/L40S) lets both Qwen + Z-Image stay resident.
 - Concurrency: `1`
-- Timeout: `240s` for standard beta; raise to `300s` if exposing strong
-- Container disk: `50 GB+`
+- Timeout: `240s` for standard beta; `300s` for strong; `420s` if exposing max
+- Container disk: `60 GB+`
+- Network volume: mount one at `/runpod-volume`. The first boot downloads the 10
+  Synthid-Bypass model files (~10 GB) into `/runpod-volume/ComfyUI/models/` via
+  `bootstrap_models.py`; later boots skip the download.
 
 For lowest cost during beta:
 
@@ -155,14 +168,20 @@ Set worker environment:
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
 DEEPCLEAN_OUTPUT_BUCKET=deepclean-outputs
-DEEPCLEAN_ENGINE_MODE=python
 DEEPCLEAN_PRELOAD=1
 DEEPCLEAN_PRELOAD_PROFILE=standard
-DEEPCLEAN_DEVICE=cuda
-DEEPCLEAN_MODEL=
 DEEPCLEAN_SEED=0
 HF_TOKEN=...
+# Optional overrides (defaults shown):
+# COMFYUI_BASE=/runpod-volume/ComfyUI
+# COMFYUI_URL=http://127.0.0.1:8188
+# DEEPCLEAN_WORKFLOW=/app/workflows/synthid-bypass-v2.api.json
 ```
+
+`DEEPCLEAN_PRELOAD=1` runs a small image through the workflow at boot so Qwen
++ the Canny controlnet land in VRAM; with `Active workers: 1` the first real
+job skips the model-load delay. `start.sh` starts ComfyUI as a localhost
+service on `127.0.0.1:8188` and then starts the RunPod handler.
 
 Copy the endpoint ID into Supabase:
 

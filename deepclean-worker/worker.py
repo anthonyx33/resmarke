@@ -1,7 +1,6 @@
 import hashlib
 import json
 import os
-import shlex
 import shutil
 import subprocess
 import tempfile
@@ -13,56 +12,30 @@ import requests
 import runpod
 from PIL import Image, ImageDraw, ImageFont
 
+# The cleaning engine is ComfyUI running the Synthid-Bypass v2 workflow, started
+# as a localhost service by start.sh (see comfyui_client.py). The workflow
+# template is the API-format export at DEEPCLEAN_WORKFLOW (default
+# /app/workflows/synthid-bypass-v2.api.json — see workflows/README.md).
+TEMPLATE_PATH = Path(
+    os.environ.get("DEEPCLEAN_WORKFLOW", "/app/workflows/synthid-bypass-v2.api.json")
+)
 
+# Profiles drive the python-side optimizations (resolution cap + restore-to-
+# original + timeout). The ComfyUI workflow's own AdaptiveDenoise node still
+# scales denoise per resolution inside the graph.
+#
+# TODO(v2): `face_path` is not yet wired into the graph — bypassing the
+# Z-Image/SAM/MediaPipe/RES4LYF face subgraph requires the API-format template
+# to be exported first so we can identify the face-path node IDs. v1 runs the
+# full v2 workflow for every profile (correct, just not yet face-conditional).
+# `upscale_back` is lanczos for all tiers in v1; neural upscale (Real-ESRGAN
+# via a ComfyUI UpscaleModelLoader node) is a follow-up to avoid a fragile
+# realesrgan pip install in the ComfyUI image.
 PROFILE_CONFIG = {
-    "standard": {
-        "timeout": 240,
-        "pipeline": "controlnet",
-        "steps": 40,
-        "strength": 0.30,
-        "max_resolution": 1536,
-        "min_resolution": 1024,
-        "controlnet_scale": 1.0,
-        "humanize": 0.0,
-        "unsharp": 0.25,
-        "adaptive_polish": True,
-        "tile": False,
-        "tile_size": 1024,
-        "tile_overlap": 128,
-    },
-    "strong": {
-        "timeout": 300,
-        "pipeline": "controlnet",
-        "steps": 50,
-        "strength": 0.35,
-        "max_resolution": 1800,
-        "min_resolution": 1024,
-        "controlnet_scale": 1.0,
-        "humanize": 1.25,
-        "unsharp": 0.35,
-        "adaptive_polish": True,
-        "tile": False,
-        "tile_size": 1024,
-        "tile_overlap": 128,
-    },
-    "max": {
-        "timeout": 420,
-        "pipeline": "controlnet",
-        "steps": 60,
-        "strength": 0.42,
-        "max_resolution": 0,
-        "min_resolution": 1024,
-        "controlnet_scale": 1.1,
-        "humanize": 2.0,
-        "unsharp": 0.45,
-        "adaptive_polish": True,
-        "tile": True,
-        "tile_size": 1024,
-        "tile_overlap": 160,
-    },
+    "standard": {"timeout": 180, "process_cap": 1536, "upscale_back": "lanczos", "face_path": False},
+    "strong": {"timeout": 240, "process_cap": 1536, "upscale_back": "lanczos", "face_path": True},
+    "max": {"timeout": 360, "process_cap": 1800, "upscale_back": "lanczos", "face_path": True},
 }
-
-ENGINE_CACHE = {}
 
 
 def handler(job):
@@ -188,167 +161,117 @@ def upload_output(storage_path, path):
     response.raise_for_status()
 
 
+# ---------------------------------------------------------------------------
+# Engine: ComfyUI + Synthid-Bypass v2 workflow
+# ---------------------------------------------------------------------------
+
 def run_deepclean(input_path, output_path, profile):
-    if os.environ.get("DEEPCLEAN_ENGINE_MODE", "python").lower() == "cli":
-        return run_deepclean_cli(input_path, output_path, profile)
-
-    try:
-        return run_deepclean_python(input_path, output_path, profile)
-    except Exception as exc:
-        if os.environ.get("DEEPCLEAN_CLI_FALLBACK", "0") != "1":
-            raise
-        if output_path.exists():
-            output_path.unlink()
-        fallback_report = run_deepclean_cli(input_path, output_path, profile)
-        fallback_report["python_api_error"] = str(exc)
-        return fallback_report
+    return run_deepclean_comfyui(input_path, output_path, profile)
 
 
-def run_deepclean_python(input_path, output_path, profile):
-    profile_config = get_profile_config(profile)
+def run_deepclean_comfyui(input_path, output_path, profile):
+    import comfyui_client as cc
+
+    cfg = get_profile_config(profile)
     started = time.time()
-    engine, engine_report = get_engine(profile)
-    progress_messages = []
 
-    def progress(message):
-        print(f"[deepclean] {message}", flush=True)
-        progress_messages.append(message)
-        del progress_messages[:-12]
+    # --- Preprocess: normalize to RGB + cap to process_cap (lossless PNG). ---
+    # SynthID is resolution-dependent (remove-ai-watermarks only certifies at
+    # <=1536; reverse-SynthID-gpu confirms a resolution-dependent carrier), so
+    # processing a 4K image costs 4x compute for no removal gain. We cap, run
+    # the bypass, then restore to the original size in postprocess.
+    source = Image.open(input_path).convert("RGB")
+    orig_w, orig_h = source.size
+    cap = cfg["process_cap"]
+    proc_w, proc_h = orig_w, orig_h
+    if cap and max(orig_w, orig_h) > cap:
+        ratio = cap / float(max(orig_w, orig_h))
+        proc_w = max(1, int(orig_w * ratio))
+        proc_h = max(1, int(orig_h * ratio))
+        proc_img = source.resize((proc_w, proc_h), Image.Resampling.LANCZOS)
+    else:
+        proc_img = source
 
-    # The engine keeps the original progress callback from construction. For now
-    # progress is startup-scoped; per-job progress is still represented by runtime.
-    seed = env_int("DEEPCLEAN_SEED")
-    engine.remove_watermark(
-        image_path=Path(input_path),
-        output_path=Path(output_path),
-        strength=profile_config["strength"],
-        num_inference_steps=profile_config["steps"],
-        guidance_scale=None,
-        seed=seed,
-        humanize=profile_config["humanize"],
-        max_resolution=profile_config["max_resolution"],
-        min_resolution=profile_config["min_resolution"],
-        vendor=None,
-        unsharp=profile_config["unsharp"],
-        adaptive_polish=profile_config["adaptive_polish"],
-        upscaler="lanczos",
-        tile=profile_config["tile"],
-        tile_size=profile_config["tile_size"],
-        tile_overlap=profile_config["tile_overlap"],
-    )
-    if not output_path.exists():
-        raise RuntimeError("DeepClean engine failed: Python API did not write an output file.")
-
-    return {
-        "profile": profile,
-        "method": "python-api",
-        "params": public_profile_config(profile_config),
-        "engine": engine_report,
-        "seed": seed,
-        "runtime_ms": int((time.time() - started) * 1000),
-        "progress_tail": progress_messages,
-    }
-
-
-def run_deepclean_cli(input_path, output_path, profile):
-    profile_config = get_profile_config(profile)
-    args = cli_args_for_profile(profile_config)
-    if token := os.environ.get("HF_TOKEN"):
-        args.extend(["--hf-token", token])
-    if model := os.environ.get("DEEPCLEAN_MODEL"):
-        args.extend(["--model", model])
-
-    command = [
-        "remove-ai-watermarks",
-        "all",
-        str(input_path),
-        "-o",
-        str(output_path),
-        "--device",
-        "cuda",
-        *args,
-    ]
-    completed = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        timeout=profile_config["timeout"],
-    )
-    if completed.returncode != 0 or not output_path.exists():
+    if not TEMPLATE_PATH.exists():
         raise RuntimeError(
-            "DeepClean engine failed: "
-            + (completed.stderr.strip() or completed.stdout.strip() or "unknown error")
+            f"Workflow template missing at {TEMPLATE_PATH}. Export the API-format "
+            "workflow from ComfyUI — see deepclean-worker/workflows/README.md."
         )
+
+    seed = env_int("DEEPCLEAN_SEED")
+
+    with tempfile.TemporaryDirectory(prefix="deepclean-comfy-") as tmpd:
+        tmp = Path(tmpd)
+        proc_png = tmp / "proc.png"
+        proc_img.save(proc_png, format="PNG")
+
+        filename = cc.upload_image(proc_png)
+        graph = cc.load_template(str(TEMPLATE_PATH))
+        cc.set_loadimage(graph, filename)
+        if seed is not None:
+            cc.set_seed(graph, seed)
+
+        prompt_id = cc.post_prompt(graph)
+        entry = cc.wait_for_prompt(prompt_id, timeout=cfg["timeout"])
+        out_bytes = cc.get_output_image(entry)
+
+        cap_png = tmp / "cleaned_cap.png"
+        cap_png.write_bytes(out_bytes)
+
+        # --- Postprocess: restore to the creator's original resolution. ---
+        cleaned = Image.open(cap_png).convert("RGB")
+        if (cleaned.width, cleaned.height) != (orig_w, orig_h):
+            cleaned = cleaned.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+        cleaned.save(output_path, format="PNG")
+
     return {
         "profile": profile,
-        "method": "cli",
-        "command": redact_command(command),
-        "stdout_tail": tail(completed.stdout),
-        "stderr_tail": tail(completed.stderr),
-    }
-
-
-def get_engine(profile):
-    profile_config = get_profile_config(profile)
-    pipeline = profile_config["pipeline"]
-    model_id = os.environ.get("DEEPCLEAN_MODEL") or None
-    hf_token = os.environ.get("HF_TOKEN") or None
-    device = os.environ.get("DEEPCLEAN_DEVICE") or "cuda"
-    controlnet_scale = profile_config["controlnet_scale"]
-    cache_key = (pipeline, model_id, device, bool(hf_token), controlnet_scale)
-
-    if cache_key in ENGINE_CACHE:
-        return ENGINE_CACHE[cache_key]["engine"], {
-            "cached": True,
-            "pipeline": pipeline,
-            "device": device,
-            "model": model_id or "default",
-            "controlnet_scale": controlnet_scale,
-            "load_ms": ENGINE_CACHE[cache_key]["load_ms"],
-        }
-
-    print(
-        f"[deepclean] Loading engine pipeline={pipeline} device={device} "
-        f"model={model_id or 'default'} controlnet_scale={controlnet_scale}",
-        flush=True,
-    )
-    started = time.time()
-
-    from remove_ai_watermarks.invisible_engine import InvisibleEngine
-
-    def progress(message):
-        print(f"[deepclean:init] {message}", flush=True)
-
-    engine = InvisibleEngine(
-        model_id=model_id,
-        device=device,
-        pipeline=pipeline,
-        hf_token=hf_token,
-        progress_callback=progress,
-        controlnet_conditioning_scale=controlnet_scale,
-    )
-    engine.preload()
-    load_ms = int((time.time() - started) * 1000)
-    ENGINE_CACHE[cache_key] = {"engine": engine, "load_ms": load_ms}
-    print(f"[deepclean] Engine ready in {load_ms}ms", flush=True)
-    return engine, {
-        "cached": False,
-        "pipeline": pipeline,
-        "device": device,
-        "model": model_id or "default",
-        "controlnet_scale": controlnet_scale,
-        "load_ms": load_ms,
+        "method": "comfyui",
+        "engine": "synthid-bypass-v2",
+        "params": public_profile_config(cfg),
+        "seed": seed,
+        "process_resolution": [proc_w, proc_h],
+        "output_resolution": [orig_w, orig_h],
+        "upscale_back": cfg["upscale_back"],
+        "runtime_ms": int((time.time() - started) * 1000),
     }
 
 
 def warmup(profile):
+    """Push a small neutral image through the workflow so Qwen + controlnet
+    land in VRAM at boot. A flat image has no faces, so the Z-Image face path
+    stays unloaded until a real portrait arrives."""
+    import comfyui_client as cc
+
     started = time.time()
-    _, engine_report = get_engine(profile)
+    cfg = get_profile_config(profile)
+    warmed = False
+    err = None
+    if TEMPLATE_PATH.exists():
+        with tempfile.TemporaryDirectory(prefix="deepclean-warm-") as tmpd:
+            warm_png = Path(tmpd) / "warm.png"
+            Image.new("RGB", (512, 512), (128, 128, 128)).save(warm_png, format="PNG")
+            try:
+                filename = cc.upload_image(warm_png)
+                graph = cc.load_template(str(TEMPLATE_PATH))
+                cc.set_loadimage(graph, filename)
+                prompt_id = cc.post_prompt(graph)
+                cc.wait_for_prompt(prompt_id, timeout=cfg["timeout"])
+                warmed = True
+            except Exception as exc:  # noqa: BLE001
+                err = str(exc)
+                print(f"[deepclean] warmup prompt failed: {exc}", flush=True)
+    else:
+        err = f"template missing at {TEMPLATE_PATH}"
+        print(f"[deepclean] warmup skipped: {err}", flush=True)
+
     return {
         "ok": True,
         "action": "warmup",
         "profile": profile,
-        "engine": engine_report,
+        "warmed": warmed,
+        "warmup_error": err,
+        "engine": "synthid-bypass-v2",
         "runtime_ms": int((time.time() - started) * 1000),
         "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
         "engine_version": engine_version(),
@@ -359,58 +282,13 @@ def get_profile_config(profile):
     return PROFILE_CONFIG.get(profile, PROFILE_CONFIG["standard"])
 
 
-def public_profile_config(profile_config):
+def public_profile_config(cfg):
     return {
-        "pipeline": profile_config["pipeline"],
-        "steps": profile_config["steps"],
-        "strength": profile_config["strength"],
-        "max_resolution": profile_config["max_resolution"],
-        "min_resolution": profile_config["min_resolution"],
-        "controlnet_scale": profile_config["controlnet_scale"],
-        "humanize": profile_config["humanize"],
-        "unsharp": profile_config["unsharp"],
-        "adaptive_polish": profile_config["adaptive_polish"],
-        "tile": profile_config["tile"],
-        "tile_size": profile_config["tile_size"],
-        "tile_overlap": profile_config["tile_overlap"],
+        "process_cap": cfg["process_cap"],
+        "upscale_back": cfg["upscale_back"],
+        "face_path": cfg["face_path"],
+        "timeout": cfg["timeout"],
     }
-
-
-def cli_args_for_profile(profile_config):
-    args = [
-        "--pipeline",
-        profile_config["pipeline"],
-        "--force",
-        "--steps",
-        str(profile_config["steps"]),
-        "--strength",
-        str(profile_config["strength"]),
-        "--max-resolution",
-        str(profile_config["max_resolution"]),
-        "--min-resolution",
-        str(profile_config["min_resolution"]),
-        "--controlnet-scale",
-        str(profile_config["controlnet_scale"]),
-        "--unsharp",
-        str(profile_config["unsharp"]),
-    ]
-    if profile_config["humanize"] > 0:
-        args.extend(["--humanize", str(profile_config["humanize"])])
-    if profile_config["adaptive_polish"]:
-        args.append("--adaptive-polish")
-    else:
-        args.append("--no-adaptive-polish")
-    if profile_config["tile"]:
-        args.extend(
-            [
-                "--tile",
-                "--tile-size",
-                str(profile_config["tile_size"]),
-                "--tile-overlap",
-                str(profile_config["tile_overlap"]),
-            ]
-        )
-    return args
 
 
 def env_int(name):
@@ -523,6 +401,9 @@ def short_hash(value):
 
 
 def identify_image(path):
+    """Before/after watermark inventory via the `remove-ai-watermarks identify`
+    CLI. Optional — if the package is absent (e.g. dropped to keep the image
+    lean), this returns ok=False and the webhook report simply omits it."""
     completed = subprocess.run(
         ["remove-ai-watermarks", "identify", str(path), "--json"],
         capture_output=True,
@@ -542,27 +423,12 @@ def identify_image(path):
 
 
 def engine_version():
-    completed = subprocess.run(
-        ["remove-ai-watermarks", "--version"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    return (completed.stdout or completed.stderr or "remove-ai-watermarks").strip()
-
-
-def redact_command(command):
-    redacted = []
-    skip_next = False
-    for item in command:
-        if skip_next:
-            redacted.append("[redacted]")
-            skip_next = False
-            continue
-        redacted.append(item)
-        if item == "--hf-token":
-            skip_next = True
-    return " ".join(shlex.quote(part) for part in redacted)
+    if TEMPLATE_PATH.exists():
+        try:
+            return f"comfyui+synthid-bypass-v2 template={sha256_file(TEMPLATE_PATH)[:12]}"
+        except Exception:
+            pass
+    return "comfyui+synthid-bypass-v2 template=missing"
 
 
 def tail(text, limit=2000):
@@ -607,23 +473,32 @@ def log_cache_env():
         "TRANSFORMERS_CACHE",
         "DIFFUSERS_CACHE",
         "TORCH_HOME",
+        "COMFYUI_BASE",
     ):
         print(f"[deepclean:cache] {key}={os.environ.get(key)}", flush=True)
 
     volume = "/runpod-volume"
     print(f"[deepclean:cache] {volume} mounted={os.path.isdir(volume)}", flush=True)
 
-    hub = os.environ.get("HF_HUB_CACHE") or os.path.join(os.environ.get("HF_HOME", ""), "hub")
+    comfy_base = os.environ.get("COMFYUI_BASE", f"{volume}/ComfyUI")
+    models_dir = os.path.join(comfy_base, "models")
     try:
-        populated = os.path.isdir(hub) and bool(os.listdir(hub))
+        populated = os.path.isdir(models_dir) and bool(os.listdir(models_dir))
     except OSError:
         populated = False
-    print(f"[deepclean:cache] weights cached={populated} ({hub})", flush=True)
+    print(f"[deepclean:cache] comfy models populated={populated} ({models_dir})", flush=True)
+
+    if TEMPLATE_PATH.exists():
+        print(f"[deepclean:cache] workflow template present ({TEMPLATE_PATH})", flush=True)
+    else:
+        print(
+            f"[deepclean:cache] WARNING: workflow template missing ({TEMPLATE_PATH}) "
+            "— export API-format workflow, see workflows/README.md",
+            flush=True,
+        )
 
 
 def maybe_preload_on_start():
-    if os.environ.get("DEEPCLEAN_ENGINE_MODE", "python").lower() == "cli":
-        return
     if os.environ.get("DEEPCLEAN_PRELOAD", "1") == "0":
         return
     profile = os.environ.get("DEEPCLEAN_PRELOAD_PROFILE", "standard")
