@@ -17,7 +17,7 @@ python main.py \
     --listen 127.0.0.1 \
     --port "${PORT}" \
     --base-path "${COMFY_BASE}" \
-    --preview-method default \
+    --preview-method none \
     --disable-metadata &
 
 # Wait until ComfyUI's API is answering.
