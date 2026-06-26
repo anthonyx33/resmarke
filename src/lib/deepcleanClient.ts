@@ -10,11 +10,16 @@ export type DeepCleanJob = {
   uploadToken?: string;
   inputPath?: string;
   outputPath?: string;
+  outputUrl?: string;
+  runtimeMs?: number;
+  gpuType?: string;
+  report?: Record<string, unknown>;
   failureReason?: string;
 };
 
 export async function createDeepCleanJob(params: {
   file: File;
+  creatorId: string;
   profile: DeepCleanProfile;
   outputMode: DeepCleanOutputMode;
 }): Promise<DeepCleanJob> {
@@ -27,6 +32,7 @@ export async function createDeepCleanJob(params: {
       file_name: params.file.name,
       file_size: params.file.size,
       content_type: params.file.type || "application/octet-stream",
+      creator_id: params.creatorId,
       profile: params.profile,
       output_mode: params.outputMode
     }
@@ -59,6 +65,31 @@ export async function dispatchDeepCleanJob(jobId: string): Promise<void> {
   }
 
   const { error } = await supabase.functions.invoke("dispatch-deepclean-job", {
+    body: { job_id: jobId }
+  });
+
+  if (error) throw error;
+}
+
+export async function getDeepCleanJob(jobId: string): Promise<DeepCleanJob> {
+  if (!supabase) {
+    throw new Error("Supabase is not configured for DeepClean jobs.");
+  }
+
+  const { data, error } = await supabase.functions.invoke("get-deepclean-job", {
+    body: { job_id: jobId }
+  });
+
+  if (error) throw error;
+  return data as DeepCleanJob;
+}
+
+export async function cancelDeepCleanJob(jobId: string): Promise<void> {
+  if (!supabase) {
+    throw new Error("Supabase is not configured for DeepClean jobs.");
+  }
+
+  const { error } = await supabase.functions.invoke("cancel-deepclean-job", {
     body: { job_id: jobId }
   });
 

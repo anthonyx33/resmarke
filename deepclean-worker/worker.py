@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -10,24 +11,79 @@ from pathlib import Path
 import numpy as np
 import requests
 import runpod
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 
 PROFILE_ARGS = {
-    "standard": ["--pipeline", "controlnet", "--max-resolution", "1536"],
-    "strong": ["--pipeline", "controlnet", "--max-resolution", "1536", "--strength", "0.35"],
-    "max": [
-        "--pipeline",
-        "controlnet",
-        "--max-resolution",
-        "2048",
-        "--strength",
-        "0.40",
-        "--humanize",
-        "2.0",
-        "--unsharp",
-        "0.35",
-    ],
+    "standard": {
+        "timeout": 240,
+        "args": [
+            "--pipeline",
+            "controlnet",
+            "--force",
+            "--steps",
+            "40",
+            "--strength",
+            "0.30",
+            "--max-resolution",
+            "1536",
+            "--min-resolution",
+            "1024",
+            "--controlnet-scale",
+            "1.0",
+            "--unsharp",
+            "0.25",
+        ],
+    },
+    "strong": {
+        "timeout": 300,
+        "args": [
+            "--pipeline",
+            "controlnet",
+            "--force",
+            "--steps",
+            "50",
+            "--strength",
+            "0.35",
+            "--max-resolution",
+            "1800",
+            "--min-resolution",
+            "1024",
+            "--controlnet-scale",
+            "1.0",
+            "--humanize",
+            "1.25",
+            "--unsharp",
+            "0.35",
+        ],
+    },
+    "max": {
+        "timeout": 420,
+        "args": [
+            "--pipeline",
+            "controlnet",
+            "--force",
+            "--steps",
+            "60",
+            "--strength",
+            "0.42",
+            "--max-resolution",
+            "0",
+            "--min-resolution",
+            "1024",
+            "--controlnet-scale",
+            "1.1",
+            "--tile",
+            "--tile-size",
+            "1024",
+            "--tile-overlap",
+            "160",
+            "--humanize",
+            "2.0",
+            "--unsharp",
+            "0.45",
+        ],
+    },
 }
 
 
@@ -37,6 +93,7 @@ def handler(job):
     job_id = payload["job_id"]
     webhook_url = payload["webhook_url"]
     webhook_secret = payload["webhook_secret"]
+    creator_id = payload.get("creator_id") or job_id
 
     with tempfile.TemporaryDirectory(prefix=f"deepclean-{job_id}-") as tmpdir:
         tmp = Path(tmpdir)
@@ -47,8 +104,9 @@ def handler(job):
         try:
             download(payload["input_url"], input_path)
             input_sha = sha256_file(input_path)
+            before_report = identify_image(input_path)
 
-            run_deepclean(
+            engine_report = run_deepclean(
                 input_path=input_path,
                 output_path=cleaned_path,
                 profile=payload.get("profile", "standard"),
@@ -62,9 +120,10 @@ def handler(job):
                 cleaned_path=cleaned_path,
                 output_path=final_path,
                 output_mode=payload.get("output_mode", "sealed"),
-                job_id=job_id,
+                creator_id=creator_id,
             )
 
+            after_report = identify_image(final_path)
             output_sha = sha256_file(final_path)
             upload_output(payload["output_path"], final_path)
             runtime_ms = int((time.time() - started) * 1000)
@@ -83,7 +142,11 @@ def handler(job):
                     "report": {
                         "profile": payload.get("profile", "standard"),
                         "output_mode": payload.get("output_mode", "sealed"),
+                        "creator_id_hash": short_hash(creator_id),
+                        "engine": engine_report,
                         "quality": quality,
+                        "identify_before": before_report,
+                        "identify_after": after_report,
                     },
                 },
             )
@@ -108,6 +171,8 @@ def handler(job):
             )
             return {"ok": False, "job_id": job_id, "error": str(exc)}
         finally:
+            if payload.get("input_path"):
+                delete_storage_object("deepclean-inputs", payload["input_path"])
             shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -139,7 +204,13 @@ def upload_output(storage_path, path):
 
 
 def run_deepclean(input_path, output_path, profile):
-    args = PROFILE_ARGS.get(profile, PROFILE_ARGS["standard"])
+    profile_config = PROFILE_ARGS.get(profile, PROFILE_ARGS["standard"])
+    args = list(profile_config["args"])
+    if token := os.environ.get("HF_TOKEN"):
+        args.extend(["--hf-token", token])
+    if model := os.environ.get("DEEPCLEAN_MODEL"):
+        args.extend(["--model", model])
+
     command = [
         "remove-ai-watermarks",
         "all",
@@ -150,12 +221,23 @@ def run_deepclean(input_path, output_path, profile):
         "cuda",
         *args,
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, timeout=180)
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=profile_config["timeout"],
+    )
     if completed.returncode != 0 or not output_path.exists():
         raise RuntimeError(
             "DeepClean engine failed: "
             + (completed.stderr.strip() or completed.stdout.strip() or "unknown error")
         )
+    return {
+        "profile": profile,
+        "command": redact_command(command),
+        "stdout_tail": tail(completed.stdout),
+        "stderr_tail": tail(completed.stderr),
+    }
 
 
 def quality_check(input_path, output_path):
@@ -178,7 +260,7 @@ def quality_check(input_path, output_path):
     return {"ok": True, "psnr": psnr, "variance": variance}
 
 
-def finalize_output(cleaned_path, output_path, output_mode, job_id):
+def finalize_output(cleaned_path, output_path, output_mode, creator_id):
     image = Image.open(cleaned_path).convert("RGB")
     canvas = Image.new("RGB", (1800, 1800), (247, 248, 244))
     image.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
@@ -187,14 +269,14 @@ def finalize_output(cleaned_path, output_path, output_mode, job_id):
     canvas.paste(image, (x, y))
 
     if output_mode in ("sealed", "sealed-stamped"):
-        apply_fibonacci_88(canvas, job_id)
+        apply_fibonacci_88(canvas, creator_id)
 
     if output_mode == "sealed-stamped":
         draw = ImageDraw.Draw(canvas)
-        label = "Resmarke"
+        label = "ResMarke"
         box = (1428, 1718, 1768, 1772)
         draw.rounded_rectangle(box, radius=8, fill=(30, 37, 37))
-        draw.text((1460, 1734), label, fill=(255, 255, 255))
+        draw.text((1460, 1734), label, fill=(255, 255, 255), font=ImageFont.load_default())
 
     canvas.save(output_path, format="JPEG", quality=88, optimize=True)
 
@@ -256,6 +338,29 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
+def short_hash(value):
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def identify_image(path):
+    completed = subprocess.run(
+        ["remove-ai-watermarks", "identify", str(path), "--json"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if completed.returncode != 0:
+        return {
+            "ok": False,
+            "stderr_tail": tail(completed.stderr),
+            "stdout_tail": tail(completed.stdout),
+        }
+    try:
+        return {"ok": True, "result": json.loads(completed.stdout)}
+    except json.JSONDecodeError:
+        return {"ok": True, "raw_tail": tail(completed.stdout)}
+
+
 def engine_version():
     completed = subprocess.run(
         ["remove-ai-watermarks", "--version"],
@@ -264,6 +369,44 @@ def engine_version():
         timeout=10,
     )
     return (completed.stdout or completed.stderr or "remove-ai-watermarks").strip()
+
+
+def redact_command(command):
+    redacted = []
+    skip_next = False
+    for item in command:
+        if skip_next:
+            redacted.append("[redacted]")
+            skip_next = False
+            continue
+        redacted.append(item)
+        if item == "--hf-token":
+            skip_next = True
+    return " ".join(shlex.quote(part) for part in redacted)
+
+
+def tail(text, limit=2000):
+    text = (text or "").strip()
+    return text[-limit:]
+
+
+def delete_storage_object(bucket, storage_path):
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not supabase_url or not service_key:
+        return
+    response = requests.delete(
+        f"{supabase_url}/storage/v1/object/{bucket}",
+        data=json.dumps({"prefixes": [storage_path]}),
+        headers={
+            "authorization": f"Bearer {service_key}",
+            "apikey": service_key,
+            "content-type": "application/json",
+        },
+        timeout=30,
+    )
+    if response.status_code not in (200, 204):
+        print(f"Warning: failed to delete {bucket}/{storage_path}: {response.status_code}")
 
 
 def notify(webhook_url, secret, body):

@@ -1,43 +1,65 @@
 import {
-  BadgeCheck,
+  ArrowRight,
   Check,
+  ChevronDown,
   Cloud,
+  Cpu,
   Download,
-  FileImage,
-  KeyRound,
+  Fingerprint,
+  ImageOff,
   Loader2,
   Lock,
+  Moon,
   RotateCcw,
   ShieldCheck,
   Sparkles,
+  Sun,
   Upload,
-  WalletCards
+  Wallet
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { config, hasSupabaseConfig } from "./lib/config";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { hasSupabaseConfig } from "./lib/config";
 import {
   grantLocalPrivacyCredits,
   readLocalCredits,
   spendLocalPrivacyCredit,
   type CreditSnapshot
 } from "./lib/localCredits";
-import { runPrivacyMax, type PrivacyMaxResult } from "./lib/privacyWorker";
+import {
+  runPrivacyMax,
+  type OutputFormat,
+  type OutputSizeMode,
+  type PrivacyMaxResult
+} from "./lib/privacyWorker";
 import { sha256Hex } from "./lib/hash";
 import {
+  cancelDeepCleanJob,
   createDeepCleanJob,
   dispatchDeepCleanJob,
+  getDeepCleanJob,
   uploadDeepCleanInput,
+  type DeepCleanJob,
   type DeepCleanOutputMode,
   type DeepCleanProfile
 } from "./lib/deepcleanClient";
 import { supabase } from "./lib/supabase";
 
 type ProcessingState = "idle" | "processing" | "done" | "error";
+type Theme = "light" | "dark";
+
+function initialTheme(): Theme {
+  if (typeof window === "undefined") return "dark";
+  const saved = localStorage.getItem("resmarke:theme");
+  if (saved === "light" || saved === "dark") return saved;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [dragging, setDragging] = useState(false);
   const [resultUrl, setResultUrl] = useState<string>("");
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [resultHash, setResultHash] = useState<string>("");
@@ -49,25 +71,42 @@ export default function App() {
   const [fit, setFit] = useState<"contain" | "cover">("contain");
   const [jpegQuality, setJpegQuality] = useState(0.86);
   const [markStrength, setMarkStrength] = useState(3);
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>("jpeg");
+  const [sizeMode, setSizeMode] = useState<OutputSizeMode>("original");
+  const [inputDims, setInputDims] = useState<{ w: number; h: number } | null>(null);
+  const [customWidth, setCustomWidth] = useState(0);
+  const [customHeight, setCustomHeight] = useState(0);
   const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
   const [deepCleanProfile, setDeepCleanProfile] = useState<DeepCleanProfile>("standard");
   const [deepCleanOutputMode, setDeepCleanOutputMode] =
     useState<DeepCleanOutputMode>("sealed");
   const [deepCleanStatus, setDeepCleanStatus] = useState("");
+  const [deepCleanJob, setDeepCleanJob] = useState<DeepCleanJob | null>(null);
+  const deepCleanPollRef = useRef<number | null>(null);
   const [authEmail, setAuthEmail] = useState("");
   const [userId, setUserId] = useState<string>("");
   const [authStatus, setAuthStatus] = useState("");
 
-  const canProcess =
-    file &&
-    state !== "processing" &&
-    credits.privacyCredits > 0 &&
-    (!hasSupabaseConfig || userId);
+  // Tool works without sign-in (accounts come later). Sign-in upgrades to Supabase credits.
+  const canProcess = !!file && state !== "processing" && credits.privacyCredits > 0;
+
   const outputName = useMemo(() => {
-    if (!file) return "resmarke-output.jpg";
+    const ext = outputFormat === "png" ? "png" : outputFormat === "webp" ? "webp" : "jpg";
+    if (!file) return `resmarke-output.${ext}`;
     const base = file.name.replace(/\.[^.]+$/, "");
-    return `${base}-resmarke.jpg`;
-  }, [file]);
+    return `${base}-resmarke.${ext}`;
+  }, [file, outputFormat]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("resmarke:theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    return () => {
+      if (deepCleanPollRef.current) window.clearInterval(deepCleanPollRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -112,9 +151,7 @@ export default function App() {
     setAuthStatus("Sending sign-in link...");
     const { error } = await supabase.auth.signInWithOtp({
       email: authEmail.trim(),
-      options: {
-        emailRedirectTo: window.location.href
-      }
+      options: { emailRedirectTo: window.location.href }
     });
     setAuthStatus(error ? error.message : "Check your email for the sign-in link.");
   }
@@ -123,6 +160,7 @@ export default function App() {
     if (!supabase) return;
     await supabase.auth.signOut();
     setUserId("");
+    setCredits(readLocalCredits());
     setAuthStatus("Signed out.");
   }
 
@@ -165,6 +203,25 @@ export default function App() {
 
     setFile(nextFile);
     setPreviewUrl(URL.createObjectURL(nextFile));
+
+    // Default output mirrors the input: same format, same dimensions.
+    const nextFormat: OutputFormat = nextFile.type.includes("png")
+      ? "png"
+      : nextFile.type.includes("webp")
+        ? "webp"
+        : "jpeg";
+    setOutputFormat(nextFormat);
+    setSizeMode("original");
+    setInputDims(null);
+
+    createImageBitmap(nextFile)
+      .then((bitmap) => {
+        setInputDims({ w: bitmap.width, h: bitmap.height });
+        setCustomWidth(bitmap.width);
+        setCustomHeight(bitmap.height);
+        bitmap.close();
+      })
+      .catch(() => setInputDims(null));
   }
 
   async function processPrivacyMax() {
@@ -180,8 +237,12 @@ export default function App() {
         creatorId,
         cleanVisibleMarks,
         markStrength,
-        jpegQuality,
-        targetSize: 1800,
+        quality: jpegQuality,
+        format: outputFormat,
+        sizeMode,
+        squareSize: 1800,
+        customWidth,
+        customHeight,
         fit
       });
 
@@ -207,340 +268,730 @@ export default function App() {
       setDeepCleanStatus("Choose an image first.");
       return;
     }
+    if (hasSupabaseConfig && !userId) {
+      setDeepCleanStatus("Sign in before queueing a GPU DeepClean job.");
+      return;
+    }
 
+    let createdJob: DeepCleanJob | null = null;
     setDeepCleanStatus("Creating DeepClean job...");
     try {
       const job = await createDeepCleanJob({
         file,
+        creatorId,
         profile: deepCleanProfile,
         outputMode: deepCleanOutputMode
       });
+      createdJob = job;
+      setDeepCleanJob(job);
       setDeepCleanStatus("Uploading private input...");
       await uploadDeepCleanInput(job, file);
       setDeepCleanStatus("Dispatching GPU worker...");
       await dispatchDeepCleanJob(job.id);
-      setDeepCleanStatus(`Job ${job.id} is queued. Watch Supabase job status for progress.`);
+      setDeepCleanStatus(`Job ${job.id} is running on the GPU worker.`);
+      startDeepCleanPolling(job.id);
     } catch (nextError) {
+      if (createdJob) {
+        await cancelDeepCleanJob(createdJob.id).catch(() => undefined);
+      }
       setDeepCleanStatus(
-        nextError instanceof Error ? nextError.message : "DeepClean is not configured."
+        nextError instanceof Error ? nextError.message : "DeepClean is not configured yet."
       );
     }
   }
 
-  return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <div className="brand-row">
-            <ShieldCheck size={28} aria-hidden="true" />
-            <h1>Resmarke</h1>
-          </div>
-          <p>Privacy-first creator cleanup and creator sealing.</p>
-        </div>
-        <div className="credit-pill" title="Privacy-Max demo credits">
-          <WalletCards size={18} aria-hidden="true" />
-          <span>
-            {credits.privacyCredits} Privacy-Max exports
-            {credits.mode === "demo" ? " demo" : ""}
-          </span>
-        </div>
-      </header>
+  function startDeepCleanPolling(jobId: string) {
+    if (deepCleanPollRef.current) window.clearInterval(deepCleanPollRef.current);
 
-      <section className="account-band">
-        <div>
-          <div className="panel-header">
-            <KeyRound size={20} aria-hidden="true" />
-            <h2>Account</h2>
-          </div>
-          <p>
-            {hasSupabaseConfig
-              ? userId
-                ? "Signed in. Credits are tracked in Supabase."
-                : "Sign in to use real Supabase credits."
-              : "Demo mode is active because Supabase is not configured."}
-          </p>
+    const tick = async () => {
+      try {
+        const job = await getDeepCleanJob(jobId);
+        setDeepCleanJob(job);
+        if (job.status === "completed") {
+          if (deepCleanPollRef.current) window.clearInterval(deepCleanPollRef.current);
+          deepCleanPollRef.current = null;
+          setDeepCleanStatus(
+            `Completed in ${job.runtimeMs ? Math.round(job.runtimeMs / 1000) : "?"}s.`
+          );
+        } else if (job.status === "failed") {
+          if (deepCleanPollRef.current) window.clearInterval(deepCleanPollRef.current);
+          deepCleanPollRef.current = null;
+          setDeepCleanStatus(job.failureReason || "DeepClean failed and the credit was released.");
+          if (userId) void refreshSupabaseCredits(userId);
+        } else {
+          setDeepCleanStatus(`GPU job status: ${job.status}.`);
+        }
+      } catch (nextError) {
+        setDeepCleanStatus(
+          nextError instanceof Error ? nextError.message : "Could not refresh DeepClean job."
+        );
+      }
+    };
+
+    void tick();
+    deepCleanPollRef.current = window.setInterval(tick, 3500);
+  }
+
+  function resetAll() {
+    onFileSelected(null);
+    setDeepCleanStatus("");
+    setDeepCleanJob(null);
+    setCredits(userId ? credits : readLocalCredits());
+  }
+
+  const openPicker = () => fileInputRef.current?.click();
+
+  return (
+    <div className="page">
+      <nav className="nav">
+        <a className="brand" href="/">
+          <span className="brand-mark">
+            <ShieldCheck size={19} aria-hidden="true" />
+          </span>
+          <span>ResMarke</span>
+        </a>
+
+        <div className="nav-links">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#faq">FAQ</a>
         </div>
-        {hasSupabaseConfig ? (
-          userId ? (
-            <button type="button" onClick={signOut}>
-              Sign out
-            </button>
-          ) : (
-            <div className="auth-controls">
-              <input
-                value={authEmail}
-                onChange={(event) => setAuthEmail(event.target.value)}
-                placeholder="email@example.com"
-                type="email"
-              />
-              <button type="button" onClick={sendMagicLink}>
-                Send link
+
+        <div className="nav-right">
+          <span className="credit-pill" title="Privacy export credits">
+            <Wallet size={15} aria-hidden="true" />
+            <strong>{credits.privacyCredits}</strong> exports
+          </span>
+
+          {hasSupabaseConfig ? (
+            userId ? (
+              <button className="icon-btn" type="button" onClick={signOut} title="Sign out">
+                <RotateCcw size={16} aria-hidden="true" />
+              </button>
+            ) : (
+              <details className="auth">
+                <summary>Sign in</summary>
+                <div className="auth-body">
+                  <p>Sign in to sync credits to your account.</p>
+                  <input
+                    className="input"
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    placeholder="you@email.com"
+                    type="email"
+                  />
+                  <button className="btn btn-primary" type="button" onClick={sendMagicLink}>
+                    Send magic link
+                  </button>
+                  {authStatus ? <p>{authStatus}</p> : null}
+                </div>
+              </details>
+            )
+          ) : null}
+
+          <button
+            className="icon-btn"
+            type="button"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+            aria-label="Toggle theme"
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </div>
+      </nav>
+
+      <main className="main">
+        {!file ? (
+          <section className="hero">
+            <span className="hero-badge">
+              <span className="dot" /> Privacy-first · Runs in your browser
+            </span>
+            <h1 className="hero-title">
+              Clean your images.
+              <br />
+              <span className="accent">Reclaim your privacy.</span>
+            </h1>
+            <p className="hero-sub">
+              Strip hidden metadata, remove visible AI marks, and seal your work — instantly,
+              locally, and privately. Nothing ever leaves your device.
+            </p>
+
+            <Dropzone
+              large
+              previewUrl=""
+              dragging={dragging}
+              setDragging={setDragging}
+              onPick={() => fileInputRef.current?.click()}
+              onDropFile={onFileSelected}
+            />
+
+            <p className="hero-trust">
+              <Lock size={14} aria-hidden="true" /> No uploads. Processing happens on your device.
+            </p>
+          </section>
+        ) : (
+          <section className="workspace">
+            <div className="work-head">
+              <h2>Workspace</h2>
+              <button className="btn btn-ghost" type="button" onClick={resetAll}>
+                <RotateCcw size={16} aria-hidden="true" /> Start over
               </button>
             </div>
-          )
-        ) : null}
-        {authStatus ? <p className="account-status">{authStatus}</p> : null}
-      </section>
 
-      <section className="notice-band">
-        <Lock size={20} aria-hidden="true" />
-        <p>
-          Privacy-Max runs locally in your browser. Images are not uploaded. DeepClean is a
-          separate cloud GPU beta for advanced hidden watermark reduction and is charged only
-          after successful processing.
-        </p>
-      </section>
+            <div className="work-grid">
+              {/* Original */}
+              <div className="card">
+                <div className="card-label">Original</div>
+                <Dropzone
+                  previewUrl={previewUrl}
+                  dragging={dragging}
+                  setDragging={setDragging}
+                  onPick={() => fileInputRef.current?.click()}
+                  onDropFile={onFileSelected}
+                />
+                <div className="file-meta">
+                  <span className="name">{file.name}</span>
+                  <span>{(file.size / 1_000_000).toFixed(2)} MB</span>
+                </div>
+              </div>
 
-      <section className="workspace-grid">
-        <div className="tool-panel">
-          <div className="panel-header">
-            <FileImage size={20} aria-hidden="true" />
-            <h2>Input</h2>
-          </div>
+              {/* Cleaned */}
+              <div className="card">
+                <div className="card-label">Cleaned result</div>
+                <div className="output-frame">
+                  {resultUrl ? (
+                    <img src={resultUrl} alt="Cleaned output preview" />
+                  ) : (
+                    <div className="output-empty">
+                      <ImageOff size={26} aria-hidden="true" />
+                      <span>Your cleaned 1800×1800 JPEG appears here</span>
+                    </div>
+                  )}
+                </div>
 
-          <button
-            className="drop-zone"
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              onFileSelected(event.dataTransfer.files.item(0));
-            }}
-          >
-            {previewUrl ? (
-              <img src={previewUrl} alt="Selected image preview" />
-            ) : (
-              <span>
-                <Upload size={26} aria-hidden="true" />
-                Drop an image or choose a file
-              </span>
-            )}
-          </button>
-          <input
-            ref={fileInputRef}
-            className="sr-only"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(event) => onFileSelected(event.target.files?.item(0) ?? null)}
-          />
+                {report && (
+                  <div className="report-grid">
+                    <Metric label="Metadata" value="Stripped" />
+                    <Metric
+                      label="Visible cleanup"
+                      value={
+                        report.visibleCleanupApplied
+                          ? `${report.visibleCleanupPixels} px`
+                          : "None"
+                      }
+                    />
+                    <Metric label="Seal" value="Fibonacci-88" />
+                    <Metric label="Hash" value={resultHash.slice(0, 12)} />
+                  </div>
+                )}
 
-          <div className="file-meta">
-            <span>{file ? file.name : "No image selected"}</span>
-            <span>{file ? `${(file.size / 1_000_000).toFixed(2)} MB` : "JPEG, PNG, WebP"}</span>
-          </div>
-        </div>
+                <div className="action-row">
+                  <button
+                    className="btn btn-primary btn-block"
+                    type="button"
+                    disabled={!canProcess}
+                    onClick={processPrivacyMax}
+                  >
+                    {state === "processing" ? (
+                      <>
+                        <Loader2 className="spin" size={18} aria-hidden="true" /> Cleaning…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={18} aria-hidden="true" />
+                        {resultBlob ? "Clean again" : "Clean image"}
+                      </>
+                    )}
+                  </button>
 
-        <div className="tool-panel settings-panel">
-          <div className="panel-header">
-            <KeyRound size={20} aria-hidden="true" />
-            <h2>Privacy-Max</h2>
-          </div>
+                  {resultBlob ? (
+                    <a className="btn btn-ghost btn-block" href={resultUrl} download={outputName}>
+                      <Download size={18} aria-hidden="true" /> Download JPEG
+                    </a>
+                  ) : null}
+                </div>
 
-          <label className="field">
-            <span>Creator ID</span>
-            <input
-              value={creatorId}
-              onChange={(event) => setCreatorId(event.target.value)}
-              placeholder="creator@example.com"
-            />
-          </label>
+                {state === "error" && <p className="error-text">{error}</p>}
 
-          <div className="segmented" aria-label="Image fit">
-            <button
-              className={fit === "contain" ? "active" : ""}
-              type="button"
-              onClick={() => setFit("contain")}
-            >
-              Contain
-            </button>
-            <button
-              className={fit === "cover" ? "active" : ""}
-              type="button"
-              onClick={() => setFit("cover")}
-            >
-              Cover
-            </button>
-          </div>
+                {credits.privacyCredits <= 0 ? (
+                  <div className="inline-warning">
+                    <span>No export credits left.</span>
+                    {credits.mode === "demo" ? (
+                      <button type="button" onClick={() => setCredits(grantLocalPrivacyCredits(15))}>
+                        Add 15 credits
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
 
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={cleanVisibleMarks}
-              onChange={(event) => setCleanVisibleMarks(event.target.checked)}
-            />
-            <span>Clean reliable visible AI corner marks</span>
-          </label>
+                <details className="options">
+                  <summary>
+                    Advanced options <ChevronDown className="chev" size={16} aria-hidden="true" />
+                  </summary>
+                  <div className="options-body">
+                    <div className="opt-section">
+                      <div className="opt-section-title">Output</div>
 
-          <label className="field range-field">
-            <span>Fibonacci-88 strength: {markStrength}</span>
-            <input
-              type="range"
-              min="1"
-              max="8"
-              value={markStrength}
-              onChange={(event) => setMarkStrength(Number(event.target.value))}
-            />
-          </label>
+                      <div className="field">
+                        <span>Format</span>
+                        <div className="segmented" aria-label="Output format">
+                          <button
+                            className={outputFormat === "jpeg" ? "active" : ""}
+                            type="button"
+                            onClick={() => setOutputFormat("jpeg")}
+                          >
+                            JPG
+                          </button>
+                          <button
+                            className={outputFormat === "png" ? "active" : ""}
+                            type="button"
+                            onClick={() => setOutputFormat("png")}
+                          >
+                            PNG
+                          </button>
+                          <button
+                            className={outputFormat === "webp" ? "active" : ""}
+                            type="button"
+                            onClick={() => setOutputFormat("webp")}
+                          >
+                            WebP
+                          </button>
+                        </div>
+                      </div>
 
-          <label className="field range-field">
-            <span>JPEG quality: {Math.round(jpegQuality * 100)}%</span>
-            <input
-              type="range"
-              min="0.7"
-              max="0.94"
-              step="0.01"
-              value={jpegQuality}
-              onChange={(event) => setJpegQuality(Number(event.target.value))}
-            />
-          </label>
+                      <label className="field">
+                        <span>Size &amp; ratio</span>
+                        <select
+                          className="select"
+                          value={sizeMode}
+                          onChange={(event) => setSizeMode(event.target.value as OutputSizeMode)}
+                        >
+                          <option value="original">
+                            Match input{inputDims ? ` (${inputDims.w}×${inputDims.h})` : ""}
+                          </option>
+                          <option value="square">Square (1800×1800)</option>
+                          <option value="custom">Custom…</option>
+                        </select>
+                      </label>
 
-          <button
-            className="primary-action"
-            type="button"
-            disabled={!canProcess}
-            onClick={processPrivacyMax}
-          >
-            {state === "processing" ? (
-              <Loader2 className="spin" size={20} aria-hidden="true" />
-            ) : (
-              <Sparkles size={20} aria-hidden="true" />
-            )}
-            Process locally
-          </button>
+                      {sizeMode === "custom" ? (
+                        <div className="dim-row">
+                          <label className="field">
+                            <span>Width</span>
+                            <input
+                              className="input"
+                              type="number"
+                              min={16}
+                              max={8192}
+                              value={customWidth || ""}
+                              onChange={(event) => setCustomWidth(Number(event.target.value))}
+                            />
+                          </label>
+                          <span className="dim-x">×</span>
+                          <label className="field">
+                            <span>Height</span>
+                            <input
+                              className="input"
+                              type="number"
+                              min={16}
+                              max={8192}
+                              value={customHeight || ""}
+                              onChange={(event) => setCustomHeight(Number(event.target.value))}
+                            />
+                          </label>
+                        </div>
+                      ) : null}
 
-          {hasSupabaseConfig && !userId ? (
-            <div className="inline-warning">Sign in before processing with production credits.</div>
-          ) : null}
+                      {sizeMode !== "original" ? (
+                        <div className="field">
+                          <span>Fit</span>
+                          <div className="segmented" aria-label="Image fit">
+                            <button
+                              className={fit === "contain" ? "active" : ""}
+                              type="button"
+                              onClick={() => setFit("contain")}
+                            >
+                              Contain
+                            </button>
+                            <button
+                              className={fit === "cover" ? "active" : ""}
+                              type="button"
+                              onClick={() => setFit("cover")}
+                            >
+                              Cover
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
 
-          {credits.privacyCredits <= 0 ? (
-            <div className="inline-warning">
-              No demo credits left.
-              {credits.mode === "demo" ? (
-                <button type="button" onClick={() => setCredits(grantLocalPrivacyCredits(15))}>
-                  Add 15 demo credits
+                      {outputFormat !== "png" ? (
+                        <label className="range-field">
+                          <span>Quality: {Math.round(jpegQuality * 100)}%</span>
+                          <input
+                            type="range"
+                            min="0.7"
+                            max="0.94"
+                            step="0.01"
+                            value={jpegQuality}
+                            onChange={(event) => setJpegQuality(Number(event.target.value))}
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+
+                    <div className="opt-section">
+                      <div className="opt-section-title">Privacy &amp; seal</div>
+
+                      <label className="field">
+                        <span>Creator ID</span>
+                        <input
+                          className="input"
+                          value={creatorId}
+                          onChange={(event) => setCreatorId(event.target.value)}
+                          placeholder="creator@example.com"
+                        />
+                      </label>
+
+                      <label className="check-row">
+                        <input
+                          type="checkbox"
+                          checked={cleanVisibleMarks}
+                          onChange={(event) => setCleanVisibleMarks(event.target.checked)}
+                        />
+                        <span>Clean visible AI corner marks</span>
+                      </label>
+
+                      <label className="range-field">
+                        <span>Fibonacci-88 strength: {markStrength}</span>
+                        <input
+                          type="range"
+                          min="1"
+                          max="8"
+                          value={markStrength}
+                          onChange={(event) => setMarkStrength(Number(event.target.value))}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </div>
+
+            {/* DeepClean GPU */}
+            <div className="deepclean">
+              <div className="deepclean-head">
+                <Cloud size={20} aria-hidden="true" />
+                <h3>DeepClean GPU</h3>
+                <span className="tag">
+                  <Cpu size={11} aria-hidden="true" /> Beta
+                </span>
+              </div>
+              <p className="desc">
+                Optional cloud regeneration for advanced hidden-watermark reduction. Use only on
+                images you own or control. A credit is captured only after the GPU worker completes
+                successfully.
+              </p>
+
+              <div className="deepclean-controls">
+                <label className="field">
+                  <span>Profile</span>
+                  <select
+                    className="select"
+                    value={deepCleanProfile}
+                    onChange={(event) =>
+                      setDeepCleanProfile(event.target.value as DeepCleanProfile)
+                    }
+                  >
+                    <option value="standard">Standard</option>
+                    <option value="strong">Strong</option>
+                    <option value="max">Max</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Output</span>
+                  <select
+                    className="select"
+                    value={deepCleanOutputMode}
+                    onChange={(event) =>
+                      setDeepCleanOutputMode(event.target.value as DeepCleanOutputMode)
+                    }
+                  >
+                    <option value="stripped">Stripped only</option>
+                    <option value="sealed">Stripped + Fibonacci-88</option>
+                    <option value="sealed-stamped">Stripped + seal + stamp</option>
+                  </select>
+                </label>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={startDeepCleanBeta}
+                  disabled={!file}
+                >
+                  <Cloud size={18} aria-hidden="true" /> Queue job
                 </button>
+              </div>
+
+              <p className="deepclean-status">
+                {hasSupabaseConfig
+                  ? deepCleanStatus || "Connected. Queue a job to run it on the GPU worker."
+                  : "Set Supabase env vars to enable DeepClean."}
+              </p>
+              {deepCleanJob?.outputUrl ? (
+                <a className="btn btn-ghost deepclean-download" href={deepCleanJob.outputUrl}>
+                  <Download size={18} aria-hidden="true" /> Download DeepClean result
+                </a>
               ) : null}
             </div>
-          ) : null}
-        </div>
+          </section>
+        )}
 
-        <div className="tool-panel">
-          <div className="panel-header">
-            <Download size={20} aria-hidden="true" />
-            <h2>Output</h2>
-          </div>
-
-          <div className="output-frame">
-            {resultUrl ? (
-              <img src={resultUrl} alt="Processed output preview" />
-            ) : (
-              <span>Processed 1800 x 1800 JPEG appears here</span>
-            )}
-          </div>
-
-          {state === "error" && <p className="error-text">{error}</p>}
-
-          {report && (
-            <div className="report-grid">
-              <Metric label="Metadata" value="Stripped" />
-              <Metric
-                label="Visible cleanup"
-                value={report.visibleCleanupApplied ? `${report.visibleCleanupPixels} px` : "None"}
+        {!file && (
+          <>
+            {/* Features */}
+            <section className="section" id="features">
+              <SectionHead
+                eyebrow="Why ResMarke"
+                title="Privacy you can actually trust"
+                subtitle="No uploads. No account required. Just clean, sealed images in seconds."
               />
-              <Metric label="Seal" value="Fibonacci-88" />
-              <Metric label="Hash" value={resultHash.slice(0, 12)} />
-            </div>
-          )}
+              <div className="features">
+                <Feature
+                  icon={<Lock size={20} aria-hidden="true" />}
+                  title="Local & private"
+                  body="Privacy-Max runs entirely in your browser. Your images are never uploaded or stored."
+                />
+                <Feature
+                  icon={<ImageOff size={20} aria-hidden="true" />}
+                  title="Metadata stripped"
+                  body="EXIF, GPS, device, and software tags are removed, plus a clean re-encode of the pixels."
+                />
+                <Feature
+                  icon={<Fingerprint size={20} aria-hidden="true" />}
+                  title="Fibonacci-88 seal"
+                  body="A subtle creator mark sealed into your export — yours, and recognizably so."
+                />
+              </div>
+            </section>
 
-          <a
-            className={`download-button ${resultBlob ? "" : "disabled"}`}
-            href={resultUrl || undefined}
-            download={outputName}
-            aria-disabled={!resultBlob}
-          >
-            <Download size={20} aria-hidden="true" />
-            Download JPEG
-          </a>
-        </div>
-      </section>
+            {/* How it works */}
+            <section className="section" id="how">
+              <SectionHead eyebrow="How it works" title="Three steps to a clean image" />
+              <div className="steps">
+                <Step
+                  n={1}
+                  title="Drop your image"
+                  body="Add a JPG, PNG, or WebP. Everything happens locally — nothing is uploaded."
+                />
+                <Step
+                  n={2}
+                  title="Clean & seal"
+                  body="We strip metadata, remove visible AI marks, and seal it with your Fibonacci-88 mark."
+                />
+                <Step
+                  n={3}
+                  title="Export your way"
+                  body="Download in your original format and size, or pick a custom type and ratio."
+                />
+              </div>
+            </section>
 
-      <section className="deepclean-band">
-        <div className="deepclean-copy">
-          <div className="panel-header">
-            <Cloud size={20} aria-hidden="true" />
-            <h2>DeepClean GPU Beta</h2>
-          </div>
-          <p>
-            Optional cloud regeneration for advanced hidden watermark reduction. Use only for
-            images you own or control. A credit is captured only after the worker completes
-            successfully.
-          </p>
-        </div>
+            {/* DeepClean promo */}
+            <section className="section">
+              <div className="promo">
+                <span className="tag">
+                  <Cpu size={11} aria-hidden="true" /> DeepClean GPU · Beta
+                </span>
+                <h3>Go deeper with GPU regeneration</h3>
+                <p>
+                  For stubborn, deeply embedded watermarks, DeepClean runs an optional cloud GPU
+                  pass that regenerates the image — far beyond what a browser can do. You only pay
+                  after a job completes successfully.
+                </p>
+                <button className="btn btn-primary" type="button" onClick={openPicker}>
+                  <Upload size={18} aria-hidden="true" /> Start with an image
+                </button>
+              </div>
+            </section>
 
-        <div className="deepclean-controls">
-          <select
-            value={deepCleanProfile}
-            onChange={(event) => setDeepCleanProfile(event.target.value as DeepCleanProfile)}
-            aria-label="DeepClean profile"
-          >
-            <option value="standard">Standard</option>
-            <option value="strong">Strong</option>
-            <option value="max">Max</option>
-          </select>
-          <select
-            value={deepCleanOutputMode}
-            onChange={(event) =>
-              setDeepCleanOutputMode(event.target.value as DeepCleanOutputMode)
-            }
-            aria-label="DeepClean output mode"
-          >
-            <option value="stripped">Stripped only</option>
-            <option value="sealed">Stripped + Fibonacci-88</option>
-            <option value="sealed-stamped">Stripped + seal + stamp</option>
-          </select>
-          <button type="button" onClick={startDeepCleanBeta} disabled={!file}>
-            <Cloud size={18} aria-hidden="true" />
-            Queue beta job
-          </button>
-        </div>
+            {/* Pricing */}
+            <section className="section" id="pricing">
+              <SectionHead
+                eyebrow="Pricing"
+                title="Simple, creator-friendly pricing"
+                subtitle="Start free. Upgrade only when you need more volume."
+              />
+              <div className="pricing">
+                <Tier
+                  name="Free"
+                  price="$0"
+                  period="forever"
+                  features={["3 Privacy-Max exports", "Local, private processing", "Fibonacci-88 seal"]}
+                  cta="Start free"
+                  onClick={openPicker}
+                />
+                <Tier
+                  name="Trial"
+                  price="$1"
+                  period="7 days"
+                  features={["15 exports", "All output formats & sizes", "Everything in Free"]}
+                  cta="Start trial"
+                  onClick={openPicker}
+                />
+                <Tier
+                  name="Pro"
+                  price="$19.99"
+                  period="month"
+                  featured
+                  features={[
+                    "200 exports / month",
+                    "Priority processing",
+                    "All formats, sizes & ratios"
+                  ]}
+                  cta="Choose Pro"
+                  onClick={openPicker}
+                />
+                <Tier
+                  name="Pro+"
+                  price="$29.99"
+                  period="month"
+                  features={[
+                    "500 exports / month",
+                    "DeepClean GPU credits",
+                    "Everything in Pro"
+                  ]}
+                  cta="Choose Pro+"
+                  onClick={openPicker}
+                />
+              </div>
+              <p className="pricing-note">
+                Card payments via Airwallex are launching soon — start cleaning free today, no
+                account required.
+              </p>
+            </section>
 
-        <p className="deepclean-status">
-          {hasSupabaseConfig
-            ? deepCleanStatus || "Supabase is configured. DeepClean jobs can be queued."
-            : "Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable DeepClean job creation."}
-        </p>
-      </section>
+            {/* FAQ */}
+            <section className="section" id="faq">
+              <SectionHead eyebrow="FAQ" title="Questions, answered" />
+              <div className="faq">
+                <FaqItem
+                  q="Are my images uploaded anywhere?"
+                  a="No. Privacy-Max runs entirely in your browser — your images never leave your device. DeepClean GPU is a separate, optional cloud feature you explicitly opt into."
+                />
+                <FaqItem
+                  q="What exactly does ResMarke remove?"
+                  a="All EXIF and metadata (GPS, device, software tags), via a clean pixel re-encode — plus optional removal of visible AI corner marks."
+                />
+                <FaqItem
+                  q="What is the Fibonacci-88 seal?"
+                  a="A subtle creator mark sealed into your export so your work is recognizably yours. It's a creator mark, not a claim of original provenance."
+                />
+                <FaqItem
+                  q="Which formats and sizes can I export?"
+                  a="JPG, PNG, or WebP — at your original dimensions, a square, or any custom width and height you set."
+                />
+                <FaqItem
+                  q="What can I use it on?"
+                  a="Use ResMarke only on images you own or control."
+                />
+              </div>
+            </section>
 
-      <section className="pricing-grid">
-        <Plan title="Free" price="$0" detail="3 Privacy-Max exports" link="" />
-        <Plan title="Trial" price="$1" detail="15 exports for 7 days" link={config.stripeTrialLink} />
-        <Plan title="Pro" price="$19.99" detail="200 monthly exports" link={config.stripeProLink} />
-        <Plan
-          title="Pro+"
-          price="$29.99"
-          detail="500 monthly exports, DeepClean add-ons"
-          link={config.stripeProPlusLink}
-        />
-      </section>
+            {/* Final CTA */}
+            <section className="section">
+              <div className="cta-band">
+                <h2>Clean your first image — free</h2>
+                <p>No account, no uploads. It runs right here in your browser.</p>
+                <button className="btn btn-primary" type="button" onClick={openPicker}>
+                  <Upload size={18} aria-hidden="true" /> Drop an image
+                </button>
+              </div>
+            </section>
+          </>
+        )}
+      </main>
+
+      <input
+        ref={fileInputRef}
+        className="sr-only"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={(event) => onFileSelected(event.target.files?.item(0) ?? null)}
+      />
 
       <footer className="footer">
-        <span>
-          Use only on images you own or control. Fibonacci-88 is a creator mark, not proof of
-          original provenance.
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            onFileSelected(null);
-            setCredits(readLocalCredits());
-          }}
-        >
-          <RotateCcw size={16} aria-hidden="true" />
-          Reset
-        </button>
+        <div className="footer-inner">
+          <span>
+            Use only on images you own or control. Fibonacci-88 is a creator mark, not proof of
+            provenance.
+          </span>
+          <span>© {new Date().getFullYear()} ResMarke</span>
+        </div>
       </footer>
-    </main>
+    </div>
+  );
+}
+
+function Dropzone({
+  large = false,
+  previewUrl,
+  dragging,
+  setDragging,
+  onPick,
+  onDropFile
+}: {
+  large?: boolean;
+  previewUrl: string;
+  dragging: boolean;
+  setDragging: (next: boolean) => void;
+  onPick: () => void;
+  onDropFile: (file: File | null) => void;
+}) {
+  return (
+    <div
+      className={[
+        "dropzone",
+        large ? "large" : "",
+        previewUrl ? "has-image" : "",
+        dragging ? "dragging" : ""
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      role="button"
+      tabIndex={0}
+      onClick={onPick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onPick();
+        }
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragging(false);
+        onDropFile(event.dataTransfer.files.item(0));
+      }}
+    >
+      {previewUrl ? (
+        <img src={previewUrl} alt="Selected image preview" />
+      ) : (
+        <div className="dz-inner">
+          <div className="dz-icon">
+            <Upload size={26} aria-hidden="true" />
+          </div>
+          <div className="dz-title">Drop your image here</div>
+          <div className="dz-sub">
+            or <span className="dz-browse">browse files</span> · JPEG, PNG, WebP up to 25MB
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -553,35 +1004,99 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Plan({
+function Feature({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
+  return (
+    <div className="feature">
+      <div className="f-icon">{icon}</div>
+      <h4>{title}</h4>
+      <p>{body}</p>
+    </div>
+  );
+}
+
+function SectionHead({
+  eyebrow,
   title,
-  price,
-  detail,
-  link
+  subtitle
 }: {
+  eyebrow: string;
   title: string;
-  price: string;
-  detail: string;
-  link: string;
+  subtitle?: string;
 }) {
   return (
-    <div className="plan-card">
-      <div>
-        <h3>{title}</h3>
-        <strong>{price}</strong>
-        <p>{detail}</p>
-      </div>
-      {link ? (
-        <a href={link}>
-          <Check size={18} aria-hidden="true" />
-          Choose
-        </a>
-      ) : (
-        <span>
-          <BadgeCheck size={18} aria-hidden="true" />
-          Included
-        </span>
-      )}
+    <div className="section-head">
+      <span className="eyebrow">{eyebrow}</span>
+      <h2>{title}</h2>
+      {subtitle ? <p>{subtitle}</p> : null}
     </div>
+  );
+}
+
+function Step({ n, title, body }: { n: number; title: string; body: string }) {
+  return (
+    <div className="step">
+      <span className="step-n">{n}</span>
+      <h4>{title}</h4>
+      <p>{body}</p>
+    </div>
+  );
+}
+
+function Tier({
+  name,
+  price,
+  period,
+  features,
+  cta,
+  featured = false,
+  onClick
+}: {
+  name: string;
+  price: string;
+  period: string;
+  features: string[];
+  cta: string;
+  featured?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div className={featured ? "tier featured" : "tier"}>
+      {featured ? (
+        <span className="tier-badge">
+          <Sparkles size={12} aria-hidden="true" /> Most popular
+        </span>
+      ) : null}
+      <div className="tier-name">{name}</div>
+      <div className="tier-price">
+        <strong>{price}</strong>
+        <span>/ {period}</span>
+      </div>
+      <ul className="tier-features">
+        {features.map((feature) => (
+          <li key={feature}>
+            <Check size={15} aria-hidden="true" /> {feature}
+          </li>
+        ))}
+      </ul>
+      <button
+        className={featured ? "btn btn-primary btn-block" : "btn btn-ghost btn-block"}
+        type="button"
+        onClick={onClick}
+      >
+        {cta} <ArrowRight size={16} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  return (
+    <details className="faq-item">
+      <summary>
+        {q}
+        <ChevronDown className="chev" size={18} aria-hidden="true" />
+      </summary>
+      <p>{a}</p>
+    </details>
   );
 }

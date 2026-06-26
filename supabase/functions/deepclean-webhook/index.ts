@@ -33,6 +33,9 @@ Deno.serve(async (request) => {
       .single();
     if (jobError) throw jobError;
     if (!job) return jsonResponse({ error: "Job not found." }, 404);
+    if (job.status === "completed" || job.status === "failed") {
+      return jsonResponse({ ok: true, duplicate: true });
+    }
 
     const now = new Date().toISOString();
     if (body.status === "completed") {

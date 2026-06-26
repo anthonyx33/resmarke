@@ -38,9 +38,11 @@ Deno.serve(async (request) => {
     const payload = {
       input: {
         job_id: job.id,
+        creator_id: job.creator_id || user.email || user.id,
         profile: job.profile,
         output_mode: job.output_mode,
         input_url: inputSigned.signedUrl,
+        input_path: job.input_path,
         output_path: job.output_path,
         webhook_url: webhookUrl,
         webhook_secret: webhookSecret
@@ -62,10 +64,15 @@ Deno.serve(async (request) => {
     if (!runpodResponse.ok) {
       throw new Error(`RunPod dispatch failed with ${runpodResponse.status}`);
     }
+    const runpodBody = await runpodResponse.json().catch(() => ({}));
 
     await client
       .from("deepclean_jobs")
-      .update({ status: "processing", updated_at: new Date().toISOString() })
+      .update({
+        status: "processing",
+        runpod_job_id: runpodBody.id ?? runpodBody.job_id ?? null,
+        updated_at: new Date().toISOString()
+      })
       .eq("id", job.id);
 
     return jsonResponse({ ok: true, job_id: job.id });

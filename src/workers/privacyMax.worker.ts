@@ -2,14 +2,21 @@
 
 import { applyFibonacci88Mark } from "../lib/fibonacci88";
 
+type OutputFormat = "jpeg" | "png" | "webp";
+type OutputSizeMode = "original" | "square" | "custom";
+
 type PrivacyRequest = {
   id: string;
   file: File;
   creatorId: string;
   cleanVisibleMarks: boolean;
   markStrength: number;
-  jpegQuality: number;
-  targetSize: number;
+  quality: number;
+  format: OutputFormat;
+  sizeMode: OutputSizeMode;
+  squareSize: number;
+  customWidth: number;
+  customHeight: number;
   fit: "contain" | "cover";
 };
 
@@ -24,9 +31,12 @@ type PrivacySuccess = {
     visibleCleanupApplied: boolean;
     visibleCleanupPixels: number;
     fibonacciBits: 88;
-    jpegQuality: number;
+    format: OutputFormat;
+    quality: number;
   };
 };
+
+const MAX_DIM = 8192;
 
 type PrivacyFailure = {
   id: string;
@@ -40,9 +50,12 @@ self.onmessage = async (event: MessageEvent<PrivacyRequest>) => {
   const request = event.data;
   try {
     const bitmap = await createImageBitmap(request.file);
-    const canvas = new OffscreenCanvas(request.targetSize, request.targetSize);
+    const { width, height } = resolveDimensions(request, bitmap);
+
+    const canvas = new OffscreenCanvas(width, height);
+    const opaque = request.format === "jpeg";
     const context = canvas.getContext("2d", {
-      alpha: false,
+      alpha: !opaque,
       willReadFrequently: true
     });
 
@@ -50,11 +63,16 @@ self.onmessage = async (event: MessageEvent<PrivacyRequest>) => {
       throw new Error("Canvas is not available in this browser.");
     }
 
-    context.fillStyle = "#f7f8f4";
-    context.fillRect(0, 0, request.targetSize, request.targetSize);
-    drawFittedImage(context, bitmap, request.targetSize, request.fit);
+    // JPEG has no alpha — flatten onto white so letterboxing isn't black.
+    if (opaque) {
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+    }
 
-    let imageData = context.getImageData(0, 0, request.targetSize, request.targetSize);
+    drawFittedImage(context, bitmap, width, height, request.sizeMode, request.fit);
+    bitmap.close();
+
+    let imageData = context.getImageData(0, 0, width, height);
     const visibleCleanup = request.cleanVisibleMarks
       ? cleanVisibleCornerMarks(imageData)
       : { applied: false, changedPixels: 0, imageData };
@@ -65,23 +83,29 @@ self.onmessage = async (event: MessageEvent<PrivacyRequest>) => {
     });
 
     context.putImageData(imageData, 0, 0);
-    const blob = await canvas.convertToBlob({
-      type: "image/jpeg",
-      quality: request.jpegQuality
-    });
+
+    const type =
+      request.format === "png"
+        ? "image/png"
+        : request.format === "webp"
+          ? "image/webp"
+          : "image/jpeg";
+    // quality is ignored by the encoder for PNG.
+    const blob = await canvas.convertToBlob({ type, quality: request.quality });
 
     const response: WorkerResponse = {
       id: request.id,
       ok: true,
       blob,
-      width: request.targetSize,
-      height: request.targetSize,
+      width,
+      height,
       report: {
         metadataStripped: true,
         visibleCleanupApplied: visibleCleanup.applied,
         visibleCleanupPixels: visibleCleanup.changedPixels,
         fibonacciBits: 88,
-        jpegQuality: request.jpegQuality
+        format: request.format,
+        quality: request.quality
       }
     };
     self.postMessage(response);
@@ -95,38 +119,64 @@ self.onmessage = async (event: MessageEvent<PrivacyRequest>) => {
   }
 };
 
+function resolveDimensions(
+  request: PrivacyRequest,
+  bitmap: ImageBitmap
+): { width: number; height: number } {
+  const clamp = (value: number, fallback: number) => {
+    const rounded = Math.round(value);
+    if (!Number.isFinite(rounded) || rounded <= 0) return fallback;
+    return Math.max(16, Math.min(MAX_DIM, rounded));
+  };
+
+  if (request.sizeMode === "square") {
+    const size = clamp(request.squareSize, 1800);
+    return { width: size, height: size };
+  }
+  if (request.sizeMode === "custom") {
+    return {
+      width: clamp(request.customWidth, bitmap.width),
+      height: clamp(request.customHeight, bitmap.height)
+    };
+  }
+  // "original" — match the input dimensions exactly.
+  return { width: clamp(bitmap.width, 16), height: clamp(bitmap.height, 16) };
+}
+
 function drawFittedImage(
   context: OffscreenCanvasRenderingContext2D,
   bitmap: ImageBitmap,
-  targetSize: number,
+  targetW: number,
+  targetH: number,
+  sizeMode: OutputSizeMode,
   fit: "contain" | "cover"
 ) {
-  const imageRatio = bitmap.width / bitmap.height;
-  const targetRatio = 1;
-  let drawWidth = targetSize;
-  let drawHeight = targetSize;
-
-  if (fit === "contain") {
-    if (imageRatio > targetRatio) {
-      drawWidth = targetSize;
-      drawHeight = targetSize / imageRatio;
-    } else {
-      drawHeight = targetSize;
-      drawWidth = targetSize * imageRatio;
-    }
-  } else if (imageRatio > targetRatio) {
-    drawHeight = targetSize;
-    drawWidth = targetSize * imageRatio;
-  } else {
-    drawWidth = targetSize;
-    drawHeight = targetSize / imageRatio;
-  }
-
-  const x = (targetSize - drawWidth) / 2;
-  const y = (targetSize - drawHeight) / 2;
-
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
+
+  // Match-input: the canvas already equals the image aspect, draw 1:1.
+  if (sizeMode === "original") {
+    context.drawImage(bitmap, 0, 0, targetW, targetH);
+    return;
+  }
+
+  const imageRatio = bitmap.width / bitmap.height;
+  const targetRatio = targetW / targetH;
+  const constrainByWidth =
+    fit === "contain" ? imageRatio > targetRatio : imageRatio < targetRatio;
+
+  let drawWidth: number;
+  let drawHeight: number;
+  if (constrainByWidth) {
+    drawWidth = targetW;
+    drawHeight = targetW / imageRatio;
+  } else {
+    drawHeight = targetH;
+    drawWidth = targetH * imageRatio;
+  }
+
+  const x = (targetW - drawWidth) / 2;
+  const y = (targetH - drawHeight) / 2;
   context.drawImage(bitmap, x, y, drawWidth, drawHeight);
 }
 

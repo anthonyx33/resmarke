@@ -1,3 +1,7 @@
+-- ResMarke production schema.
+-- Paste this into the Supabase SQL Editor for the resmarke-prod project.
+-- Safe to run more than once.
+
 create extension if not exists "pgcrypto";
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -49,18 +53,25 @@ create table if not exists public.deepclean_jobs (
   completed_at timestamptz
 );
 
+alter table public.deepclean_jobs
+  add column if not exists creator_id text not null default '',
+  add column if not exists runpod_job_id text;
+
 alter table public.creator_profiles enable row level security;
 alter table public.credit_ledger enable row level security;
 alter table public.deepclean_jobs enable row level security;
 
+drop policy if exists "Users can read own profile" on public.creator_profiles;
 create policy "Users can read own profile"
   on public.creator_profiles for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Users can read own ledger" on public.credit_ledger;
 create policy "Users can read own ledger"
   on public.credit_ledger for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Users can read own deepclean jobs" on public.deepclean_jobs;
 create policy "Users can read own deepclean jobs"
   on public.deepclean_jobs for select
   using (auth.uid() = user_id);

@@ -1,4 +1,4 @@
-# Resmarke Launch Runbook
+# ResMarke Launch Runbook
 
 This is the fastest path to launch Privacy-Max now and DeepClean GPU beta next.
 
@@ -12,7 +12,7 @@ Install:
 brew install supabase/tap/supabase
 ```
 
-Install Docker Desktop or OrbStack if you want to build the GPU image locally. If you do not want Docker locally, use GitHub Actions or another cloud builder to publish `deepclean-worker/`.
+Install Docker Desktop or OrbStack if you want to build the GPU image locally. If you do not want Docker locally, use the included GitHub Actions workflow to publish `deepclean-worker/`.
 
 ## 1. Launch Privacy-Max First
 
@@ -71,6 +71,8 @@ Deploy functions:
 supabase functions deploy spend-privacy-credit
 supabase functions deploy create-deepclean-job
 supabase functions deploy dispatch-deepclean-job
+supabase functions deploy get-deepclean-job
+supabase functions deploy cancel-deepclean-job
 supabase functions deploy deepclean-webhook --no-verify-jwt
 ```
 
@@ -116,8 +118,9 @@ docker push ghcr.io/YOUR_GITHUB_USER/resmarke-deepclean:latest
 No-local-Docker path:
 
 1. Push repo to GitHub.
-2. Build `deepclean-worker/Dockerfile` with GitHub Actions, Docker Hub, or another cloud builder.
-3. Publish to GHCR or Docker Hub.
+2. Open GitHub Actions.
+3. Run the `DeepClean Worker Image` workflow.
+4. Use `ghcr.io/YOUR_GITHUB_USER/resmarke-deepclean:latest` as the RunPod image.
 
 ## 5. RunPod Serverless Endpoint
 
@@ -136,6 +139,7 @@ Set worker environment:
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
 DEEPCLEAN_OUTPUT_BUCKET=deepclean-outputs
+DEEPCLEAN_MODEL=
 HF_TOKEN=...
 ```
 

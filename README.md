@@ -1,6 +1,6 @@
-# Resmarke
+# ResMarke
 
-Resmarke implements the bootstrap launch plan:
+ResMarke implements the bootstrap launch plan:
 
 - Privacy-Max local processing in the browser.
 - Metadata stripping by browser re-encode.
@@ -49,8 +49,10 @@ DeepClean is scaffolded as an async cloud job:
 1. `create-deepclean-job` reserves a credit and returns a signed upload URL.
 2. The frontend uploads the image to private storage.
 3. `dispatch-deepclean-job` sends a RunPod job payload.
-4. The RunPod worker processes the image and calls `deepclean-webhook`.
-5. The webhook captures or releases the reserved credit.
+4. `get-deepclean-job` polls status and returns a short-lived signed output URL.
+5. `cancel-deepclean-job` releases reserved credits if upload/dispatch fails.
+6. The RunPod worker processes the image and calls `deepclean-webhook`.
+7. The webhook captures or releases the reserved credit.
 
 Deploy the SQL migration and Supabase functions in `supabase/`, then build and publish the worker in `deepclean-worker/`.
 
@@ -62,7 +64,7 @@ The worker needs these runtime secrets:
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 DEEPCLEAN_OUTPUT_BUCKET=deepclean-outputs
-BACKEND_WEBHOOK_SECRET=
+DEEPCLEAN_MODEL=
 HF_TOKEN=
 ```
 

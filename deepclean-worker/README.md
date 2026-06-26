@@ -9,7 +9,7 @@ docker build -t ghcr.io/YOUR_GITHUB_USER/resmarke-deepclean:latest .
 docker push ghcr.io/YOUR_GITHUB_USER/resmarke-deepclean:latest
 ```
 
-If Docker is not installed locally, push this repo to GitHub and build the image with GitHub Actions or any cloud builder that can publish to GHCR/Docker Hub.
+If Docker is not installed locally, push this repo to GitHub and run the included `DeepClean Worker Image` GitHub Actions workflow.
 
 ## RunPod Endpoint
 
@@ -28,6 +28,7 @@ Create a RunPod Serverless endpoint with:
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
 DEEPCLEAN_OUTPUT_BUCKET=deepclean-outputs
+DEEPCLEAN_MODEL=
 HF_TOKEN=...
 ```
 

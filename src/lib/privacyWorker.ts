@@ -1,10 +1,17 @@
+export type OutputFormat = "jpeg" | "png" | "webp";
+export type OutputSizeMode = "original" | "square" | "custom";
+
 export type PrivacyMaxOptions = {
   file: File;
   creatorId: string;
   cleanVisibleMarks: boolean;
   markStrength: number;
-  jpegQuality: number;
-  targetSize: number;
+  quality: number;
+  format: OutputFormat;
+  sizeMode: OutputSizeMode;
+  squareSize: number;
+  customWidth: number;
+  customHeight: number;
   fit: "contain" | "cover";
 };
 
@@ -17,7 +24,8 @@ export type PrivacyMaxResult = {
     visibleCleanupApplied: boolean;
     visibleCleanupPixels: number;
     fibonacciBits: 88;
-    jpegQuality: number;
+    format: OutputFormat;
+    quality: number;
   };
 };
 
