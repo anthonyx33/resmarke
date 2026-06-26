@@ -78,7 +78,11 @@ def set_loadimage(graph: dict, filename: str) -> int:
 
 def set_seed(graph: dict, seed: int) -> int:
     """Set the seed on every node that exposes a `seed` input (KSampler,
-    SEGSDetailerModelSwap, etc.) for deterministic output."""
+    SEGSDetailerModelSwap, etc.) for deterministic output.
+
+    Also flips `control_after_generate` to 'fixed' on those nodes — the v2
+    workflow ships KSampler with control_after_generate='randomize', which in
+    API format is a separate input that would otherwise overwrite our seed."""
     count = 0
     for node_id, node in graph.items():
         if not isinstance(node, dict):
@@ -86,6 +90,8 @@ def set_seed(graph: dict, seed: int) -> int:
         inputs = node.get("inputs")
         if isinstance(inputs, dict) and "seed" in inputs:
             inputs["seed"] = int(seed)
+            if "control_after_generate" in inputs:
+                inputs["control_after_generate"] = "fixed"
             count += 1
     return count
 

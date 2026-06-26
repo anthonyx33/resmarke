@@ -402,14 +402,20 @@ def short_hash(value):
 
 def identify_image(path):
     """Before/after watermark inventory via the `remove-ai-watermarks identify`
-    CLI. Optional — if the package is absent (e.g. dropped to keep the image
-    lean), this returns ok=False and the webhook report simply omits it."""
-    completed = subprocess.run(
-        ["remove-ai-watermarks", "identify", str(path), "--json"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    CLI. Optional — if the package is absent or broken (e.g. dropped to keep the
+    image lean), this returns ok=False and the webhook report simply omits it.
+    Must NEVER raise: a missing optional tool must not fail a clean job."""
+    try:
+        completed = subprocess.run(
+            ["remove-ai-watermarks", "identify", str(path), "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return {"ok": False, "reason": "remove-ai-watermarks not installed"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "reason": f"identify failed: {exc}"}
     if completed.returncode != 0:
         return {
             "ok": False,
