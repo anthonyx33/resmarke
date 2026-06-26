@@ -21,20 +21,34 @@ TEMPLATE_PATH = Path(
 )
 
 # Profiles drive the python-side optimizations (resolution cap + restore-to-
-# original + timeout). The ComfyUI workflow's own AdaptiveDenoise node still
-# scales denoise per resolution inside the graph.
-#
-# TODO(v2): `face_path` is not yet wired into the graph — skipping the
-# Z-Image/SAM/MediaPipe/RES4LYF face subgraph requires the API-format template
-# to be exported first so we can identify the face-path node IDs. v1 runs the
-# full v2 workflow for every profile (correct, just not yet face-conditional).
+# original + timeout) plus small graph mutations before /prompt submission.
+# Standard skips the Z-Image/SAM/MediaPipe/RES4LYF face subgraph by rewiring
+# SaveImage to the global Qwen output and pruning unreachable nodes.
 # `upscale_back` is lanczos for all tiers in v1; neural upscale (Real-ESRGAN
 # via a ComfyUI UpscaleModelLoader node) is a follow-up to avoid a fragile
 # realesrgan pip install in the ComfyUI image.
 PROFILE_CONFIG = {
-    "standard": {"timeout": 180, "process_cap": 1536, "upscale_back": "lanczos", "face_path": False},
-    "strong": {"timeout": 240, "process_cap": 1536, "upscale_back": "lanczos", "face_path": True},
-    "max": {"timeout": 360, "process_cap": 1800, "upscale_back": "lanczos", "face_path": True},
+    "standard": {
+        "timeout": 180,
+        "process_cap": 1536,
+        "upscale_back": "lanczos",
+        "face_path": False,
+        "adaptive_level": 4,
+    },
+    "strong": {
+        "timeout": 240,
+        "process_cap": 1536,
+        "upscale_back": "lanczos",
+        "face_path": True,
+        "adaptive_level": 6,
+    },
+    "max": {
+        "timeout": 360,
+        "process_cap": 1800,
+        "upscale_back": "lanczos",
+        "face_path": True,
+        "adaptive_level": 8,
+    },
 }
 
 
@@ -169,6 +183,35 @@ def run_deepclean(input_path, output_path, profile):
     return run_deepclean_comfyui(input_path, output_path, profile)
 
 
+def prepare_workflow_graph(cc, filename, cfg, seed=None):
+    graph = cc.load_template(str(TEMPLATE_PATH))
+    loadimage_nodes = cc.set_loadimage(graph, filename)
+
+    if cfg["face_path"]:
+        face_path_bypass = {
+            "applied": False,
+            "reason": "face_path_enabled",
+            "nodes_before": len(graph),
+            "nodes_after": len(graph),
+            "removed_nodes": 0,
+        }
+    else:
+        face_path_bypass = cc.bypass_face_path(graph)
+
+    adaptive_nodes = cc.set_adaptive_level(graph, cfg["adaptive_level"])
+    seed_nodes = cc.set_seed(graph, seed) if seed is not None else 0
+
+    return graph, {
+        "loadimage_nodes": loadimage_nodes,
+        "adaptive_level": cfg["adaptive_level"],
+        "adaptive_nodes": adaptive_nodes,
+        "seed_nodes": seed_nodes,
+        "face_path": cfg["face_path"],
+        "face_path_bypass": face_path_bypass,
+        "workflow_nodes": len(graph),
+    }
+
+
 def run_deepclean_comfyui(input_path, output_path, profile):
     import comfyui_client as cc
 
@@ -207,10 +250,7 @@ def run_deepclean_comfyui(input_path, output_path, profile):
         proc_img.save(proc_png, format="PNG")
 
         filename = cc.upload_image(proc_png)
-        graph = cc.load_template(str(TEMPLATE_PATH))
-        cc.set_loadimage(graph, filename)
-        if seed is not None:
-            cc.set_seed(graph, seed)
+        graph, workflow_report = prepare_workflow_graph(cc, filename, cfg, seed=seed)
 
         prompt_id = cc.post_prompt(graph)
         entry = cc.wait_for_prompt(prompt_id, timeout=cfg["timeout"])
@@ -234,28 +274,28 @@ def run_deepclean_comfyui(input_path, output_path, profile):
         "process_resolution": [proc_w, proc_h],
         "output_resolution": [orig_w, orig_h],
         "upscale_back": cfg["upscale_back"],
+        "workflow": workflow_report,
         "runtime_ms": int((time.time() - started) * 1000),
     }
 
 
 def warmup(profile):
-    """Push a small neutral image through the workflow so Qwen + controlnet
-    land in VRAM at boot. A flat image has no faces, so the Z-Image face path
-    stays unloaded until a real portrait arrives."""
+    """Push a small neutral image through the selected profile's workflow so
+    the relevant models land in VRAM at boot."""
     import comfyui_client as cc
 
     started = time.time()
     cfg = get_profile_config(profile)
     warmed = False
     err = None
+    workflow_report = None
     if TEMPLATE_PATH.exists():
         with tempfile.TemporaryDirectory(prefix="deepclean-warm-") as tmpd:
             warm_png = Path(tmpd) / "warm.png"
             Image.new("RGB", (512, 512), (128, 128, 128)).save(warm_png, format="PNG")
             try:
                 filename = cc.upload_image(warm_png)
-                graph = cc.load_template(str(TEMPLATE_PATH))
-                cc.set_loadimage(graph, filename)
+                graph, workflow_report = prepare_workflow_graph(cc, filename, cfg)
                 prompt_id = cc.post_prompt(graph)
                 cc.wait_for_prompt(prompt_id, timeout=cfg["timeout"])
                 warmed = True
@@ -273,6 +313,7 @@ def warmup(profile):
         "warmed": warmed,
         "warmup_error": err,
         "engine": "remarkee-max-v2",
+        "workflow": workflow_report,
         "runtime_ms": int((time.time() - started) * 1000),
         "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
         "engine_version": engine_version(),
@@ -288,6 +329,7 @@ def public_profile_config(cfg):
         "process_cap": cfg["process_cap"],
         "upscale_back": cfg["upscale_back"],
         "face_path": cfg["face_path"],
+        "adaptive_level": cfg["adaptive_level"],
         "timeout": cfg["timeout"],
     }
 

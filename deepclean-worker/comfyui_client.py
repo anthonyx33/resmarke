@@ -7,6 +7,8 @@ module talks to ComfyUI's HTTP API (http://127.0.0.1:8188 by default):
     load_template(path) -> graph          read API-format workflow JSON
     set_loadimage(graph, filename)        mutate the LoadImage node
     set_seed(graph, seed)                 mutate every node with a `seed` input
+    set_adaptive_level(graph, level)      mutate RemarkeeMax-AdaptiveDenoise
+    bypass_face_path(graph)               prune face-only nodes for standard
     post_prompt(graph) -> prompt_id       POST /prompt
     wait_for_prompt(prompt_id, timeout)   poll GET /history/{id}
     get_output_image(prompt_id) -> bytes  GET /view
@@ -14,13 +16,14 @@ module talks to ComfyUI's HTTP API (http://127.0.0.1:8188 by default):
 The workflow template is the **API format** (flat {node_id: {class_type, inputs}}),
 exported once from ComfyUI's UI via "Save (API Format)" — see
 workflows/EXPORT.md. We only mutate fields with stable, well-known API input
-names (LoadImage.image, KSampler.seed); the workflow's own AdaptiveDenoise node
-continues to drive per-resolution denoise untouched.
+names (LoadImage.image, seed, adaptive_level, SaveImage.images).
 """
+import copy
 import json
 import os
 import time
 import uuid
+from collections import Counter
 from pathlib import Path
 
 import requests
@@ -64,6 +67,68 @@ def _find_nodes_by_class(graph: dict, class_type: str):
             yield node_id, node
 
 
+def _node_sort_key(node_id: str):
+    try:
+        return (0, int(node_id))
+    except (TypeError, ValueError):
+        return (1, str(node_id))
+
+
+def _looks_like_node_link(value) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) == 2
+        and isinstance(value[0], str)
+        and isinstance(value[1], int)
+    )
+
+
+def _is_node_link(value, graph: dict) -> bool:
+    return _looks_like_node_link(value) and value[0] in graph
+
+
+def _iter_node_links(value):
+    if _looks_like_node_link(value):
+        yield value[0]
+    elif isinstance(value, dict):
+        for child in value.values():
+            yield from _iter_node_links(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_node_links(child)
+
+
+def _dependency_closure(graph: dict, root_id: str) -> set[str]:
+    seen = set()
+    stack = [root_id]
+    while stack:
+        node_id = stack.pop()
+        if node_id in seen:
+            continue
+        if node_id not in graph:
+            raise RuntimeError(f"Workflow references missing node {node_id!r}.")
+        seen.add(node_id)
+        node = graph[node_id]
+        stack.extend(_iter_node_links(node.get("inputs", {})))
+    return seen
+
+
+def _single_node_by_class(graph: dict, class_type: str):
+    matches = list(_find_nodes_by_class(graph, class_type))
+    if len(matches) != 1:
+        raise RuntimeError(f"Expected exactly one {class_type} node, found {len(matches)}.")
+    return matches[0]
+
+
+def _assert_no_dangling_refs(graph: dict) -> None:
+    for node_id, node in graph.items():
+        if not isinstance(node, dict):
+            continue
+        for dep_id in _iter_node_links(node.get("inputs", {})):
+            if dep_id not in graph:
+                raise RuntimeError(f"Node {node_id} references missing node {dep_id}.")
+
+
 def set_loadimage(graph: dict, filename: str) -> int:
     """Point every LoadImage node at the uploaded filename."""
     count = 0
@@ -94,6 +159,77 @@ def set_seed(graph: dict, seed: int) -> int:
                 inputs["control_after_generate"] = "fixed"
             count += 1
     return count
+
+
+def set_adaptive_level(graph: dict, level: int) -> int:
+    """Set Remarkee Max's global adaptive denoise level."""
+    count = 0
+    for _, node in _find_nodes_by_class(graph, "RemarkeeMax-AdaptiveDenoise"):
+        inputs = node.setdefault("inputs", {})
+        if "adaptive_level" in inputs:
+            inputs["adaptive_level"] = int(level)
+            count += 1
+    if count == 0:
+        raise RuntimeError("Workflow template has no RemarkeeMax-AdaptiveDenoise.adaptive_level input.")
+    return count
+
+
+def bypass_face_path(graph: dict) -> dict:
+    """Prune the Z-Image face path for standard jobs.
+
+    The API export includes non-SaveImage output nodes, so deleting only the
+    SEGSPaste chain can leave dangling references. This rewires SaveImage to
+    the global Qwen output, then keeps only nodes reachable from SaveImage.
+    If discovery fails, the original graph is left untouched.
+    """
+    try:
+        candidate = copy.deepcopy(graph)
+        before_count = len(candidate)
+
+        save_id, save_node = _single_node_by_class(candidate, "SaveImage")
+        save_inputs = save_node.setdefault("inputs", {})
+        save_images = save_inputs.get("images")
+        if not _is_node_link(save_images, candidate):
+            raise RuntimeError("SaveImage.images is not a node link.")
+
+        paste_id = save_images[0]
+        paste_node = candidate[paste_id]
+        if paste_node.get("class_type") != "SEGSPaste":
+            raise RuntimeError(f"SaveImage does not point at SEGSPaste; found {paste_node.get('class_type')}.")
+
+        base_link = paste_node.get("inputs", {}).get("image")
+        if not _is_node_link(base_link, candidate):
+            raise RuntimeError("SEGSPaste.image is not a node link.")
+
+        save_inputs["images"] = list(base_link)
+        keep = _dependency_closure(candidate, save_id)
+        removed_ids = [node_id for node_id in list(candidate) if node_id not in keep]
+        removed_classes = Counter(candidate[node_id].get("class_type", "unknown") for node_id in removed_ids)
+        for node_id in removed_ids:
+            del candidate[node_id]
+
+        _assert_no_dangling_refs(candidate)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "applied": False,
+            "reason": str(exc),
+            "nodes_before": len(graph),
+            "nodes_after": len(graph),
+            "removed_nodes": 0,
+        }
+
+    graph.clear()
+    graph.update(candidate)
+    return {
+        "applied": True,
+        "save_node": save_id,
+        "base_node": base_link[0],
+        "nodes_before": before_count,
+        "nodes_after": len(graph),
+        "removed_nodes": len(removed_ids),
+        "removed_class_counts": dict(sorted(removed_classes.items())),
+        "removed_node_ids": sorted(removed_ids, key=_node_sort_key),
+    }
 
 
 def post_prompt(graph: dict) -> str:
