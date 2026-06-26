@@ -14,81 +14,62 @@ import runpod
 from PIL import Image, ImageDraw, ImageFont
 
 
-PROFILE_ARGS = {
+PROFILE_CONFIG = {
     "standard": {
         "timeout": 240,
-        "args": [
-            "--pipeline",
-            "controlnet",
-            "--force",
-            "--steps",
-            "40",
-            "--strength",
-            "0.30",
-            "--max-resolution",
-            "1536",
-            "--min-resolution",
-            "1024",
-            "--controlnet-scale",
-            "1.0",
-            "--unsharp",
-            "0.25",
-        ],
+        "pipeline": "controlnet",
+        "steps": 40,
+        "strength": 0.30,
+        "max_resolution": 1536,
+        "min_resolution": 1024,
+        "controlnet_scale": 1.0,
+        "humanize": 0.0,
+        "unsharp": 0.25,
+        "adaptive_polish": True,
+        "tile": False,
+        "tile_size": 1024,
+        "tile_overlap": 128,
     },
     "strong": {
         "timeout": 300,
-        "args": [
-            "--pipeline",
-            "controlnet",
-            "--force",
-            "--steps",
-            "50",
-            "--strength",
-            "0.35",
-            "--max-resolution",
-            "1800",
-            "--min-resolution",
-            "1024",
-            "--controlnet-scale",
-            "1.0",
-            "--humanize",
-            "1.25",
-            "--unsharp",
-            "0.35",
-        ],
+        "pipeline": "controlnet",
+        "steps": 50,
+        "strength": 0.35,
+        "max_resolution": 1800,
+        "min_resolution": 1024,
+        "controlnet_scale": 1.0,
+        "humanize": 1.25,
+        "unsharp": 0.35,
+        "adaptive_polish": True,
+        "tile": False,
+        "tile_size": 1024,
+        "tile_overlap": 128,
     },
     "max": {
         "timeout": 420,
-        "args": [
-            "--pipeline",
-            "controlnet",
-            "--force",
-            "--steps",
-            "60",
-            "--strength",
-            "0.42",
-            "--max-resolution",
-            "0",
-            "--min-resolution",
-            "1024",
-            "--controlnet-scale",
-            "1.1",
-            "--tile",
-            "--tile-size",
-            "1024",
-            "--tile-overlap",
-            "160",
-            "--humanize",
-            "2.0",
-            "--unsharp",
-            "0.45",
-        ],
+        "pipeline": "controlnet",
+        "steps": 60,
+        "strength": 0.42,
+        "max_resolution": 0,
+        "min_resolution": 1024,
+        "controlnet_scale": 1.1,
+        "humanize": 2.0,
+        "unsharp": 0.45,
+        "adaptive_polish": True,
+        "tile": True,
+        "tile_size": 1024,
+        "tile_overlap": 160,
     },
 }
+
+ENGINE_CACHE = {}
 
 
 def handler(job):
     payload = job.get("input", {})
+    if payload.get("action") == "warmup":
+        return warmup(payload.get("profile", "standard"))
+
     started = time.time()
     job_id = payload["job_id"]
     webhook_url = payload["webhook_url"]
@@ -204,8 +185,70 @@ def upload_output(storage_path, path):
 
 
 def run_deepclean(input_path, output_path, profile):
-    profile_config = PROFILE_ARGS.get(profile, PROFILE_ARGS["standard"])
-    args = list(profile_config["args"])
+    if os.environ.get("DEEPCLEAN_ENGINE_MODE", "python").lower() == "cli":
+        return run_deepclean_cli(input_path, output_path, profile)
+
+    try:
+        return run_deepclean_python(input_path, output_path, profile)
+    except Exception as exc:
+        if os.environ.get("DEEPCLEAN_CLI_FALLBACK", "0") != "1":
+            raise
+        if output_path.exists():
+            output_path.unlink()
+        fallback_report = run_deepclean_cli(input_path, output_path, profile)
+        fallback_report["python_api_error"] = str(exc)
+        return fallback_report
+
+
+def run_deepclean_python(input_path, output_path, profile):
+    profile_config = get_profile_config(profile)
+    started = time.time()
+    engine, engine_report = get_engine(profile)
+    progress_messages = []
+
+    def progress(message):
+        print(f"[deepclean] {message}", flush=True)
+        progress_messages.append(message)
+        del progress_messages[:-12]
+
+    # The engine keeps the original progress callback from construction. For now
+    # progress is startup-scoped; per-job progress is still represented by runtime.
+    seed = env_int("DEEPCLEAN_SEED")
+    engine.remove_watermark(
+        image_path=Path(input_path),
+        output_path=Path(output_path),
+        strength=profile_config["strength"],
+        num_inference_steps=profile_config["steps"],
+        guidance_scale=None,
+        seed=seed,
+        humanize=profile_config["humanize"],
+        max_resolution=profile_config["max_resolution"],
+        min_resolution=profile_config["min_resolution"],
+        vendor=None,
+        unsharp=profile_config["unsharp"],
+        adaptive_polish=profile_config["adaptive_polish"],
+        upscaler="lanczos",
+        tile=profile_config["tile"],
+        tile_size=profile_config["tile_size"],
+        tile_overlap=profile_config["tile_overlap"],
+    )
+    if not output_path.exists():
+        raise RuntimeError("DeepClean engine failed: Python API did not write an output file.")
+
+    return {
+        "profile": profile,
+        "method": "python-api",
+        "params": public_profile_config(profile_config),
+        "engine": engine_report,
+        "seed": seed,
+        "runtime_ms": int((time.time() - started) * 1000),
+        "progress_tail": progress_messages,
+    }
+
+
+def run_deepclean_cli(input_path, output_path, profile):
+    profile_config = get_profile_config(profile)
+    args = cli_args_for_profile(profile_config)
     if token := os.environ.get("HF_TOKEN"):
         args.extend(["--hf-token", token])
     if model := os.environ.get("DEEPCLEAN_MODEL"):
@@ -234,10 +277,143 @@ def run_deepclean(input_path, output_path, profile):
         )
     return {
         "profile": profile,
+        "method": "cli",
         "command": redact_command(command),
         "stdout_tail": tail(completed.stdout),
         "stderr_tail": tail(completed.stderr),
     }
+
+
+def get_engine(profile):
+    profile_config = get_profile_config(profile)
+    pipeline = profile_config["pipeline"]
+    model_id = os.environ.get("DEEPCLEAN_MODEL") or None
+    hf_token = os.environ.get("HF_TOKEN") or None
+    device = os.environ.get("DEEPCLEAN_DEVICE") or "cuda"
+    controlnet_scale = profile_config["controlnet_scale"]
+    cache_key = (pipeline, model_id, device, bool(hf_token), controlnet_scale)
+
+    if cache_key in ENGINE_CACHE:
+        return ENGINE_CACHE[cache_key]["engine"], {
+            "cached": True,
+            "pipeline": pipeline,
+            "device": device,
+            "model": model_id or "default",
+            "controlnet_scale": controlnet_scale,
+            "load_ms": ENGINE_CACHE[cache_key]["load_ms"],
+        }
+
+    print(
+        f"[deepclean] Loading engine pipeline={pipeline} device={device} "
+        f"model={model_id or 'default'} controlnet_scale={controlnet_scale}",
+        flush=True,
+    )
+    started = time.time()
+
+    from remove_ai_watermarks.invisible_engine import InvisibleEngine
+
+    def progress(message):
+        print(f"[deepclean:init] {message}", flush=True)
+
+    engine = InvisibleEngine(
+        model_id=model_id,
+        device=device,
+        pipeline=pipeline,
+        hf_token=hf_token,
+        progress_callback=progress,
+        controlnet_conditioning_scale=controlnet_scale,
+    )
+    engine.preload()
+    load_ms = int((time.time() - started) * 1000)
+    ENGINE_CACHE[cache_key] = {"engine": engine, "load_ms": load_ms}
+    print(f"[deepclean] Engine ready in {load_ms}ms", flush=True)
+    return engine, {
+        "cached": False,
+        "pipeline": pipeline,
+        "device": device,
+        "model": model_id or "default",
+        "controlnet_scale": controlnet_scale,
+        "load_ms": load_ms,
+    }
+
+
+def warmup(profile):
+    started = time.time()
+    _, engine_report = get_engine(profile)
+    return {
+        "ok": True,
+        "action": "warmup",
+        "profile": profile,
+        "engine": engine_report,
+        "runtime_ms": int((time.time() - started) * 1000),
+        "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
+        "engine_version": engine_version(),
+    }
+
+
+def get_profile_config(profile):
+    return PROFILE_CONFIG.get(profile, PROFILE_CONFIG["standard"])
+
+
+def public_profile_config(profile_config):
+    return {
+        "pipeline": profile_config["pipeline"],
+        "steps": profile_config["steps"],
+        "strength": profile_config["strength"],
+        "max_resolution": profile_config["max_resolution"],
+        "min_resolution": profile_config["min_resolution"],
+        "controlnet_scale": profile_config["controlnet_scale"],
+        "humanize": profile_config["humanize"],
+        "unsharp": profile_config["unsharp"],
+        "adaptive_polish": profile_config["adaptive_polish"],
+        "tile": profile_config["tile"],
+        "tile_size": profile_config["tile_size"],
+        "tile_overlap": profile_config["tile_overlap"],
+    }
+
+
+def cli_args_for_profile(profile_config):
+    args = [
+        "--pipeline",
+        profile_config["pipeline"],
+        "--force",
+        "--steps",
+        str(profile_config["steps"]),
+        "--strength",
+        str(profile_config["strength"]),
+        "--max-resolution",
+        str(profile_config["max_resolution"]),
+        "--min-resolution",
+        str(profile_config["min_resolution"]),
+        "--controlnet-scale",
+        str(profile_config["controlnet_scale"]),
+        "--unsharp",
+        str(profile_config["unsharp"]),
+    ]
+    if profile_config["humanize"] > 0:
+        args.extend(["--humanize", str(profile_config["humanize"])])
+    if profile_config["adaptive_polish"]:
+        args.append("--adaptive-polish")
+    else:
+        args.append("--no-adaptive-polish")
+    if profile_config["tile"]:
+        args.extend(
+            [
+                "--tile",
+                "--tile-size",
+                str(profile_config["tile_size"]),
+                "--tile-overlap",
+                str(profile_config["tile_overlap"]),
+            ]
+        )
+    return args
+
+
+def env_int(name):
+    value = os.environ.get(name)
+    if value in (None, ""):
+        return None
+    return int(value)
 
 
 def quality_check(input_path, output_path):
@@ -419,4 +595,20 @@ def notify(webhook_url, secret, body):
     response.raise_for_status()
 
 
+def maybe_preload_on_start():
+    if os.environ.get("DEEPCLEAN_ENGINE_MODE", "python").lower() == "cli":
+        return
+    if os.environ.get("DEEPCLEAN_PRELOAD", "1") == "0":
+        return
+    profile = os.environ.get("DEEPCLEAN_PRELOAD_PROFILE", "standard")
+    try:
+        report = warmup(profile)
+        print(f"[deepclean] Startup preload complete: {json.dumps(report)}", flush=True)
+    except Exception as exc:
+        print(f"[deepclean] Startup preload failed: {exc}", flush=True)
+        if os.environ.get("DEEPCLEAN_PRELOAD_REQUIRED") == "1":
+            raise
+
+
+maybe_preload_on_start()
 runpod.serverless.start({"handler": handler})

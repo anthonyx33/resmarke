@@ -129,9 +129,22 @@ Create RunPod Serverless endpoint:
 - Image: `ghcr.io/YOUR_GITHUB_USER/resmarke-deepclean:latest`
 - GPU: A40/A6000/L40S, 48 GB preferred for bakeoff
 - Concurrency: `1`
-- Timeout: `180s`
+- Timeout: `240s` for standard beta; raise to `300s` if exposing strong
 - Container disk: `50 GB+`
-- Idle timeout: low during beta
+
+For lowest cost during beta:
+
+- Active workers: `0`
+- Max workers: `1`
+- Idle timeout: `60-300s`
+
+For fastest customer experience:
+
+- Active workers: `1`
+- Max workers: `1` to start
+- `DEEPCLEAN_PRELOAD=1` so the model loads when the worker boots
+
+The fast mode bills continuously while the active worker is running, but it avoids the worst user-facing cold start.
 
 Set worker environment:
 
@@ -139,7 +152,12 @@ Set worker environment:
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
 DEEPCLEAN_OUTPUT_BUCKET=deepclean-outputs
+DEEPCLEAN_ENGINE_MODE=python
+DEEPCLEAN_PRELOAD=1
+DEEPCLEAN_PRELOAD_PROFILE=standard
+DEEPCLEAN_DEVICE=cuda
 DEEPCLEAN_MODEL=
+DEEPCLEAN_SEED=0
 HF_TOKEN=...
 ```
 
