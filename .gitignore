@@ -7,3 +7,5 @@ dist/
 *.pyc
 __pycache__/
 .supabase/
+supabase/.temp/
+supabase/.branches/
