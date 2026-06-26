@@ -36,7 +36,7 @@ FILES = [
     ("Qwen_3_4b-imatrix-IQ4_XS.gguf", "clip",
      "https://huggingface.co/worstplayer/Z-Image_Qwen_3_4b_text_encoder_GGUF/resolve/main/Qwen_3_4b-imatrix-IQ4_XS.gguf"),
     ("ae.safetensors", "vae",
-     "https://huggingface.co/Comfy-Org/Z-Image-ComfyUI/resolve/main/split_files/vae/ae.safetensors"),
+     "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors"),
     # Face detection / segmentation
     ("yolov8n-face.pt", "ultralytics/bbox",
      "https://huggingface.co/Bingsu/adetailer/resolve/main/face_yolov8n.pt"),
