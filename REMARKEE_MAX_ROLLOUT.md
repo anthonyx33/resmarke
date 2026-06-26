@@ -22,7 +22,7 @@ Browser (Vercel SPA)  ──►  Supabase (Postgres + Edge Functions + Storage +
 - **Frontend** (`src/`): React/Vite SPA on Vercel. Renders the Remarkee Max card,
   calls Supabase edge functions, polls job status.
 - **Supabase**: source of truth — `deepclean_jobs`, `creator_profiles`,
-  `credit_ledger` tables; private storage buckets; 6 edge functions; auth.
+  `credit_ledger` tables; private storage buckets; 8 edge functions; auth.
 - **RunPod worker** (`deepclean-worker/`): Docker container running ComfyUI as a
   localhost service + the RunPod serverless handler. Runs the Remarkee Max
   ComfyUI workflow (Qwen Image + Z-Image Turbo, Q4_K_M GGUF) on a 24 GB GPU.
@@ -88,14 +88,16 @@ select id, public from storage.buckets;
 -- both rows must show public=false
 ```
 
-### 2.4 Deploy the 6 edge functions
+### 2.4 Deploy the edge functions
 
 ```bash
+supabase functions deploy spend-privacy-credit
 supabase functions deploy create-deepclean-job
 supabase functions deploy dispatch-deepclean-job
 supabase functions deploy get-deepclean-job
 supabase functions deploy cancel-deepclean-job
 supabase functions deploy admin-runpod-endpoint
+supabase functions deploy reconcile-deepclean-jobs
 supabase functions deploy deepclean-webhook --no-verify-jwt   # ← called by RunPod, not a user JWT
 ```
 
@@ -110,15 +112,14 @@ with a shared secret, not a user session. (It still authenticates via
 supabase secrets set RUNPOD_API_KEY=rpa_xxx
 supabase secrets set RUNPOD_ENDPOINT_ID=xxxx                  # from Phase 4
 supabase secrets set DEEPCLEAN_WEBHOOK_SECRET=$(openssl rand -hex 32)
+supabase secrets set ADMIN_EMAILS=you@example.com
 
-# The service role key the functions + worker use:
-supabase secrets set SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY=eyJ...        # service role key
+# Supabase automatically provides SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+# to Edge Functions. Do not put the service-role key in Vercel.
 ```
 
-**Copy the `DEEPCLEAN_WEBHOOK_SECRET` value** — the RunPod worker needs the same
-value (Phase 4). Keep the service role key out of git (it's a secret, never a
-VITE_ var).
+Keep every server key out of git. The service role key is a secret, never a
+`VITE_` var.
 
 ### 2.6 Storage lifecycle (production hardening — do before GA)
 
@@ -226,8 +227,6 @@ DEEPCLEAN_OUTPUT_BUCKET=deepclean-outputs
 DEEPCLEAN_PRELOAD=1                                       # warm Qwen into VRAM at boot
 DEEPCLEAN_PRELOAD_PROFILE=standard
 DEEPCLEAN_SEED=0                                          # deterministic output (optional)
-# Webhook secret — must equal the Supabase DEEPCLEAN_WEBHOOK_SECRET:
-DEEPCLEAN_WEBHOOK_SECRET=<the value from 2.5>
 # Optional overrides (defaults shown):
 # COMFYUI_BASE=/runpod-volume/ComfyUI
 # COMFYUI_URL=http://127.0.0.1:8188
@@ -235,13 +234,10 @@ DEEPCLEAN_WEBHOOK_SECRET=<the value from 2.5>
 # HF_TOKEN=...   (only if HF rate-limited)
 ```
 
-> ⚠️ **Wait — does the worker read `DEEPCLEAN_WEBHOOK_SECRET`?** The webhook
-> secret is currently passed **per-job in the dispatch payload** (Supabase sends
-> `webhook_secret` in the job input; the worker includes it in the webhook body).
-> So the worker does **not** need a `DEEPCLEAN_WEBHOOK_SECRET` env var — the
-> secret flows through the job payload. Confirm `dispatch-deepclean-job` reads
-> `DEEPCLEAN_WEBHOOK_SECRET` from Supabase secrets and forwards it. Do **not**
-> put the secret in the RunPod env unless you also wire the worker to read it.
+The worker does **not** need `DEEPCLEAN_WEBHOOK_SECRET` as a RunPod env var.
+Supabase reads that secret in `dispatch-deepclean-job`, forwards it as
+`webhook_secret` in the job payload, and the worker sends it back to
+`deepclean-webhook`.
 
 ### Scaling mode (also controllable from the app's Admin panel via `admin-runpod-endpoint`)
 
@@ -369,10 +365,10 @@ Confirm: the job ends `failed`, the credit is **refunded** (`credit_ledger`
 ### Reliability & failure modes
 - [ ] **Webhook delivery**: RunPod retries the webhook on non-2xx, but if Supabase
       edge functions are down at completion time, the job completes on the GPU but
-      the DB never updates and the credit stays reserved. Add a **reconciliation
-      sweep**: a scheduled function that finds `processing` jobs older than
-      `timeout + 2min`, calls RunPod's status API, and closes them (capture or
-      release). This is the single biggest production gap — implement before GA.
+      the DB never updates and the credit stays reserved. The
+      `reconcile-deepclean-jobs` function closes that gap by finding stale
+      `processing` jobs, calling RunPod's status API, and closing them
+      (capture or release). Schedule it before GA.
 - [ ] **Idempotent webhook**: already handled — duplicate webhooks return
       `{duplicate: true}` without re-capturing.
 - [ ] **Input validation**: `create-deepclean-job` caps at 25 MB and image MIME.
@@ -414,11 +410,10 @@ Confirm: the job ends `failed`, the credit is **refunded** (`credit_ledger`
 1. **Canary (you only):** Phase 7 verification on your own account. Fix
    everything. Run 20–50 images across all 3 profiles + the failure path.
 2. **Closed beta (invited users):** `workersMin=1, workersMax=1`. Grant beta
-   users credits manually. Watch the reconciliation gap (9) — if you haven't
-   built the sweep yet, manually reconcile stuck `processing` jobs a few times
-   a day. Collect quality feedback on faces/text.
+   users credits manually. Run `reconcile-deepclean-jobs` on a schedule and
+   collect quality feedback on faces/text.
 3. **Open beta:** wire Stripe credit purchase. Raise `workersMax` to 2–3.
-   Build the reconciliation sweep (9). Add storage TTL (2.6).
+   Add storage TTL (2.6) before meaningful volume.
 4. **GA:** scale `workersMax` to demand, lower boot timeout to normal, rotate
    the webhook secret, publish the privacy policy.
 
@@ -465,7 +460,7 @@ Confirm: the job ends `failed`, the credit is **refunded** (`credit_ledger`
 | **Update a model** (e.g. newer Qwen GGUF) | Put the new file in `/runpod-volume/ComfyUI/models/<dir>/` (run `bootstrap_models.py` with the new URL, or manual upload). Bump the filename in the workflow if it changed, re-export the API format, rebuild the image, redeploy. |
 | **Update the workflow** | Edit in ComfyUI UI → Save (API Format) → commit `remarkee-max-v2.api.json` → rebuild image → redeploy (or mount the volume and hot-replace, but rebuild is safer). |
 | **Scale up** | Raise `workersMax` in RunPod (or via the app Admin panel, clamped to 3). Keep `workersMin=1` for warm launches. |
-| **Stuck `processing` jobs** | If you haven't built the reconciliation sweep (9), run: `select id, created_at from deepclean_jobs where status='processing' and created_at < now() - interval '10 minutes';` then check RunPod job status and manually close (capture/release). |
+| **Stuck `processing` jobs** | Invoke `reconcile-deepclean-jobs` as an admin or with the service-role bearer token. Start with `{ "dry_run": true }`, then run without `dry_run` to capture completed jobs or release failed/timed-out jobs. |
 | **Worker won't start** | Check RunPod logs for `FATAL: ComfyUI did not become ready` (a node pack failed to load) or `[bootstrap]` download failures (HF down — retry). |
 | **Every job fails with "workflow template missing"** | The API-format export (`remarkee-max-v2.api.json`) isn't in the image. Do Phase 4.1, rebuild. |
 | **Jobs succeed but watermark still detected** | Raise the profile (`strong`/`max`) — higher denoise ceiling. The `max` profile processes at 1800 and runs the face path. |

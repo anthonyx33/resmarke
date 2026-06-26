@@ -75,6 +75,7 @@ supabase functions deploy dispatch-deepclean-job
 supabase functions deploy get-deepclean-job
 supabase functions deploy cancel-deepclean-job
 supabase functions deploy admin-runpod-endpoint
+supabase functions deploy reconcile-deepclean-jobs
 supabase functions deploy deepclean-webhook --no-verify-jwt
 ```
 
