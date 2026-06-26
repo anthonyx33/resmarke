@@ -599,6 +599,28 @@ def notify(webhook_url, secret, body):
     response.raise_for_status()
 
 
+def log_cache_env():
+    """Log where model weights cache to, so we can confirm the network volume is used."""
+    for key in (
+        "HF_HOME",
+        "HF_HUB_CACHE",
+        "TRANSFORMERS_CACHE",
+        "DIFFUSERS_CACHE",
+        "TORCH_HOME",
+    ):
+        print(f"[deepclean:cache] {key}={os.environ.get(key)}", flush=True)
+
+    volume = "/runpod-volume"
+    print(f"[deepclean:cache] {volume} mounted={os.path.isdir(volume)}", flush=True)
+
+    hub = os.environ.get("HF_HUB_CACHE") or os.path.join(os.environ.get("HF_HOME", ""), "hub")
+    try:
+        populated = os.path.isdir(hub) and bool(os.listdir(hub))
+    except OSError:
+        populated = False
+    print(f"[deepclean:cache] weights cached={populated} ({hub})", flush=True)
+
+
 def maybe_preload_on_start():
     if os.environ.get("DEEPCLEAN_ENGINE_MODE", "python").lower() == "cli":
         return
@@ -614,5 +636,6 @@ def maybe_preload_on_start():
             raise
 
 
+log_cache_env()
 maybe_preload_on_start()
 runpod.serverless.start({"handler": handler})

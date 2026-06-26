@@ -1,10 +1,17 @@
 FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
 
+# Cache model weights on the RunPod serverless network volume (mounted at
+# /runpod-volume) so cold starts load from disk instead of re-downloading.
+# These are defaults; the endpoint env can still override them.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    HF_HOME=/models \
-    TRANSFORMERS_CACHE=/models \
-    DIFFUSERS_CACHE=/models
+    HF_HOME=/runpod-volume/hf \
+    HF_HUB_CACHE=/runpod-volume/hf/hub \
+    HF_ASSETS_CACHE=/runpod-volume/hf/assets \
+    TRANSFORMERS_CACHE=/runpod-volume/hf/transformers \
+    DIFFUSERS_CACHE=/runpod-volume/hf/diffusers \
+    TORCH_HOME=/runpod-volume/torch \
+    XDG_CACHE_HOME=/runpod-volume/.cache
 
 WORKDIR /app
 
