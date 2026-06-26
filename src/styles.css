@@ -914,6 +914,27 @@ html[data-theme="dark"] .card {
   color: var(--text-muted);
 }
 
+.deepclean-result {
+  position: relative;
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 320px) 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.deepclean-result-info {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+@media (max-width: 700px) {
+  .deepclean-result {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-panel {
   position: relative;
   margin-top: 18px;

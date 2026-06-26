@@ -78,7 +78,11 @@ def handler(job):
 
     with tempfile.TemporaryDirectory(prefix=f"deepclean-{job_id}-") as tmpdir:
         tmp = Path(tmpdir)
-        input_path = tmp / "input"
+        # Keep a real image extension so PIL / the engine can infer the format.
+        input_suffix = Path(payload.get("input_path", "")).suffix.lower()
+        if input_suffix not in (".jpg", ".jpeg", ".png", ".webp"):
+            input_suffix = ".jpg"
+        input_path = tmp / f"input{input_suffix}"
         cleaned_path = tmp / "cleaned.png"
         final_path = tmp / "final.jpg"
 

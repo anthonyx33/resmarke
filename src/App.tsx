@@ -883,10 +883,60 @@ export default function App() {
                   ? deepCleanStatus || "Connected. Queue a job to run it on the GPU worker."
                   : "Set Supabase env vars to enable DeepClean."}
               </p>
-              {deepCleanJob?.outputUrl ? (
-                <a className="btn btn-ghost deepclean-download" href={deepCleanJob.outputUrl}>
-                  <Download size={18} aria-hidden="true" /> Download DeepClean result
-                </a>
+              {deepCleanJob &&
+              ["processing", "completed", "failed"].includes(deepCleanJob.status) ? (
+                <div className="deepclean-result">
+                  <div className="output-frame">
+                    {deepCleanJob.outputUrl ? (
+                      <img src={deepCleanJob.outputUrl} alt="DeepClean result preview" />
+                    ) : deepCleanJob.status === "failed" ? (
+                      <div className="output-empty">
+                        <ImageOff size={26} aria-hidden="true" />
+                        <span>{deepCleanJob.failureReason || "DeepClean failed."}</span>
+                      </div>
+                    ) : (
+                      <div className="output-empty">
+                        <Loader2 className="spin" size={26} aria-hidden="true" />
+                        <span>GPU worker is regenerating your image…</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="deepclean-result-info">
+                    <div className="card-label">DeepClean result</div>
+                    {deepCleanJob.status === "completed" ? (
+                      <>
+                        <div className="report-grid">
+                          <Metric label="Status" value="Completed" />
+                          <Metric
+                            label="Runtime"
+                            value={
+                              deepCleanJob.runtimeMs
+                                ? `${(deepCleanJob.runtimeMs / 1000).toFixed(1)}s`
+                                : "—"
+                            }
+                          />
+                          <Metric label="GPU" value={deepCleanJob.gpuType || "—"} />
+                          <Metric label="Output" value={deepCleanOutputMode} />
+                        </div>
+                        <a
+                          className="btn btn-primary btn-block deepclean-download"
+                          href={deepCleanJob.outputUrl}
+                          download="resmarke-deepclean.jpg"
+                        >
+                          <Download size={18} aria-hidden="true" /> Download result
+                        </a>
+                      </>
+                    ) : deepCleanJob.status === "failed" ? (
+                      <p className="error-text">
+                        {deepCleanJob.failureReason ||
+                          "DeepClean failed; your credit was released."}
+                      </p>
+                    ) : (
+                      <p className="deepclean-status">Hang tight — regenerating on the GPU…</p>
+                    )}
+                  </div>
+                </div>
               ) : null}
             </div>
 
