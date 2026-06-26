@@ -173,7 +173,7 @@ supabase secrets set RUNPOD_ENDPOINT_ID=YOUR_ENDPOINT_ID
 ## 6. First End-to-End Test
 
 1. Open the app.
-2. Sign in by magic link.
+2. Sign in with email and password.
 3. Grant your user credits:
 
 ```sql

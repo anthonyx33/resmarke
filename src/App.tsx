@@ -52,6 +52,7 @@ import { supabase } from "./lib/supabase";
 
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
+type AuthMode = "signin" | "signup";
 
 function initialTheme(): Theme {
   if (typeof window === "undefined") return "dark";
@@ -89,7 +90,9 @@ export default function App() {
   const [deepCleanStatus, setDeepCleanStatus] = useState("");
   const [deepCleanJob, setDeepCleanJob] = useState<DeepCleanJob | null>(null);
   const deepCleanPollRef = useRef<number | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [userId, setUserId] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string>("");
   const [authStatus, setAuthStatus] = useState("");
@@ -100,7 +103,7 @@ export default function App() {
   const [adminStatus, setAdminStatus] = useState("");
   const [adminBusy, setAdminBusy] = useState(false);
 
-  // Tool works without sign-in (accounts come later). Sign-in upgrades to Supabase credits.
+  // Privacy-Max can run locally in demo mode. Sign-in upgrades to Supabase credits.
   const canProcess = !!file && state !== "processing" && credits.privacyCredits > 0;
   const isAdminUi =
     !!userEmail &&
@@ -169,14 +172,44 @@ export default function App() {
     });
   }
 
-  async function sendMagicLink() {
-    if (!supabase || !authEmail.trim()) return;
-    setAuthStatus("Sending sign-in link...");
-    const { error } = await supabase.auth.signInWithOtp({
-      email: authEmail.trim(),
+  async function submitPasswordAuth() {
+    if (!supabase) return;
+    const email = authEmail.trim();
+    if (!email || !authPassword) {
+      setAuthStatus("Enter your email and password.");
+      return;
+    }
+    if (authPassword.length < 6) {
+      setAuthStatus("Password must be at least 6 characters.");
+      return;
+    }
+
+    setAuthStatus(authMode === "signin" ? "Signing in..." : "Creating account...");
+    if (authMode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password: authPassword
+      });
+      setAuthStatus(error ? error.message : "Signed in.");
+      if (!error) setAuthPassword("");
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: authPassword,
       options: { emailRedirectTo: window.location.href }
     });
-    setAuthStatus(error ? error.message : "Check your email for the sign-in link.");
+    if (error) {
+      setAuthStatus(error.message);
+      return;
+    }
+    if (data.session) {
+      setAuthStatus("Account created. You are signed in.");
+      setAuthPassword("");
+      return;
+    }
+    setAuthStatus("Account created. Check your email to confirm before signing in.");
   }
 
   async function signOut() {
@@ -445,18 +478,56 @@ export default function App() {
               </button>
             ) : (
               <details className="auth">
-                <summary>Sign in</summary>
+                <summary>{authMode === "signin" ? "Sign in" : "Sign up"}</summary>
                 <div className="auth-body">
-                  <p>Sign in to sync credits to your account.</p>
+                  <div className="auth-tabs" aria-label="Authentication mode">
+                    <button
+                      className={authMode === "signin" ? "active" : ""}
+                      type="button"
+                      onClick={() => {
+                        setAuthMode("signin");
+                        setAuthStatus("");
+                      }}
+                    >
+                      Sign in
+                    </button>
+                    <button
+                      className={authMode === "signup" ? "active" : ""}
+                      type="button"
+                      onClick={() => {
+                        setAuthMode("signup");
+                        setAuthStatus("");
+                      }}
+                    >
+                      Sign up
+                    </button>
+                  </div>
+                  <p>
+                    {authMode === "signin"
+                      ? "Enter your email and password to access your credits."
+                      : "Create an account with email and password."}
+                  </p>
                   <input
                     className="input"
                     value={authEmail}
                     onChange={(event) => setAuthEmail(event.target.value)}
                     placeholder="you@email.com"
                     type="email"
+                    autoComplete="email"
                   />
-                  <button className="btn btn-primary" type="button" onClick={sendMagicLink}>
-                    Send magic link
+                  <input
+                    className="input"
+                    value={authPassword}
+                    onChange={(event) => setAuthPassword(event.target.value)}
+                    placeholder="Password"
+                    type="password"
+                    autoComplete={authMode === "signin" ? "current-password" : "new-password"}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void submitPasswordAuth();
+                    }}
+                  />
+                  <button className="btn btn-primary" type="button" onClick={submitPasswordAuth}>
+                    {authMode === "signin" ? "Sign in" : "Create account"}
                   </button>
                   {authStatus ? <p>{authStatus}</p> : null}
                 </div>
