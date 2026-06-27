@@ -2,7 +2,7 @@
 """Apply Photo Naturalization profiles to a folder of cleaned images.
 
 Use this on the 8-image acceptance set after DeepClean regeneration. It writes
-Standard/Strong/Max naturalized JPEGs plus a small JSONL metrics file for review.
+Standard/Standard+/Strong/Max naturalized JPEGs plus a small JSONL metrics file for review.
 """
 
 import argparse
@@ -25,7 +25,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("input_dir", type=Path)
     parser.add_argument("output_dir", type=Path)
-    parser.add_argument("--profiles", nargs="+", default=["standard", "strong", "max", "max-jitter"])
+    parser.add_argument(
+        "--profiles",
+        nargs="+",
+        default=["standard", "standard-plus", "strong", "max", "max-jitter"],
+    )
     parser.add_argument("--creator-id", default="acceptance-set")
     args = parser.parse_args()
 

@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 import { throwSupabaseFunctionError } from "./supabaseFunctionError";
 
-export type DeepCleanProfile = "standard" | "strong" | "max";
+export type DeepCleanProfile = "standard" | "standard-plus" | "strong" | "max";
 export type DeepCleanOutputMode = "stripped" | "sealed" | "sealed-stamped";
 
 export type DeepCleanJob = {

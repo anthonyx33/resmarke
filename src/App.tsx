@@ -960,6 +960,7 @@ export default function App() {
                     }}
                   >
                     <option value="standard">Standard</option>
+                    <option value="standard-plus">Standard+</option>
                     <option value="strong">Strong</option>
                     <option value="max">Max (Expert)</option>
                   </select>

@@ -37,7 +37,9 @@ Deno.serve(async (request) => {
     const report = (job.report ?? {}) as Record<string, unknown>;
     const requestedOptions = (report.requested_options ?? {}) as Record<string, unknown>;
     const workerProfile =
-      job.profile === "max" && requestedOptions.micro_texture_jitter === true
+      requestedOptions.profile_variant === "standard-plus"
+        ? "standard-plus"
+        : job.profile === "max" && requestedOptions.micro_texture_jitter === true
         ? "max-jitter"
         : job.profile;
 

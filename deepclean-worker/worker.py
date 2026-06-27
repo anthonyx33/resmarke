@@ -38,6 +38,14 @@ PROFILE_CONFIG = {
         "adaptive_level": 4,
         "naturalization": PHOTO_NATURALIZATION_PROFILES["standard"],
     },
+    "standard-plus": {
+        "timeout": 200,
+        "process_cap": 1536,
+        "upscale_back": "lanczos",
+        "face_path": False,
+        "adaptive_level": 5,
+        "naturalization": PHOTO_NATURALIZATION_PROFILES["standard-plus"],
+    },
     "strong": {
         "timeout": 240,
         "process_cap": 1536,
