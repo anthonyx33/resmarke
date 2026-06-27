@@ -61,6 +61,7 @@ import { supabase } from "./lib/supabase";
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
+type DeepCleanProfileSelection = DeepCleanProfile | "max-optical-pro";
 
 const expertRefinementPresets: Record<
   ExpertRefinementMode,
@@ -201,7 +202,8 @@ export default function App() {
   const [customWidth, setCustomWidth] = useState(0);
   const [customHeight, setCustomHeight] = useState(0);
   const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
-  const [deepCleanProfile, setDeepCleanProfile] = useState<DeepCleanProfile>("standard");
+  const [deepCleanProfile, setDeepCleanProfile] =
+    useState<DeepCleanProfileSelection>("standard");
   const [deepCleanMicroTextureJitter, setDeepCleanMicroTextureJitter] = useState(false);
   const [expertRefinementMode, setExpertRefinementMode] =
     useState<ExpertRefinementMode>("off");
@@ -523,9 +525,17 @@ export default function App() {
     setExpertRefinementTechniques(cloneExpertPreset(mode));
   }
 
-  function chooseDeepCleanProfile(profile: DeepCleanProfile) {
+  function chooseDeepCleanProfile(profile: DeepCleanProfileSelection) {
     setDeepCleanProfile(profile);
     if (profile !== "max") setDeepCleanMicroTextureJitter(false);
+    if (profile === "max-optical-pro") {
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
+      return;
+    }
     if (profile !== "max-mint") return;
 
     setDeepCleanOutputMode("stripped");
@@ -1114,7 +1124,7 @@ export default function App() {
                     className="select"
                     value={deepCleanProfile}
                     onChange={(event) => {
-                      const profile = event.target.value as DeepCleanProfile;
+                      const profile = event.target.value as DeepCleanProfileSelection;
                       chooseDeepCleanProfile(profile);
                     }}
                   >
@@ -1123,6 +1133,7 @@ export default function App() {
                     <option value="strong">Strong</option>
                     <option value="max">Max (Expert)</option>
                     <option value="max-mint">Max Mint</option>
+                    {isAdminUi ? <option value="max-optical-pro">Optical Pro Lab</option> : null}
                   </select>
                 </label>
                 <label className="field">
@@ -1149,6 +1160,20 @@ export default function App() {
                 </button>
               </div>
 
+              {deepCleanProfile === "max-optical-pro" ? (
+                <div className="expert-refinement">
+                  <div className="expert-refinement-head">
+                    <div>
+                      <div className="card-label">Optical Pro Lab</div>
+                      <p>
+                        Hidden internal test: 2x upscale-capture-downscale, ultra-light CFA,
+                        luma sensor noise, grid offset, and final JPEG 91 / 4:2:2.
+                      </p>
+                    </div>
+                    <SlidersHorizontal size={18} aria-hidden="true" />
+                  </div>
+                </div>
+              ) : (
               <div className="expert-refinement">
                 <div className="expert-refinement-head">
                   <div>
@@ -1250,6 +1275,7 @@ export default function App() {
                   </label>
                 </details>
               </div>
+              )}
 
               <p className="deepclean-status">
                 {hasSupabaseConfig

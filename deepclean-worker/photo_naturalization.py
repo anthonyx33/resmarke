@@ -123,6 +123,15 @@ EXPERT_REFINEMENT_PRESETS = {
         "lens_character": {"enabled": True, "value": 0.20},
         "double_quantization": {"enabled": True, "value": 0.10},
     },
+    "optical-pro": {
+        "pixel_alignment_break": {"enabled": False, "value": 0.0},
+        "sensor_noise_luma": {"enabled": False, "value": 0.0},
+        "lens_vignette": {"enabled": False, "value": 0.0},
+        "compression_texture": {"enabled": False, "value": 0.0},
+        "bayer_cfa_lite": {"enabled": False, "value": 0.0},
+        "lens_character": {"enabled": False, "value": 0.0},
+        "double_quantization": {"enabled": False, "value": 0.0},
+    },
 }
 
 EXPERT_REFINEMENT_TECHNIQUES = tuple(EXPERT_REFINEMENT_PRESETS["off"].keys())
@@ -207,6 +216,16 @@ def apply_expert_refinement(image, settings, creator_id, seed_extra=""):
     seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest()[:16], 16) & 0xFFFFFFFF
     rng = np.random.default_rng(seed)
     report["seed"] = seed
+
+    if cfg["mode"] == "optical-pro":
+        optical_image, optical_report = apply_optical_pro_capture(image, rng)
+        image.paste(optical_image)
+        report["pipeline"] = "upscale_capture_downscale"
+        report["techniques"] = optical_report
+        return report, {
+            "jpeg_quality": 91,
+            "jpeg_subsampling": "4:2:2",
+        }
 
     pixel = cfg["techniques"]["pixel_alignment_break"]
     if pixel["enabled"] and pixel["effective"] > 0:
@@ -343,6 +362,78 @@ def resample_roundtrip(image, scale_x, scale_y):
     return image.resize(scaled_size, Image.Resampling.LANCZOS).resize(
         (width, height), Image.Resampling.LANCZOS
     )
+
+
+def apply_optical_pro_capture(image, rng):
+    width, height = image.size
+    high_size = (width * 2, height * 2)
+    high = image.resize(high_size, Image.Resampling.LANCZOS)
+    high = apply_rgb_display_shift(high, amount=0.45)
+    high = high.filter(ImageFilter.GaussianBlur(radius=0.45))
+    high = apply_bayer_cfa_lite(high, amount=0.07)
+    high = apply_luma_signal_noise(high, rng, amount=0.65)
+    captured = high.resize((width, height), Image.Resampling.BICUBIC)
+    captured, grid_shift_x, grid_shift_y = subpixel_translate(captured, rng, amount=0.75)
+    return captured, {
+        "upscale": {
+            "enabled": True,
+            "scale": 2.0,
+            "resampling": "lanczos",
+            "resolution": [high_size[0], high_size[1]],
+        },
+        "rgb_display_shift": {
+            "enabled": True,
+            "red_shift_x": -0.45,
+            "blue_shift_x": 0.45,
+            "scale_space": "2x",
+        },
+        "lens_softness": {
+            "enabled": True,
+            "gaussian_radius": 0.45,
+            "scale_space": "2x",
+        },
+        "bayer_cfa_lite": {
+            "enabled": True,
+            "amount": 0.07,
+        },
+        "sensor_noise_luma": {
+            "enabled": True,
+            "amount": 0.65,
+        },
+        "downscale": {
+            "enabled": True,
+            "resampling": "bicubic_mitchell_proxy",
+            "resolution": [width, height],
+        },
+        "jpeg_grid_offset": {
+            "enabled": True,
+            "shift_x": grid_shift_x,
+            "shift_y": grid_shift_y,
+            "max_abs_shift": 0.75,
+        },
+        "final_jpeg_quality": 91,
+        "final_jpeg_subsampling": "4:2:2",
+    }
+
+
+def apply_rgb_display_shift(image, amount):
+    red, green, blue = image.split()
+    red = subpixel_translate_plane(red, -amount, 0.0)
+    blue = subpixel_translate_plane(blue, amount, 0.0)
+    return Image.merge("RGB", (red, green, blue))
+
+
+def subpixel_translate_plane(plane, shift_x, shift_y):
+    width, height = plane.size
+    pad = 3
+    padded = edge_pad_plane(plane, pad)
+    shifted = padded.transform(
+        padded.size,
+        Image.Transform.AFFINE,
+        (1, 0, -shift_x, 0, 1, -shift_y),
+        resample=Image.Resampling.BICUBIC,
+    )
+    return shifted.crop((pad, pad, pad + width, pad + height))
 
 
 def apply_luma_signal_noise(image, rng, amount):
@@ -523,6 +614,10 @@ def split_channel_blur(image, radius, chroma_multiplier):
 
 def edge_pad(image, pad):
     return Image.fromarray(np.pad(np.asarray(image), ((pad, pad), (pad, pad), (0, 0)), mode="edge"))
+
+
+def edge_pad_plane(image, pad):
+    return Image.fromarray(np.pad(np.asarray(image), ((pad, pad), (pad, pad)), mode="edge"))
 
 
 def srgb_to_linear(value):

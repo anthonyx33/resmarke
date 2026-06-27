@@ -1,7 +1,12 @@
 import { supabase } from "./supabase";
 import { throwSupabaseFunctionError } from "./supabaseFunctionError";
 
-export type DeepCleanProfile = "standard" | "standard-plus" | "strong" | "max" | "max-mint";
+export type DeepCleanProfile =
+  | "standard"
+  | "standard-plus"
+  | "strong"
+  | "max"
+  | "max-mint";
 export type DeepCleanOutputMode = "stripped" | "sealed" | "sealed-stamped";
 export type ExpertRefinementMode = "off" | "light" | "balanced" | "optical";
 export type ExpertRefinementTechnique =
@@ -44,7 +49,7 @@ export type DeepCleanJob = {
 export async function createDeepCleanJob(params: {
   file: File;
   creatorId: string;
-  profile: DeepCleanProfile;
+  profile: DeepCleanProfile | "max-optical-pro";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;

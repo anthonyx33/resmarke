@@ -6,7 +6,7 @@ type CreateJobBody = {
   file_size: number;
   content_type: string;
   creator_id?: string;
-  profile: "standard" | "standard-plus" | "strong" | "max" | "max-mint";
+  profile: "standard" | "standard-plus" | "strong" | "max" | "max-mint" | "max-optical-pro";
   micro_texture_jitter?: boolean;
   expert_refinement?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
@@ -27,7 +27,11 @@ Deno.serve(async (request) => {
     if (body.file_size > maxBytes) {
       return jsonResponse({ error: "DeepClean beta accepts images up to 25 MB." }, 400);
     }
-    if (!["standard", "standard-plus", "strong", "max", "max-mint"].includes(body.profile)) {
+    if (
+      !["standard", "standard-plus", "strong", "max", "max-mint", "max-optical-pro"].includes(
+        body.profile
+      )
+    ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
     }
     if (!["stripped", "sealed", "sealed-stamped"].includes(body.output_mode)) {
@@ -56,11 +60,18 @@ Deno.serve(async (request) => {
         ? "standard"
         : requestedProfile === "max-mint"
         ? "max"
+        : requestedProfile === "max-optical-pro"
+        ? "max"
         : requestedProfile;
-    const requestedOutputMode = requestedProfile === "max-mint" ? "stripped" : body.output_mode;
+    const requestedOutputMode =
+      requestedProfile === "max-mint" || requestedProfile === "max-optical-pro"
+        ? "stripped"
+        : body.output_mode;
     const expertRefinement =
       requestedProfile === "max-mint"
         ? maxMintExpertRefinement()
+        : requestedProfile === "max-optical-pro"
+        ? opticalProExpertRefinement()
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -95,7 +106,12 @@ Deno.serve(async (request) => {
       report: {
         requested_options: {
           profile_variant: requestedProfile === "standard-plus" ? "standard-plus" : null,
-          profile_layout: requestedProfile === "max-mint" ? "max-mint" : null,
+          profile_layout:
+            requestedProfile === "max-mint"
+              ? "max-mint"
+              : requestedProfile === "max-optical-pro"
+              ? "max-optical-pro"
+              : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
         }
@@ -140,7 +156,7 @@ function photoStyleOutputName(): string {
 }
 
 function normalizeExpertRefinement(input: unknown) {
-  const modes = ["off", "light", "balanced", "optical"];
+  const modes = ["off", "light", "balanced", "optical", "optical-pro"];
   const techniqueKeys = [
     "pixel_alignment_break",
     "sensor_noise_luma",
@@ -190,6 +206,15 @@ function maxMintExpertRefinement() {
       lens_character: { enabled: true, value: 0.2 },
       double_quantization: { enabled: true, value: 0.23 }
     }
+  };
+}
+
+function opticalProExpertRefinement() {
+  return {
+    mode: "optical-pro",
+    intensity: 100,
+    preserve_straight_lines: true,
+    techniques: {}
   };
 }
 
