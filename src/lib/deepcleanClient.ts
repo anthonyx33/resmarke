@@ -9,6 +9,7 @@ export type ExpertRefinementTechnique =
   | "sensor_noise_luma"
   | "lens_vignette"
   | "compression_texture"
+  | "bayer_cfa_lite"
   | "lens_character"
   | "double_quantization";
 

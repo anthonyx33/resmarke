@@ -136,6 +136,7 @@ function normalizeExpertRefinement(input: unknown) {
     "sensor_noise_luma",
     "lens_vignette",
     "compression_texture",
+    "bayer_cfa_lite",
     "lens_character",
     "double_quantization"
   ];
@@ -148,11 +149,13 @@ function normalizeExpertRefinement(input: unknown) {
   const techniques: Record<string, { enabled: boolean; value: number }> = {};
 
   for (const key of techniqueKeys) {
-    const row = isRecord(rawTechniques[key]) ? rawTechniques[key] : {};
-    techniques[key] = {
-      enabled: typeof row.enabled === "boolean" ? row.enabled : false,
-      value: clampNumber(row.value, 0, 1, 0)
-    };
+    if (isRecord(rawTechniques[key])) {
+      const row = rawTechniques[key];
+      techniques[key] = {
+        enabled: typeof row.enabled === "boolean" ? row.enabled : false,
+        value: clampNumber(row.value, 0, 1, 0)
+      };
+    }
   }
 
   return {

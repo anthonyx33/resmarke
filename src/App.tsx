@@ -71,6 +71,7 @@ const expertRefinementPresets: Record<
     sensor_noise_luma: { enabled: false, value: 0 },
     lens_vignette: { enabled: false, value: 0 },
     compression_texture: { enabled: false, value: 0 },
+    bayer_cfa_lite: { enabled: false, value: 0 },
     lens_character: { enabled: false, value: 0 },
     double_quantization: { enabled: false, value: 0 }
   },
@@ -79,6 +80,7 @@ const expertRefinementPresets: Record<
     sensor_noise_luma: { enabled: true, value: 0.2 },
     lens_vignette: { enabled: true, value: 0.1 },
     compression_texture: { enabled: true, value: 0.2 },
+    bayer_cfa_lite: { enabled: false, value: 0.3 },
     lens_character: { enabled: false, value: 0.2 },
     double_quantization: { enabled: false, value: 0.1 }
   },
@@ -87,6 +89,7 @@ const expertRefinementPresets: Record<
     sensor_noise_luma: { enabled: true, value: 0.35 },
     lens_vignette: { enabled: true, value: 0.15 },
     compression_texture: { enabled: true, value: 0.3 },
+    bayer_cfa_lite: { enabled: false, value: 0.5 },
     lens_character: { enabled: false, value: 0.2 },
     double_quantization: { enabled: false, value: 0.1 }
   },
@@ -95,6 +98,7 @@ const expertRefinementPresets: Record<
     sensor_noise_luma: { enabled: true, value: 0.5 },
     lens_vignette: { enabled: true, value: 0.2 },
     compression_texture: { enabled: true, value: 0.4 },
+    bayer_cfa_lite: { enabled: true, value: 0.7 },
     lens_character: { enabled: true, value: 0.2 },
     double_quantization: { enabled: true, value: 0.1 }
   }
@@ -124,6 +128,11 @@ const expertTechniqueRows: Array<{
     key: "compression_texture",
     label: "Compression Texture",
     detail: "Camera-like final JPEG texture and chroma subsampling."
+  },
+  {
+    key: "bayer_cfa_lite",
+    label: "Bayer CFA Lite",
+    detail: "Subtle camera-sensor color-filter decorrelation without heavy softness."
   },
   {
     key: "lens_character",

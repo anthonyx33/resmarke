@@ -92,6 +92,7 @@ EXPERT_REFINEMENT_PRESETS = {
         "sensor_noise_luma": {"enabled": False, "value": 0.0},
         "lens_vignette": {"enabled": False, "value": 0.0},
         "compression_texture": {"enabled": False, "value": 0.0},
+        "bayer_cfa_lite": {"enabled": False, "value": 0.0},
         "lens_character": {"enabled": False, "value": 0.0},
         "double_quantization": {"enabled": False, "value": 0.0},
     },
@@ -100,6 +101,7 @@ EXPERT_REFINEMENT_PRESETS = {
         "sensor_noise_luma": {"enabled": True, "value": 0.20},
         "lens_vignette": {"enabled": True, "value": 0.10},
         "compression_texture": {"enabled": True, "value": 0.20},
+        "bayer_cfa_lite": {"enabled": False, "value": 0.30},
         "lens_character": {"enabled": False, "value": 0.20},
         "double_quantization": {"enabled": False, "value": 0.10},
     },
@@ -108,6 +110,7 @@ EXPERT_REFINEMENT_PRESETS = {
         "sensor_noise_luma": {"enabled": True, "value": 0.35},
         "lens_vignette": {"enabled": True, "value": 0.15},
         "compression_texture": {"enabled": True, "value": 0.30},
+        "bayer_cfa_lite": {"enabled": False, "value": 0.50},
         "lens_character": {"enabled": False, "value": 0.20},
         "double_quantization": {"enabled": False, "value": 0.10},
     },
@@ -116,6 +119,7 @@ EXPERT_REFINEMENT_PRESETS = {
         "sensor_noise_luma": {"enabled": True, "value": 0.50},
         "lens_vignette": {"enabled": True, "value": 0.20},
         "compression_texture": {"enabled": True, "value": 0.40},
+        "bayer_cfa_lite": {"enabled": True, "value": 0.70},
         "lens_character": {"enabled": True, "value": 0.20},
         "double_quantization": {"enabled": True, "value": 0.10},
     },
@@ -215,6 +219,16 @@ def apply_expert_refinement(image, settings, creator_id, seed_extra=""):
         }
     else:
         report["techniques"]["pixel_alignment_break"] = {"enabled": False}
+
+    bayer = cfg["techniques"]["bayer_cfa_lite"]
+    if bayer["enabled"] and bayer["effective"] > 0:
+        image.paste(apply_bayer_cfa_lite(image, bayer["effective"]))
+        report["techniques"]["bayer_cfa_lite"] = {
+            "enabled": True,
+            "effective": bayer["effective"],
+        }
+    else:
+        report["techniques"]["bayer_cfa_lite"] = {"enabled": False}
 
     noise = cfg["techniques"]["sensor_noise_luma"]
     if noise["enabled"] and noise["effective"] > 0:
@@ -346,6 +360,56 @@ def apply_luma_signal_noise(image, rng, amount):
     linear = np.clip(linear + noise, 0.0, 1.0)
     refined = np.clip(linear_to_srgb(linear) * 255.0 + 0.5, 0, 255).astype(np.uint8)
     return Image.fromarray(refined)
+
+
+def apply_bayer_cfa_lite(image, amount):
+    rgb = np.asarray(image).astype(np.float32)
+    height, width, _ = rgb.shape
+    yy, xx = np.indices((height, width))
+    red_mask = ((yy % 2) == 0) & ((xx % 2) == 0)
+    blue_mask = ((yy % 2) == 1) & ((xx % 2) == 1)
+    green_mask = ~(red_mask | blue_mask)
+
+    masks = (
+        red_mask.astype(np.float32),
+        green_mask.astype(np.float32),
+        blue_mask.astype(np.float32),
+    )
+    demosaiced = []
+    for channel, mask in enumerate(masks):
+        demosaiced.append(demosaic_channel(rgb[..., channel], mask))
+    demosaiced_rgb = np.stack(demosaiced, axis=2)
+
+    # Keep this intentionally lite: enough channel decorrelation to mimic a
+    # camera color-filter array, but far below a full demosaic softness pass.
+    blend = min(0.22, amount * 0.28)
+    refined = rgb * (1.0 - blend) + demosaiced_rgb * blend
+    refined_image = Image.fromarray(np.clip(refined + 0.5, 0, 255).astype(np.uint8))
+
+    chroma_radius = min(0.28, amount * 0.36)
+    if chroma_radius <= 0:
+        return refined_image
+    y, cb, cr = refined_image.convert("YCbCr").split()
+    cb = cb.filter(ImageFilter.GaussianBlur(radius=chroma_radius))
+    cr = cr.filter(ImageFilter.GaussianBlur(radius=chroma_radius))
+    return Image.merge("YCbCr", (y, cb, cr)).convert("RGB")
+
+
+def demosaic_channel(channel, mask):
+    values = channel * mask
+    sum_values = box3(values)
+    sum_mask = box3(mask)
+    interpolated = sum_values / np.maximum(sum_mask, 1e-6)
+    return np.where(mask > 0, channel, interpolated)
+
+
+def box3(array):
+    padded = np.pad(array, ((1, 1), (1, 1)), mode="edge")
+    total = np.zeros_like(array, dtype=np.float32)
+    for y_offset in range(3):
+        for x_offset in range(3):
+            total += padded[y_offset : y_offset + array.shape[0], x_offset : x_offset + array.shape[1]]
+    return total
 
 
 def apply_micro_vignette(image, amount):
