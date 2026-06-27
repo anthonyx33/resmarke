@@ -52,7 +52,15 @@ PROFILE_CONFIG = {
         "upscale_back": "lanczos",
         "face_path": True,
         "adaptive_level": 8,
-        "naturalization": PHOTO_NATURALIZATION_PROFILES["off"],
+        "naturalization": PHOTO_NATURALIZATION_PROFILES["max"],
+    },
+    "max-jitter": {
+        "timeout": 360,
+        "process_cap": 1800,
+        "upscale_back": "lanczos",
+        "face_path": True,
+        "adaptive_level": 8,
+        "naturalization": PHOTO_NATURALIZATION_PROFILES["max-jitter"],
     },
 }
 
@@ -94,6 +102,7 @@ def handler(job):
             quality = quality_check(input_path, cleaned_path)
             if not quality["ok"]:
                 raise RuntimeError(quality["reason"])
+            cleaned_sha = sha256_file(cleaned_path)
 
             naturalization_report = finalize_output(
                 cleaned_path=cleaned_path,
@@ -101,6 +110,7 @@ def handler(job):
                 output_mode=payload.get("output_mode", "sealed"),
                 creator_id=creator_id,
                 naturalization=cfg["naturalization"],
+                seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
             )
 
             after_report = identify_image(final_path)
@@ -343,6 +353,8 @@ def public_profile_config(cfg):
         "naturalization": {
             "enabled": cfg["naturalization"]["enabled"],
             "jpeg_quality": cfg["naturalization"]["jpeg_quality"],
+            "jpeg_subsampling": cfg["naturalization"].get("jpeg_subsampling", "pillow-default"),
+            "micro_texture_jitter": cfg["naturalization"].get("micro_texture_jitter", False),
         },
     }
 
@@ -374,7 +386,7 @@ def quality_check(input_path, output_path):
     return {"ok": True, "psnr": psnr, "variance": variance}
 
 
-def finalize_output(cleaned_path, output_path, output_mode, creator_id, naturalization):
+def finalize_output(cleaned_path, output_path, output_mode, creator_id, naturalization, seed_extra=""):
     # Preserve the creator's native resolution. The engine already restored the
     # cleaned image to the original size; here we just cap the final export
     # (keeps JPEGs sane on huge inputs) and apply the Fibonacci-88 seal at that
@@ -384,7 +396,12 @@ def finalize_output(cleaned_path, output_path, output_mode, creator_id, naturali
     if max(image.width, image.height) > MAX_FINAL:
         image.thumbnail((MAX_FINAL, MAX_FINAL), Image.Resampling.LANCZOS)
 
-    naturalization_report = apply_photo_naturalization(image, creator_id, naturalization)
+    naturalization_report = apply_photo_naturalization(
+        image,
+        creator_id,
+        naturalization,
+        seed_extra=seed_extra,
+    )
 
     if output_mode in ("sealed", "sealed-stamped"):
         apply_fibonacci_88(image, creator_id)
@@ -400,8 +417,17 @@ def finalize_output(cleaned_path, output_path, output_mode, creator_id, naturali
         draw.rounded_rectangle(box, radius=8, fill=(30, 37, 37))
         draw.text((box[0] + 32, box[1] + 18), label, fill=(255, 255, 255), font=ImageFont.load_default())
 
-    image.save(output_path, format="JPEG", quality=naturalization["jpeg_quality"], optimize=True)
+    save_kwargs = {
+        "format": "JPEG",
+        "quality": naturalization["jpeg_quality"],
+        "optimize": True,
+    }
+    jpeg_subsampling = naturalization.get("jpeg_subsampling")
+    if jpeg_subsampling:
+        save_kwargs["subsampling"] = jpeg_subsampling
+    image.save(output_path, **save_kwargs)
     naturalization_report["final_jpeg_quality"] = naturalization["jpeg_quality"]
+    naturalization_report["final_jpeg_subsampling"] = jpeg_subsampling or "pillow-default"
     return naturalization_report
 
 

@@ -85,6 +85,7 @@ export default function App() {
   const [customHeight, setCustomHeight] = useState(0);
   const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
   const [deepCleanProfile, setDeepCleanProfile] = useState<DeepCleanProfile>("standard");
+  const [deepCleanMicroTextureJitter, setDeepCleanMicroTextureJitter] = useState(false);
   const [deepCleanOutputMode, setDeepCleanOutputMode] =
     useState<DeepCleanOutputMode>("sealed");
   const [deepCleanStatus, setDeepCleanStatus] = useState("");
@@ -332,12 +333,14 @@ export default function App() {
     }
 
     let createdJob: DeepCleanJob | null = null;
+    const requestedProfile: DeepCleanProfile =
+      deepCleanProfile === "max" && deepCleanMicroTextureJitter ? "max-jitter" : deepCleanProfile;
     setDeepCleanStatus("Creating Remarkee Max job...");
     try {
       const job = await createDeepCleanJob({
         file,
         creatorId,
-        profile: deepCleanProfile,
+        profile: requestedProfile,
         outputMode: deepCleanOutputMode
       });
       createdJob = job;
@@ -845,14 +848,30 @@ export default function App() {
                   <select
                     className="select"
                     value={deepCleanProfile}
-                    onChange={(event) =>
-                      setDeepCleanProfile(event.target.value as DeepCleanProfile)
-                    }
+                    onChange={(event) => {
+                      const profile = event.target.value as DeepCleanProfile;
+                      setDeepCleanProfile(profile);
+                      if (profile !== "max") setDeepCleanMicroTextureJitter(false);
+                    }}
                   >
                     <option value="standard">Standard</option>
                     <option value="strong">Strong</option>
+                    <option value="max">Max (Expert)</option>
                   </select>
                 </label>
+                {deepCleanProfile === "max" ? (
+                  <div className="field">
+                    <span>Experimental</span>
+                    <label className="toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={deepCleanMicroTextureJitter}
+                        onChange={(event) => setDeepCleanMicroTextureJitter(event.target.checked)}
+                      />
+                      <span>Micro-texture jitter</span>
+                    </label>
+                  </div>
+                ) : null}
                 <label className="field">
                   <span>Output</span>
                   <select

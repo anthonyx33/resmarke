@@ -2,7 +2,7 @@
 """Apply Photo Naturalization profiles to a folder of cleaned images.
 
 Use this on the 8-image acceptance set after DeepClean regeneration. It writes
-Standard/Strong naturalized JPEGs plus a small JSONL metrics file for review.
+Standard/Strong/Max naturalized JPEGs plus a small JSONL metrics file for review.
 """
 
 import argparse
@@ -25,7 +25,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("input_dir", type=Path)
     parser.add_argument("output_dir", type=Path)
-    parser.add_argument("--profiles", nargs="+", default=["standard", "strong"])
+    parser.add_argument("--profiles", nargs="+", default=["standard", "strong", "max", "max-jitter"])
     parser.add_argument("--creator-id", default="acceptance-set")
     args = parser.parse_args()
 
@@ -42,9 +42,21 @@ def main() -> int:
             for profile in args.profiles:
                 cfg = PHOTO_NATURALIZATION_PROFILES[profile]
                 result = source.copy()
-                report = apply_photo_naturalization(result, f"{args.creator_id}:{path.name}:{profile}", cfg)
+                report = apply_photo_naturalization(
+                    result,
+                    args.creator_id,
+                    cfg,
+                    seed_extra=f"{path.name}:{profile}",
+                )
                 out_path = args.output_dir / f"{path.stem}-{profile}.jpg"
-                result.save(out_path, format="JPEG", quality=cfg["jpeg_quality"], optimize=True)
+                save_kwargs = {
+                    "format": "JPEG",
+                    "quality": cfg["jpeg_quality"],
+                    "optimize": True,
+                }
+                if cfg.get("jpeg_subsampling"):
+                    save_kwargs["subsampling"] = cfg["jpeg_subsampling"]
+                result.save(out_path, **save_kwargs)
 
                 row = {
                     "input": str(path),

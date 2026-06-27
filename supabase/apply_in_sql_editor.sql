@@ -34,7 +34,7 @@ create table if not exists public.deepclean_jobs (
   user_id uuid not null references auth.users(id) on delete cascade,
   creator_id text not null default '',
   status text not null default 'queued' check (status in ('queued', 'uploading', 'processing', 'completed', 'failed')),
-  profile text not null default 'standard' check (profile in ('standard', 'strong', 'max')),
+  profile text not null default 'standard' check (profile in ('standard', 'strong', 'max', 'max-jitter')),
   output_mode text not null default 'sealed' check (output_mode in ('stripped', 'sealed', 'sealed-stamped')),
   input_path text not null,
   output_path text not null,
@@ -56,6 +56,13 @@ create table if not exists public.deepclean_jobs (
 alter table public.deepclean_jobs
   add column if not exists creator_id text not null default '',
   add column if not exists runpod_job_id text;
+
+alter table public.deepclean_jobs
+  drop constraint if exists deepclean_jobs_profile_check;
+
+alter table public.deepclean_jobs
+  add constraint deepclean_jobs_profile_check
+  check (profile in ('standard', 'strong', 'max', 'max-jitter'));
 
 alter table public.creator_profiles enable row level security;
 alter table public.credit_ledger enable row level security;
