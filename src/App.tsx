@@ -146,12 +146,28 @@ const expertTechniqueRows: Array<{
   }
 ];
 
+const maxMintTechniques: ExpertRefinementSettings["techniques"] = {
+  pixel_alignment_break: { enabled: true, value: 0.71 },
+  sensor_noise_luma: { enabled: true, value: 0.61 },
+  lens_vignette: { enabled: true, value: 0.29 },
+  compression_texture: { enabled: true, value: 0.47 },
+  bayer_cfa_lite: { enabled: true, value: 0.07 },
+  lens_character: { enabled: true, value: 0.2 },
+  double_quantization: { enabled: true, value: 0.23 }
+};
+
 function cloneExpertPreset(mode: ExpertRefinementMode): ExpertRefinementSettings["techniques"] {
   return Object.fromEntries(
     Object.entries(expertRefinementPresets[mode]).map(([key, value]) => [
       key,
       { ...value }
     ])
+  ) as ExpertRefinementSettings["techniques"];
+}
+
+function cloneMaxMintTechniques(): ExpertRefinementSettings["techniques"] {
+  return Object.fromEntries(
+    Object.entries(maxMintTechniques).map(([key, value]) => [key, { ...value }])
   ) as ExpertRefinementSettings["techniques"];
 }
 
@@ -505,6 +521,18 @@ export default function App() {
   function chooseExpertRefinementMode(mode: ExpertRefinementMode) {
     setExpertRefinementMode(mode);
     setExpertRefinementTechniques(cloneExpertPreset(mode));
+  }
+
+  function chooseDeepCleanProfile(profile: DeepCleanProfile) {
+    setDeepCleanProfile(profile);
+    if (profile !== "max") setDeepCleanMicroTextureJitter(false);
+    if (profile !== "max-mint") return;
+
+    setDeepCleanOutputMode("stripped");
+    setExpertRefinementMode("optical");
+    setExpertRefinementIntensity(97);
+    setExpertRefinementPreserveLines(true);
+    setExpertRefinementTechniques(cloneMaxMintTechniques());
   }
 
   function updateExpertTechnique(
@@ -1087,14 +1115,14 @@ export default function App() {
                     value={deepCleanProfile}
                     onChange={(event) => {
                       const profile = event.target.value as DeepCleanProfile;
-                      setDeepCleanProfile(profile);
-                      if (profile !== "max") setDeepCleanMicroTextureJitter(false);
+                      chooseDeepCleanProfile(profile);
                     }}
                   >
                     <option value="standard">Standard</option>
                     <option value="standard-plus">Standard+</option>
                     <option value="strong">Strong</option>
                     <option value="max">Max (Expert)</option>
+                    <option value="max-mint">Max Mint</option>
                   </select>
                 </label>
                 <label className="field">
