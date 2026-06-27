@@ -5,13 +5,14 @@ import shutil
 import subprocess
 import tempfile
 import time
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import requests
 import runpod
 from PIL import Image, ImageDraw, ImageFont
+
+from photo_naturalization import PHOTO_NATURALIZATION_PROFILES, apply_photo_naturalization
 
 # The cleaning engine is ComfyUI running the Remarkee Max workflow, started
 # as a localhost service by start.sh (see comfyui_client.py). The workflow
@@ -35,6 +36,7 @@ PROFILE_CONFIG = {
         "upscale_back": "lanczos",
         "face_path": False,
         "adaptive_level": 4,
+        "naturalization": PHOTO_NATURALIZATION_PROFILES["standard"],
     },
     "strong": {
         "timeout": 240,
@@ -42,6 +44,7 @@ PROFILE_CONFIG = {
         "upscale_back": "lanczos",
         "face_path": True,
         "adaptive_level": 6,
+        "naturalization": PHOTO_NATURALIZATION_PROFILES["strong"],
     },
     "max": {
         "timeout": 360,
@@ -49,6 +52,7 @@ PROFILE_CONFIG = {
         "upscale_back": "lanczos",
         "face_path": True,
         "adaptive_level": 8,
+        "naturalization": PHOTO_NATURALIZATION_PROFILES["off"],
     },
 }
 
@@ -63,6 +67,8 @@ def handler(job):
     webhook_url = payload["webhook_url"]
     webhook_secret = payload["webhook_secret"]
     creator_id = payload.get("creator_id") or job_id
+    profile = payload.get("profile", "standard")
+    cfg = get_profile_config(profile)
 
     with tempfile.TemporaryDirectory(prefix=f"deepclean-{job_id}-") as tmpdir:
         tmp = Path(tmpdir)
@@ -82,18 +88,19 @@ def handler(job):
             engine_report = run_deepclean(
                 input_path=input_path,
                 output_path=cleaned_path,
-                profile=payload.get("profile", "standard"),
+                profile=profile,
             )
 
             quality = quality_check(input_path, cleaned_path)
             if not quality["ok"]:
                 raise RuntimeError(quality["reason"])
 
-            finalize_output(
+            naturalization_report = finalize_output(
                 cleaned_path=cleaned_path,
                 output_path=final_path,
                 output_mode=payload.get("output_mode", "sealed"),
                 creator_id=creator_id,
+                naturalization=cfg["naturalization"],
             )
 
             after_report = identify_image(final_path)
@@ -113,11 +120,12 @@ def handler(job):
                     "runtime_ms": runtime_ms,
                     "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
                     "report": {
-                        "profile": payload.get("profile", "standard"),
+                        "profile": profile,
                         "output_mode": payload.get("output_mode", "sealed"),
                         "creator_id_hash": short_hash(creator_id),
                         "engine": engine_report,
                         "quality": quality,
+                        "photo_naturalization": naturalization_report,
                         "identify_before": before_report,
                         "identify_after": after_report,
                     },
@@ -137,7 +145,7 @@ def handler(job):
                     "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
                     "failure_reason": str(exc),
                     "report": {
-                        "profile": payload.get("profile", "standard"),
+                        "profile": profile,
                         "output_mode": payload.get("output_mode", "sealed"),
                     },
                 },
@@ -332,6 +340,10 @@ def public_profile_config(cfg):
         "face_path": cfg["face_path"],
         "adaptive_level": cfg["adaptive_level"],
         "timeout": cfg["timeout"],
+        "naturalization": {
+            "enabled": cfg["naturalization"]["enabled"],
+            "jpeg_quality": cfg["naturalization"]["jpeg_quality"],
+        },
     }
 
 
@@ -362,7 +374,7 @@ def quality_check(input_path, output_path):
     return {"ok": True, "psnr": psnr, "variance": variance}
 
 
-def finalize_output(cleaned_path, output_path, output_mode, creator_id):
+def finalize_output(cleaned_path, output_path, output_mode, creator_id, naturalization):
     # Preserve the creator's native resolution. The engine already restored the
     # cleaned image to the original size; here we just cap the final export
     # (keeps JPEGs sane on huge inputs) and apply the Fibonacci-88 seal at that
@@ -371,6 +383,8 @@ def finalize_output(cleaned_path, output_path, output_mode, creator_id):
     image = Image.open(cleaned_path).convert("RGB")
     if max(image.width, image.height) > MAX_FINAL:
         image.thumbnail((MAX_FINAL, MAX_FINAL), Image.Resampling.LANCZOS)
+
+    naturalization_report = apply_photo_naturalization(image, creator_id, naturalization)
 
     if output_mode in ("sealed", "sealed-stamped"):
         apply_fibonacci_88(image, creator_id)
@@ -386,33 +400,9 @@ def finalize_output(cleaned_path, output_path, output_mode, creator_id):
         draw.rounded_rectangle(box, radius=8, fill=(30, 37, 37))
         draw.text((box[0] + 32, box[1] + 18), label, fill=(255, 255, 255), font=ImageFont.load_default())
 
-    image.save(
-        output_path,
-        format="JPEG",
-        quality=88,
-        optimize=True,
-        exif=build_camera_exif(image),
-    )
-
-
-def build_camera_exif(image):
-    timestamp = datetime.utcnow().strftime("%Y:%m:%d %H:%M:%S")
-    exif = Image.Exif()
-    exif[271] = "Apple"  # Make
-    exif[272] = "iPhone 16 Pro"  # Model
-    exif[274] = 1  # Orientation
-    exif[305] = "18.2"  # Software
-    exif[306] = timestamp  # DateTime
-    exif[36864] = b"0232"  # ExifVersion
-    exif[36867] = timestamp  # DateTimeOriginal
-    exif[36868] = timestamp  # DateTimeDigitized
-    exif[40960] = b"0100"  # FlashPixVersion
-    exif[40961] = 1  # ColorSpace: sRGB
-    exif[40962] = image.width  # PixelXDimension
-    exif[40963] = image.height  # PixelYDimension
-    exif[42035] = "Apple"  # LensMake
-    exif[42036] = "iPhone 16 Pro back camera"  # LensModel
-    return exif
+    image.save(output_path, format="JPEG", quality=naturalization["jpeg_quality"], optimize=True)
+    naturalization_report["final_jpeg_quality"] = naturalization["jpeg_quality"]
+    return naturalization_report
 
 
 def apply_fibonacci_88(image, creator_id):

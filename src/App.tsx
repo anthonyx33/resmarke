@@ -851,7 +851,6 @@ export default function App() {
                   >
                     <option value="standard">Standard</option>
                     <option value="strong">Strong</option>
-                    <option value="max">Max</option>
                   </select>
                 </label>
                 <label className="field">
