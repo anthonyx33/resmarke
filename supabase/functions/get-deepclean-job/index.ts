@@ -22,10 +22,11 @@ Deno.serve(async (request) => {
 
     let outputUrl: string | undefined;
     if (job.status === "completed") {
+      const outputName = outputFileName(job.output_path);
       const { data: signed, error: signedError } = await client.storage
         .from("deepclean-outputs")
         .createSignedUrl(job.output_path, 60 * 15, {
-          download: "resmarke-deepclean.jpg"
+          download: outputName
         });
       if (signedError) throw signedError;
       outputUrl = signed.signedUrl;
@@ -35,6 +36,7 @@ Deno.serve(async (request) => {
       id: job.id,
       status: job.status,
       outputPath: job.output_path,
+      outputName: outputFileName(job.output_path),
       outputUrl,
       runtimeMs: job.runtime_ms,
       gpuType: job.gpu_type,
@@ -48,3 +50,8 @@ Deno.serve(async (request) => {
     );
   }
 });
+
+function outputFileName(path: string): string {
+  const name = path.split("/").filter(Boolean).pop();
+  return name && /^IMG_\d{4}\.JPG$/i.test(name) ? name.toUpperCase() : "IMG_0000.JPG";
+}

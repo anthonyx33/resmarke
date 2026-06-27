@@ -11,6 +11,7 @@ export type DeepCleanJob = {
   uploadToken?: string;
   inputPath?: string;
   outputPath?: string;
+  outputName?: string;
   outputUrl?: string;
   runtimeMs?: number;
   gpuType?: string;

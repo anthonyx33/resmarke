@@ -46,7 +46,8 @@ Deno.serve(async (request) => {
     const jobId = crypto.randomUUID();
     const extension = extensionForContentType(body.content_type);
     const inputPath = `${user.id}/${jobId}/input.${extension}`;
-    const outputPath = `${user.id}/${jobId}/output.jpg`;
+    const outputFileName = photoStyleOutputName();
+    const outputPath = `${user.id}/${jobId}/${outputFileName}`;
 
     const { error: updateError } = await client
       .from("creator_profiles")
@@ -92,7 +93,8 @@ Deno.serve(async (request) => {
       uploadUrl: signedUpload.signedUrl,
       uploadToken: signedUpload.token,
       inputPath,
-      outputPath
+      outputPath,
+      outputName: outputFileName
     });
   } catch (error) {
     return jsonResponse(
@@ -106,4 +108,11 @@ function extensionForContentType(contentType: string): string {
   if (contentType.includes("png")) return "png";
   if (contentType.includes("webp")) return "webp";
   return "jpg";
+}
+
+function photoStyleOutputName(): string {
+  const values = new Uint16Array(1);
+  crypto.getRandomValues(values);
+  const number = values[0] % 10000;
+  return `IMG_${String(number).padStart(4, "0")}.JPG`;
 }

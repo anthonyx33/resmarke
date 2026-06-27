@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -385,7 +386,33 @@ def finalize_output(cleaned_path, output_path, output_mode, creator_id):
         draw.rounded_rectangle(box, radius=8, fill=(30, 37, 37))
         draw.text((box[0] + 32, box[1] + 18), label, fill=(255, 255, 255), font=ImageFont.load_default())
 
-    image.save(output_path, format="JPEG", quality=88, optimize=True)
+    image.save(
+        output_path,
+        format="JPEG",
+        quality=88,
+        optimize=True,
+        exif=build_camera_exif(image),
+    )
+
+
+def build_camera_exif(image):
+    timestamp = datetime.utcnow().strftime("%Y:%m:%d %H:%M:%S")
+    exif = Image.Exif()
+    exif[271] = "Apple"  # Make
+    exif[272] = "iPhone 16 Pro"  # Model
+    exif[274] = 1  # Orientation
+    exif[305] = "18.2"  # Software
+    exif[306] = timestamp  # DateTime
+    exif[36864] = b"0232"  # ExifVersion
+    exif[36867] = timestamp  # DateTimeOriginal
+    exif[36868] = timestamp  # DateTimeDigitized
+    exif[40960] = b"0100"  # FlashPixVersion
+    exif[40961] = 1  # ColorSpace: sRGB
+    exif[40962] = image.width  # PixelXDimension
+    exif[40963] = image.height  # PixelYDimension
+    exif[42035] = "Apple"  # LensMake
+    exif[42036] = "iPhone 16 Pro back camera"  # LensModel
+    return exif
 
 
 def apply_fibonacci_88(image, creator_id):

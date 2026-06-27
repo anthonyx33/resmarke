@@ -922,7 +922,7 @@ export default function App() {
                         <a
                           className="btn btn-primary btn-block deepclean-download"
                           href={deepCleanJob.outputUrl}
-                          download="remarkee-max.jpg"
+                          download={deepCleanJob.outputName ?? "IMG_0000.JPG"}
                         >
                           <Download size={18} aria-hidden="true" /> Download result
                         </a>
