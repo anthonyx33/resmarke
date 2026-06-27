@@ -237,7 +237,7 @@ def apply_expert_refinement(image, settings, creator_id, seed_extra=""):
         }
 
     if cfg["mode"] == "neural-texture-lab":
-        shifted, shift_x, shift_y = subpixel_translate(image, rng, amount=0.5)
+        shifted, shift_x, shift_y = subpixel_translate(image, rng, amount=8.0)
         image.paste(shifted)
         report["pipeline"] = "neural_texture_lab_light_finalization"
         report["techniques"] = {
@@ -245,7 +245,8 @@ def apply_expert_refinement(image, settings, creator_id, seed_extra=""):
                 "enabled": True,
                 "shift_x": shift_x,
                 "shift_y": shift_y,
-                "max_abs_shift": 0.5,
+                "max_abs_shift": 8.0,
+                "period_pixels": 8,
             },
             "final_jpeg_quality": 92,
             "final_jpeg_subsampling": "4:2:2",
@@ -585,7 +586,7 @@ def subpixel_translate(image, rng, amount):
     width, height = image.size
     shift_x = float(rng.uniform(-amount, amount))
     shift_y = float(rng.uniform(-amount, amount))
-    pad = 3
+    pad = max(3, int(np.ceil(abs(amount))) + 3)
     padded = edge_pad(image, pad)
     shifted = padded.transform(
         padded.size,
