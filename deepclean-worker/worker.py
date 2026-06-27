@@ -17,6 +17,7 @@ from photo_naturalization import (
     apply_expert_refinement,
     apply_photo_naturalization,
 )
+from neural_texture import apply_neural_texture_lab, is_neural_texture_lab
 
 # The cleaning engine is ComfyUI running the Remarkee Max workflow, started
 # as a localhost service by start.sh (see comfyui_client.py). The workflow
@@ -30,9 +31,9 @@ TEMPLATE_PATH = Path(
 # original + timeout) plus small graph mutations before /prompt submission.
 # Standard skips the Z-Image/SAM/MediaPipe/RES4LYF face subgraph by rewiring
 # SaveImage to the global Qwen output and pruning unreachable nodes.
-# `upscale_back` is lanczos for all tiers in v1; neural upscale (Real-ESRGAN
-# via a ComfyUI UpscaleModelLoader node) is a follow-up to avoid a fragile
-# realesrgan pip install in the ComfyUI image.
+# `upscale_back` is lanczos for production tiers. The hidden Neural Texture
+# Lab uses ComfyUI's UpscaleModelLoader path after Qwen regeneration so we
+# avoid a fragile standalone realesrgan pip install in the worker image.
 PROFILE_CONFIG = {
     "standard": {
         "timeout": 180,
@@ -116,13 +117,23 @@ def handler(job):
                 raise RuntimeError(quality["reason"])
             cleaned_sha = sha256_file(cleaned_path)
 
+            expert_refinement = payload.get("expert_refinement")
+            neural_texture_report = maybe_apply_neural_texture_lab(
+                cleaned_path=cleaned_path,
+                expert_refinement=expert_refinement,
+                creator_id=creator_id,
+                seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
+            )
+            if neural_texture_report.get("applied"):
+                cleaned_sha = sha256_file(cleaned_path)
+
             naturalization_report = finalize_output(
                 cleaned_path=cleaned_path,
                 output_path=final_path,
                 output_mode=payload.get("output_mode", "sealed"),
                 creator_id=creator_id,
-                naturalization=cfg["naturalization"],
-                expert_refinement=payload.get("expert_refinement"),
+                naturalization=final_naturalization_config(cfg, expert_refinement),
+                expert_refinement=expert_refinement,
                 seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
             )
 
@@ -148,6 +159,7 @@ def handler(job):
                         "creator_id_hash": short_hash(creator_id),
                         "engine": engine_report,
                         "quality": quality,
+                        "neural_texture": neural_texture_report,
                         "photo_naturalization": naturalization_report["photo_naturalization"],
                         "expert_refinement": naturalization_report["expert_refinement"],
                         "identify_before": before_report,
@@ -371,6 +383,29 @@ def public_profile_config(cfg):
             "micro_texture_jitter": cfg["naturalization"].get("micro_texture_jitter", False),
         },
     }
+
+
+def maybe_apply_neural_texture_lab(cleaned_path, expert_refinement, creator_id, seed_extra):
+    if not is_neural_texture_lab(expert_refinement):
+        return {"enabled": False}
+
+    output_path = Path(cleaned_path).with_name("neural_texture.png")
+    report = apply_neural_texture_lab(
+        input_path=cleaned_path,
+        output_path=output_path,
+        creator_id=creator_id,
+        settings=expert_refinement,
+        seed_extra=seed_extra,
+    )
+    if report.get("applied"):
+        shutil.copyfile(output_path, cleaned_path)
+    return report
+
+
+def final_naturalization_config(cfg, expert_refinement):
+    if is_neural_texture_lab(expert_refinement):
+        return PHOTO_NATURALIZATION_PROFILES["off"]
+    return cfg["naturalization"]
 
 
 def env_int(name):

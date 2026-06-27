@@ -132,6 +132,15 @@ EXPERT_REFINEMENT_PRESETS = {
         "lens_character": {"enabled": False, "value": 0.0},
         "double_quantization": {"enabled": False, "value": 0.0},
     },
+    "neural-texture-lab": {
+        "pixel_alignment_break": {"enabled": False, "value": 0.0},
+        "sensor_noise_luma": {"enabled": False, "value": 0.0},
+        "lens_vignette": {"enabled": False, "value": 0.0},
+        "compression_texture": {"enabled": False, "value": 0.0},
+        "bayer_cfa_lite": {"enabled": False, "value": 0.0},
+        "lens_character": {"enabled": False, "value": 0.0},
+        "double_quantization": {"enabled": False, "value": 0.0},
+    },
 }
 
 EXPERT_REFINEMENT_TECHNIQUES = tuple(EXPERT_REFINEMENT_PRESETS["off"].keys())
@@ -224,6 +233,25 @@ def apply_expert_refinement(image, settings, creator_id, seed_extra=""):
         report["techniques"] = optical_report
         return report, {
             "jpeg_quality": 91,
+            "jpeg_subsampling": "4:2:2",
+        }
+
+    if cfg["mode"] == "neural-texture-lab":
+        shifted, shift_x, shift_y = subpixel_translate(image, rng, amount=0.5)
+        image.paste(shifted)
+        report["pipeline"] = "neural_texture_lab_light_finalization"
+        report["techniques"] = {
+            "jpeg_grid_offset": {
+                "enabled": True,
+                "shift_x": shift_x,
+                "shift_y": shift_y,
+                "max_abs_shift": 0.5,
+            },
+            "final_jpeg_quality": 92,
+            "final_jpeg_subsampling": "4:2:2",
+        }
+        return report, {
+            "jpeg_quality": 92,
             "jpeg_subsampling": "4:2:2",
         }
 

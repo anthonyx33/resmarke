@@ -1,4 +1,4 @@
-"""Idempotently download the 10 Remarkee Max model files onto the
+"""Idempotently download the Remarkee Max model files onto the
 persistent RunPod network volume so cold starts load from disk.
 
 Run once at container start (see start.sh). Skips any file already present.
@@ -42,6 +42,9 @@ FILES = [
      "https://huggingface.co/Bingsu/adetailer/resolve/main/face_yolov8n.pt"),
     ("sam_vit_b_01ec64.pth", "sams",
      "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"),
+    # Internal Neural Texture Lab
+    ("RealESRGAN_x4plus.pth", "upscale_models",
+     "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"),
 ]
 
 CHUNK = 1024 * 1024  # 1 MiB

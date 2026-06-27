@@ -49,7 +49,7 @@ export type DeepCleanJob = {
 export async function createDeepCleanJob(params: {
   file: File;
   creatorId: string;
-  profile: DeepCleanProfile | "max-optical-pro";
+  profile: DeepCleanProfile | "max-optical-pro" | "max-neural-texture-lab";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;

@@ -61,7 +61,7 @@ import { supabase } from "./lib/supabase";
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
-type DeepCleanProfileSelection = DeepCleanProfile | "max-optical-pro";
+type DeepCleanProfileSelection = DeepCleanProfile | "max-optical-pro" | "max-neural-texture-lab";
 
 const expertRefinementPresets: Record<
   ExpertRefinementMode,
@@ -528,7 +528,7 @@ export default function App() {
   function chooseDeepCleanProfile(profile: DeepCleanProfileSelection) {
     setDeepCleanProfile(profile);
     if (profile !== "max") setDeepCleanMicroTextureJitter(false);
-    if (profile === "max-optical-pro") {
+    if (profile === "max-optical-pro" || profile === "max-neural-texture-lab") {
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -1134,6 +1134,9 @@ export default function App() {
                     <option value="max">Max (Expert)</option>
                     <option value="max-mint">Max Mint</option>
                     {isAdminUi ? <option value="max-optical-pro">Optical Pro Lab</option> : null}
+                    {isAdminUi ? (
+                      <option value="max-neural-texture-lab">Neural Texture Lab</option>
+                    ) : null}
                   </select>
                 </label>
                 <label className="field">
@@ -1160,15 +1163,26 @@ export default function App() {
                 </button>
               </div>
 
-              {deepCleanProfile === "max-optical-pro" ? (
+              {deepCleanProfile === "max-optical-pro" || deepCleanProfile === "max-neural-texture-lab" ? (
                 <div className="expert-refinement">
                   <div className="expert-refinement-head">
                     <div>
-                      <div className="card-label">Optical Pro Lab</div>
-                      <p>
-                        Hidden internal test: 2x upscale-capture-downscale, ultra-light CFA,
-                        luma sensor noise, grid offset, and final JPEG 91 / 4:2:2.
-                      </p>
+                      <div className="card-label">
+                        {deepCleanProfile === "max-neural-texture-lab"
+                          ? "Neural Texture Lab"
+                          : "Optical Pro Lab"}
+                      </div>
+                      {deepCleanProfile === "max-neural-texture-lab" ? (
+                        <p>
+                          Hidden internal test: Real-ESRGAN x4plus, alpha 0.60 with QA
+                          retries, light grid offset, and final JPEG 92 / 4:2:2.
+                        </p>
+                      ) : (
+                        <p>
+                          Hidden internal test: 2x upscale-capture-downscale, ultra-light CFA,
+                          luma sensor noise, grid offset, and final JPEG 91 / 4:2:2.
+                        </p>
+                      )}
                     </div>
                     <SlidersHorizontal size={18} aria-hidden="true" />
                   </div>

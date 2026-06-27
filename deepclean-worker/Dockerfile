@@ -60,9 +60,11 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY bootstrap_models.py /app/bootstrap_models.py
 COPY comfyui_client.py /app/comfyui_client.py
+COPY neural_texture.py /app/neural_texture.py
 COPY photo_naturalization.py /app/photo_naturalization.py
 COPY worker.py /app/worker.py
 COPY workflows /app/workflows
+COPY tools /app/tools
 COPY custom_nodes/RemarkeeMax /app/ComfyUI/custom_nodes/RemarkeeMax
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
