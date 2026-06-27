@@ -6,7 +6,8 @@ type CreateJobBody = {
   file_size: number;
   content_type: string;
   creator_id?: string;
-  profile: "standard" | "strong" | "max" | "max-jitter";
+  profile: "standard" | "strong" | "max";
+  micro_texture_jitter?: boolean;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
 };
 
@@ -25,7 +26,7 @@ Deno.serve(async (request) => {
     if (body.file_size > maxBytes) {
       return jsonResponse({ error: "DeepClean beta accepts images up to 25 MB." }, 400);
     }
-    if (!["standard", "strong", "max", "max-jitter"].includes(body.profile)) {
+    if (!["standard", "strong", "max"].includes(body.profile)) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
     }
     if (!["stripped", "sealed", "sealed-stamped"].includes(body.output_mode)) {
@@ -77,7 +78,12 @@ Deno.serve(async (request) => {
       output_mode: body.output_mode ?? "sealed",
       input_path: inputPath,
       output_path: outputPath,
-      credits_reserved: 1
+      credits_reserved: 1,
+      report: {
+        requested_options: {
+          micro_texture_jitter: body.profile === "max" && body.micro_texture_jitter === true
+        }
+      }
     });
     if (jobError) throw jobError;
 

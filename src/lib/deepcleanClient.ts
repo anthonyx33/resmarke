@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 import { throwSupabaseFunctionError } from "./supabaseFunctionError";
 
-export type DeepCleanProfile = "standard" | "strong" | "max" | "max-jitter";
+export type DeepCleanProfile = "standard" | "strong" | "max";
 export type DeepCleanOutputMode = "stripped" | "sealed" | "sealed-stamped";
 
 export type DeepCleanJob = {
@@ -24,6 +24,7 @@ export async function createDeepCleanJob(params: {
   creatorId: string;
   profile: DeepCleanProfile;
   outputMode: DeepCleanOutputMode;
+  microTextureJitter?: boolean;
 }): Promise<DeepCleanJob> {
   if (!supabase) {
     throw new Error("Supabase is not configured for Remarkee Max jobs.");
@@ -36,7 +37,8 @@ export async function createDeepCleanJob(params: {
       content_type: params.file.type || "application/octet-stream",
       creator_id: params.creatorId,
       profile: params.profile,
-      output_mode: params.outputMode
+      output_mode: params.outputMode,
+      micro_texture_jitter: Boolean(params.microTextureJitter)
     }
   });
 

@@ -8,14 +8,18 @@ import {
   Fingerprint,
   Gauge,
   ImageOff,
+  KeyRound,
   Loader2,
   Lock,
+  LogOut,
+  Mail,
   Moon,
   RotateCcw,
   ShieldCheck,
   Sparkles,
   Sun,
   Upload,
+  UserRound,
   Wallet
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -52,7 +56,7 @@ import { supabase } from "./lib/supabase";
 
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
-type AuthMode = "signin" | "signup";
+type AuthMode = "signin" | "signup" | "reset" | "update";
 
 function initialTheme(): Theme {
   if (typeof window === "undefined") return "dark";
@@ -144,6 +148,10 @@ export default function App() {
       setUserId(user?.id ?? "");
       setUserEmail(user?.email ?? "");
       if (user) void refreshSupabaseCredits(user.id);
+      if (_event === "PASSWORD_RECOVERY") {
+        setAuthMode("update");
+        setAuthStatus("Choose a new password for this account.");
+      }
     });
 
     return () => data.subscription.unsubscribe();
@@ -176,12 +184,41 @@ export default function App() {
   async function submitPasswordAuth() {
     if (!supabase) return;
     const email = authEmail.trim();
-    if (!email || !authPassword) {
-      setAuthStatus("Enter your email and password.");
+    if (authMode === "reset") {
+      if (!email) {
+        setAuthStatus("Enter your email to receive a reset link.");
+        return;
+      }
+      setAuthStatus("Sending reset link...");
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.href.split("#")[0]
+      });
+      setAuthStatus(error ? error.message : "Reset link sent. Check your email.");
+      return;
+    }
+
+    if (!authPassword) {
+      setAuthStatus("Enter your password.");
       return;
     }
     if (authPassword.length < 6) {
       setAuthStatus("Password must be at least 6 characters.");
+      return;
+    }
+
+    if (authMode === "update") {
+      setAuthStatus("Updating password...");
+      const { error } = await supabase.auth.updateUser({ password: authPassword });
+      setAuthStatus(error ? error.message : "Password updated.");
+      if (!error) {
+        setAuthPassword("");
+        setAuthMode("signin");
+      }
+      return;
+    }
+
+    if (!email) {
+      setAuthStatus("Enter your email.");
       return;
     }
 
@@ -333,15 +370,14 @@ export default function App() {
     }
 
     let createdJob: DeepCleanJob | null = null;
-    const requestedProfile: DeepCleanProfile =
-      deepCleanProfile === "max" && deepCleanMicroTextureJitter ? "max-jitter" : deepCleanProfile;
     setDeepCleanStatus("Creating Remarkee Max job...");
     try {
       const job = await createDeepCleanJob({
         file,
         creatorId,
-        profile: requestedProfile,
-        outputMode: deepCleanOutputMode
+        profile: deepCleanProfile,
+        outputMode: deepCleanOutputMode,
+        microTextureJitter: deepCleanProfile === "max" && deepCleanMicroTextureJitter
       });
       createdJob = job;
       setDeepCleanJob(job);
@@ -450,6 +486,15 @@ export default function App() {
   }
 
   const openPicker = () => fileInputRef.current?.click();
+  const showAuthPanel = hasSupabaseConfig && (!userId || authMode === "update");
+  const authSummary =
+    authMode === "signup"
+      ? "Create account"
+      : authMode === "reset"
+        ? "Reset password"
+        : authMode === "update"
+          ? "Set password"
+          : "Sign in";
 
   return (
     <div className="page">
@@ -474,68 +519,128 @@ export default function App() {
             <strong>{credits.privacyCredits}</strong> exports
           </span>
 
-          {hasSupabaseConfig ? (
-            userId ? (
-              <button className="icon-btn" type="button" onClick={signOut} title="Sign out">
-                <RotateCcw size={16} aria-hidden="true" />
-              </button>
-            ) : (
-              <details className="auth">
-                <summary>{authMode === "signin" ? "Sign in" : "Sign up"}</summary>
+          {showAuthPanel ? (
+              <details className="auth" open={authMode === "update"}>
+                <summary>{authSummary}</summary>
                 <div className="auth-body">
-                  <div className="auth-tabs" aria-label="Authentication mode">
+                  {authMode !== "update" ? (
+                    <div className="auth-tabs" aria-label="Authentication mode">
+                      <button
+                        className={authMode === "signin" ? "active" : ""}
+                        type="button"
+                        onClick={() => {
+                          setAuthMode("signin");
+                          setAuthStatus("");
+                        }}
+                      >
+                        Sign in
+                      </button>
+                      <button
+                        className={authMode === "signup" ? "active" : ""}
+                        type="button"
+                        onClick={() => {
+                          setAuthMode("signup");
+                          setAuthStatus("");
+                        }}
+                      >
+                        Sign up
+                      </button>
+                    </div>
+                  ) : null}
+                  <p>
+                    {authMode === "signin"
+                      ? "Enter your email and password to access your credits."
+                      : authMode === "signup"
+                        ? "Create an account with email and password."
+                        : authMode === "reset"
+                          ? "Send a secure reset link to your inbox."
+                          : "Set a new password to finish recovery."}
+                  </p>
+                  {authMode !== "update" ? (
+                    <div className="input-with-icon">
+                      <Mail size={16} aria-hidden="true" />
+                      <input
+                        className="input"
+                        value={authEmail}
+                        onChange={(event) => setAuthEmail(event.target.value)}
+                        placeholder="you@email.com"
+                        type="email"
+                        autoComplete="email"
+                      />
+                    </div>
+                  ) : null}
+                  {authMode !== "reset" ? (
+                    <div className="input-with-icon">
+                      <KeyRound size={16} aria-hidden="true" />
+                      <input
+                        className="input"
+                        value={authPassword}
+                        onChange={(event) => setAuthPassword(event.target.value)}
+                        placeholder={authMode === "update" ? "New password" : "Password"}
+                        type="password"
+                        autoComplete={authMode === "signin" ? "current-password" : "new-password"}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") void submitPasswordAuth();
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <button className="btn btn-primary" type="button" onClick={submitPasswordAuth}>
+                    {authMode === "signin"
+                      ? "Sign in"
+                      : authMode === "signup"
+                        ? "Create account"
+                        : authMode === "reset"
+                          ? "Send reset link"
+                          : "Update password"}
+                  </button>
+                  {authMode === "signin" ? (
                     <button
-                      className={authMode === "signin" ? "active" : ""}
+                      className="link-btn"
+                      type="button"
+                      onClick={() => {
+                        setAuthMode("reset");
+                        setAuthStatus("");
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  ) : authMode === "reset" ? (
+                    <button
+                      className="link-btn"
                       type="button"
                       onClick={() => {
                         setAuthMode("signin");
                         setAuthStatus("");
                       }}
                     >
-                      Sign in
+                      Back to sign in
                     </button>
-                    <button
-                      className={authMode === "signup" ? "active" : ""}
-                      type="button"
-                      onClick={() => {
-                        setAuthMode("signup");
-                        setAuthStatus("");
-                      }}
-                    >
-                      Sign up
-                    </button>
-                  </div>
-                  <p>
-                    {authMode === "signin"
-                      ? "Enter your email and password to access your credits."
-                      : "Create an account with email and password."}
-                  </p>
-                  <input
-                    className="input"
-                    value={authEmail}
-                    onChange={(event) => setAuthEmail(event.target.value)}
-                    placeholder="you@email.com"
-                    type="email"
-                    autoComplete="email"
-                  />
-                  <input
-                    className="input"
-                    value={authPassword}
-                    onChange={(event) => setAuthPassword(event.target.value)}
-                    placeholder="Password"
-                    type="password"
-                    autoComplete={authMode === "signin" ? "current-password" : "new-password"}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void submitPasswordAuth();
-                    }}
-                  />
-                  <button className="btn btn-primary" type="button" onClick={submitPasswordAuth}>
-                    {authMode === "signin" ? "Sign in" : "Create account"}
-                  </button>
-                  {authStatus ? <p>{authStatus}</p> : null}
+                  ) : null}
+                  {authStatus ? <p className="auth-status">{authStatus}</p> : null}
                 </div>
               </details>
-            )
+          ) : hasSupabaseConfig && userId ? (
+              <details className="account">
+                <summary>
+                  <UserRound size={15} aria-hidden="true" />
+                  <span>{userEmail || "Account"}</span>
+                </summary>
+                <div className="account-body">
+                  <div className="account-row">
+                    <span>Privacy exports</span>
+                    <strong>{credits.privacyCredits}</strong>
+                  </div>
+                  <div className="account-row">
+                    <span>Remarkee Max</span>
+                    <strong>{credits.deepCleanCredits}</strong>
+                  </div>
+                  {isAdminUi ? <span className="account-badge">Developer admin</span> : null}
+                  <button className="btn btn-ghost btn-block" type="button" onClick={signOut}>
+                    <LogOut size={16} aria-hidden="true" /> Sign out
+                  </button>
+                </div>
+              </details>
           ) : null}
 
           <button

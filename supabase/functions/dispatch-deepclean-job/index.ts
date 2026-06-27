@@ -34,12 +34,19 @@ Deno.serve(async (request) => {
       throw new Error("Missing RunPod or webhook configuration.");
     }
 
+    const report = (job.report ?? {}) as Record<string, unknown>;
+    const requestedOptions = (report.requested_options ?? {}) as Record<string, unknown>;
+    const workerProfile =
+      job.profile === "max" && requestedOptions.micro_texture_jitter === true
+        ? "max-jitter"
+        : job.profile;
+
     const webhookUrl = `${supabaseUrl}/functions/v1/deepclean-webhook`;
     const payload = {
       input: {
         job_id: job.id,
         creator_id: job.creator_id || user.email || user.id,
-        profile: job.profile,
+        profile: workerProfile,
         output_mode: job.output_mode,
         input_url: inputSigned.signedUrl,
         input_path: job.input_path,
