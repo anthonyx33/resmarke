@@ -3,6 +3,27 @@ import { throwSupabaseFunctionError } from "./supabaseFunctionError";
 
 export type DeepCleanProfile = "standard" | "standard-plus" | "strong" | "max";
 export type DeepCleanOutputMode = "stripped" | "sealed" | "sealed-stamped";
+export type ExpertRefinementMode = "off" | "light" | "balanced" | "optical";
+export type ExpertRefinementTechnique =
+  | "pixel_alignment_break"
+  | "sensor_noise_luma"
+  | "lens_vignette"
+  | "compression_texture"
+  | "lens_character"
+  | "double_quantization";
+
+export type ExpertRefinementSettings = {
+  mode: ExpertRefinementMode;
+  intensity: number;
+  preserve_straight_lines: boolean;
+  techniques: Record<
+    ExpertRefinementTechnique,
+    {
+      enabled: boolean;
+      value: number;
+    }
+  >;
+};
 
 export type DeepCleanJob = {
   id: string;
@@ -25,6 +46,7 @@ export async function createDeepCleanJob(params: {
   profile: DeepCleanProfile;
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
+  expertRefinement?: ExpertRefinementSettings;
 }): Promise<DeepCleanJob> {
   if (!supabase) {
     throw new Error("Supabase is not configured for Remarkee Max jobs.");
@@ -38,7 +60,8 @@ export async function createDeepCleanJob(params: {
       creator_id: params.creatorId,
       profile: params.profile,
       output_mode: params.outputMode,
-      micro_texture_jitter: Boolean(params.microTextureJitter)
+      micro_texture_jitter: Boolean(params.microTextureJitter),
+      expert_refinement: params.expertRefinement
     }
   });
 

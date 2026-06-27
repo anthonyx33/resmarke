@@ -8,6 +8,7 @@ type CreateJobBody = {
   creator_id?: string;
   profile: "standard" | "standard-plus" | "strong" | "max";
   micro_texture_jitter?: boolean;
+  expert_refinement?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
 };
 
@@ -51,6 +52,7 @@ Deno.serve(async (request) => {
     const outputPath = `${user.id}/${jobId}/${outputFileName}`;
     const requestedProfile = body.profile ?? "standard";
     const storedProfile = requestedProfile === "standard-plus" ? "standard" : requestedProfile;
+    const expertRefinement = normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
       .from("creator_profiles")
@@ -84,7 +86,8 @@ Deno.serve(async (request) => {
       report: {
         requested_options: {
           profile_variant: requestedProfile === "standard-plus" ? "standard-plus" : null,
-          micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true
+          micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
+          expert_refinement: expertRefinement
         }
       }
     });
@@ -124,4 +127,48 @@ function photoStyleOutputName(): string {
   crypto.getRandomValues(values);
   const number = values[0] % 10000;
   return `IMG_${String(number).padStart(4, "0")}.JPG`;
+}
+
+function normalizeExpertRefinement(input: unknown) {
+  const modes = ["off", "light", "balanced", "optical"];
+  const techniqueKeys = [
+    "pixel_alignment_break",
+    "sensor_noise_luma",
+    "lens_vignette",
+    "compression_texture",
+    "lens_character",
+    "double_quantization"
+  ];
+  const raw = isRecord(input) ? input : {};
+  const mode = typeof raw.mode === "string" && modes.includes(raw.mode) ? raw.mode : "off";
+  const intensity = clampNumber(raw.intensity, 0, 100, 45);
+  const preserveStraightLines =
+    typeof raw.preserve_straight_lines === "boolean" ? raw.preserve_straight_lines : true;
+  const rawTechniques = isRecord(raw.techniques) ? raw.techniques : {};
+  const techniques: Record<string, { enabled: boolean; value: number }> = {};
+
+  for (const key of techniqueKeys) {
+    const row = isRecord(rawTechniques[key]) ? rawTechniques[key] : {};
+    techniques[key] = {
+      enabled: typeof row.enabled === "boolean" ? row.enabled : false,
+      value: clampNumber(row.value, 0, 1, 0)
+    };
+  }
+
+  return {
+    mode,
+    intensity,
+    preserve_straight_lines: preserveStraightLines,
+    techniques
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
 }

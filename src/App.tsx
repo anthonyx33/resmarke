@@ -16,6 +16,7 @@ import {
   Moon,
   RotateCcw,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Sun,
   Upload,
@@ -45,7 +46,10 @@ import {
   uploadDeepCleanInput,
   type DeepCleanJob,
   type DeepCleanOutputMode,
-  type DeepCleanProfile
+  type DeepCleanProfile,
+  type ExpertRefinementMode,
+  type ExpertRefinementSettings,
+  type ExpertRefinementTechnique
 } from "./lib/deepcleanClient";
 import {
   getAdminRunpodEndpoint,
@@ -57,6 +61,90 @@ import { supabase } from "./lib/supabase";
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
+
+const expertRefinementPresets: Record<
+  ExpertRefinementMode,
+  ExpertRefinementSettings["techniques"]
+> = {
+  off: {
+    pixel_alignment_break: { enabled: false, value: 0 },
+    sensor_noise_luma: { enabled: false, value: 0 },
+    lens_vignette: { enabled: false, value: 0 },
+    compression_texture: { enabled: false, value: 0 },
+    lens_character: { enabled: false, value: 0 },
+    double_quantization: { enabled: false, value: 0 }
+  },
+  light: {
+    pixel_alignment_break: { enabled: true, value: 0.25 },
+    sensor_noise_luma: { enabled: true, value: 0.2 },
+    lens_vignette: { enabled: true, value: 0.1 },
+    compression_texture: { enabled: true, value: 0.2 },
+    lens_character: { enabled: false, value: 0.2 },
+    double_quantization: { enabled: false, value: 0.1 }
+  },
+  balanced: {
+    pixel_alignment_break: { enabled: true, value: 0.4 },
+    sensor_noise_luma: { enabled: true, value: 0.35 },
+    lens_vignette: { enabled: true, value: 0.15 },
+    compression_texture: { enabled: true, value: 0.3 },
+    lens_character: { enabled: false, value: 0.2 },
+    double_quantization: { enabled: false, value: 0.1 }
+  },
+  optical: {
+    pixel_alignment_break: { enabled: true, value: 0.55 },
+    sensor_noise_luma: { enabled: true, value: 0.5 },
+    lens_vignette: { enabled: true, value: 0.2 },
+    compression_texture: { enabled: true, value: 0.4 },
+    lens_character: { enabled: true, value: 0.2 },
+    double_quantization: { enabled: true, value: 0.1 }
+  }
+};
+
+const expertTechniqueRows: Array<{
+  key: ExpertRefinementTechnique;
+  label: string;
+  detail: string;
+}> = [
+  {
+    key: "pixel_alignment_break",
+    label: "Pixel Alignment Break",
+    detail: "Subtle resample round-trip to soften rigid pixel alignment."
+  },
+  {
+    key: "sensor_noise_luma",
+    label: "Sensor Noise (luma)",
+    detail: "Brightness-dependent texture modeled after camera sensor noise."
+  },
+  {
+    key: "lens_vignette",
+    label: "Lens Vignette",
+    detail: "Very light edge falloff similar to real lenses."
+  },
+  {
+    key: "compression_texture",
+    label: "Compression Texture",
+    detail: "Camera-like final JPEG texture and chroma subsampling."
+  },
+  {
+    key: "lens_character",
+    label: "Lens Character",
+    detail: "Mild chromatic aberration and optical curvature."
+  },
+  {
+    key: "double_quantization",
+    label: "Double Quantization",
+    detail: "Optional second JPEG pass for difficult expert cases."
+  }
+];
+
+function cloneExpertPreset(mode: ExpertRefinementMode): ExpertRefinementSettings["techniques"] {
+  return Object.fromEntries(
+    Object.entries(expertRefinementPresets[mode]).map(([key, value]) => [
+      key,
+      { ...value }
+    ])
+  ) as ExpertRefinementSettings["techniques"];
+}
 
 function initialTheme(): Theme {
   if (typeof window === "undefined") return "dark";
@@ -90,6 +178,13 @@ export default function App() {
   const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
   const [deepCleanProfile, setDeepCleanProfile] = useState<DeepCleanProfile>("standard");
   const [deepCleanMicroTextureJitter, setDeepCleanMicroTextureJitter] = useState(false);
+  const [expertRefinementMode, setExpertRefinementMode] =
+    useState<ExpertRefinementMode>("off");
+  const [expertRefinementIntensity, setExpertRefinementIntensity] = useState(45);
+  const [expertRefinementPreserveLines, setExpertRefinementPreserveLines] = useState(true);
+  const [expertRefinementTechniques, setExpertRefinementTechniques] = useState(() =>
+    cloneExpertPreset("off")
+  );
   const [deepCleanOutputMode, setDeepCleanOutputMode] =
     useState<DeepCleanOutputMode>("sealed");
   const [deepCleanStatus, setDeepCleanStatus] = useState("");
@@ -377,7 +472,8 @@ export default function App() {
         creatorId,
         profile: deepCleanProfile,
         outputMode: deepCleanOutputMode,
-        microTextureJitter: deepCleanProfile === "max" && deepCleanMicroTextureJitter
+        microTextureJitter: deepCleanProfile === "max" && deepCleanMicroTextureJitter,
+        expertRefinement: buildExpertRefinementSettings()
       });
       createdJob = job;
       setDeepCleanJob(job);
@@ -395,6 +491,33 @@ export default function App() {
         nextError instanceof Error ? nextError.message : "Remarkee Max is not configured yet."
       );
     }
+  }
+
+  function chooseExpertRefinementMode(mode: ExpertRefinementMode) {
+    setExpertRefinementMode(mode);
+    setExpertRefinementTechniques(cloneExpertPreset(mode));
+  }
+
+  function updateExpertTechnique(
+    key: ExpertRefinementTechnique,
+    patch: Partial<{ enabled: boolean; value: number }>
+  ) {
+    setExpertRefinementTechniques((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        ...patch
+      }
+    }));
+  }
+
+  function buildExpertRefinementSettings(): ExpertRefinementSettings {
+    return {
+      mode: expertRefinementMode,
+      intensity: expertRefinementIntensity,
+      preserve_straight_lines: expertRefinementPreserveLines,
+      techniques: expertRefinementTechniques
+    };
   }
 
   function startDeepCleanPolling(jobId: string) {
@@ -965,19 +1088,6 @@ export default function App() {
                     <option value="max">Max (Expert)</option>
                   </select>
                 </label>
-                {deepCleanProfile === "max" ? (
-                  <div className="field">
-                    <span>Experimental</span>
-                    <label className="toggle-row">
-                      <input
-                        type="checkbox"
-                        checked={deepCleanMicroTextureJitter}
-                        onChange={(event) => setDeepCleanMicroTextureJitter(event.target.checked)}
-                      />
-                      <span>Micro-texture jitter</span>
-                    </label>
-                  </div>
-                ) : null}
                 <label className="field">
                   <span>Output</span>
                   <select
@@ -1000,6 +1110,108 @@ export default function App() {
                 >
                   <Cloud size={18} aria-hidden="true" /> Queue job
                 </button>
+              </div>
+
+              <div className="expert-refinement">
+                <div className="expert-refinement-head">
+                  <div>
+                    <div className="card-label">Expert Refinement</div>
+                    <p>Optional final camera-style texture pass for difficult outputs.</p>
+                  </div>
+                  <SlidersHorizontal size={18} aria-hidden="true" />
+                </div>
+
+                <div className="expert-mode-row">
+                  <span>Mode</span>
+                  <div className="segmented expert-modes" aria-label="Expert refinement mode">
+                    {(["off", "light", "balanced", "optical"] as ExpertRefinementMode[]).map(
+                      (mode) => (
+                        <button
+                          className={expertRefinementMode === mode ? "active" : ""}
+                          key={mode}
+                          type="button"
+                          onClick={() => chooseExpertRefinementMode(mode)}
+                        >
+                          {mode === "off"
+                            ? "Off"
+                            : mode === "light"
+                            ? "Light"
+                            : mode === "balanced"
+                            ? "Balanced"
+                            : "Optical"}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                <label className="range-field expert-intensity">
+                  <span>Intensity: {expertRefinementIntensity}%</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={expertRefinementIntensity}
+                    disabled={expertRefinementMode === "off"}
+                    onChange={(event) => setExpertRefinementIntensity(Number(event.target.value))}
+                  />
+                </label>
+
+                <details className="expert-advanced">
+                  <summary>Advanced manual controls</summary>
+                  <div className="expert-techniques">
+                    {expertTechniqueRows.map((row) => {
+                      const config = expertRefinementTechniques[row.key];
+                      const disabled = expertRefinementMode === "off";
+                      const lockedByLines =
+                        row.key === "lens_character" && expertRefinementPreserveLines;
+                      return (
+                        <div className="expert-technique" key={row.key}>
+                          <label className="toggle-row compact-toggle">
+                            <input
+                              type="checkbox"
+                              checked={lockedByLines ? false : config.enabled}
+                              disabled={disabled || lockedByLines}
+                              onChange={(event) =>
+                                updateExpertTechnique(row.key, { enabled: event.target.checked })
+                              }
+                            />
+                            <span>{row.label}</span>
+                          </label>
+                          <label className="range-field expert-technique-range">
+                            <span>
+                              {(config.value).toFixed(2)}
+                              {lockedByLines ? " · guarded" : ""}
+                            </span>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={config.value}
+                              disabled={disabled || !config.enabled || lockedByLines}
+                              onChange={(event) =>
+                                updateExpertTechnique(row.key, {
+                                  value: Number(event.target.value)
+                                })
+                              }
+                            />
+                          </label>
+                          <p>{row.detail}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <label className="check-row preserve-lines">
+                    <input
+                      type="checkbox"
+                      checked={expertRefinementPreserveLines}
+                      disabled={expertRefinementMode === "off"}
+                      onChange={(event) => setExpertRefinementPreserveLines(event.target.checked)}
+                    />
+                    <span>Preserve straight lines for architecture/interiors</span>
+                  </label>
+                </details>
               </div>
 
               <p className="deepclean-status">

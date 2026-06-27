@@ -1,6 +1,7 @@
 """Deterministic camera-texture restoration for final JPEG exports."""
 
 import hashlib
+import io
 
 import numpy as np
 from PIL import Image, ImageFilter
@@ -85,6 +86,43 @@ PHOTO_NATURALIZATION_PROFILES = {
     },
 }
 
+EXPERT_REFINEMENT_PRESETS = {
+    "off": {
+        "pixel_alignment_break": {"enabled": False, "value": 0.0},
+        "sensor_noise_luma": {"enabled": False, "value": 0.0},
+        "lens_vignette": {"enabled": False, "value": 0.0},
+        "compression_texture": {"enabled": False, "value": 0.0},
+        "lens_character": {"enabled": False, "value": 0.0},
+        "double_quantization": {"enabled": False, "value": 0.0},
+    },
+    "light": {
+        "pixel_alignment_break": {"enabled": True, "value": 0.25},
+        "sensor_noise_luma": {"enabled": True, "value": 0.20},
+        "lens_vignette": {"enabled": True, "value": 0.10},
+        "compression_texture": {"enabled": True, "value": 0.20},
+        "lens_character": {"enabled": False, "value": 0.20},
+        "double_quantization": {"enabled": False, "value": 0.10},
+    },
+    "balanced": {
+        "pixel_alignment_break": {"enabled": True, "value": 0.40},
+        "sensor_noise_luma": {"enabled": True, "value": 0.35},
+        "lens_vignette": {"enabled": True, "value": 0.15},
+        "compression_texture": {"enabled": True, "value": 0.30},
+        "lens_character": {"enabled": False, "value": 0.20},
+        "double_quantization": {"enabled": False, "value": 0.10},
+    },
+    "optical": {
+        "pixel_alignment_break": {"enabled": True, "value": 0.55},
+        "sensor_noise_luma": {"enabled": True, "value": 0.50},
+        "lens_vignette": {"enabled": True, "value": 0.20},
+        "compression_texture": {"enabled": True, "value": 0.40},
+        "lens_character": {"enabled": True, "value": 0.20},
+        "double_quantization": {"enabled": True, "value": 0.10},
+    },
+}
+
+EXPERT_REFINEMENT_TECHNIQUES = tuple(EXPERT_REFINEMENT_PRESETS["off"].keys())
+
 
 def apply_photo_naturalization(image, creator_id, cfg, seed_extra=""):
     report = {
@@ -148,6 +186,140 @@ def apply_photo_naturalization(image, creator_id, cfg, seed_extra=""):
     return report
 
 
+def apply_expert_refinement(image, settings, creator_id, seed_extra=""):
+    cfg = normalize_expert_refinement(settings)
+    report = {
+        "enabled": cfg["enabled"],
+        "mode": cfg["mode"],
+        "intensity": cfg["intensity"],
+        "preserve_straight_lines": cfg["preserve_straight_lines"],
+        "techniques": {},
+    }
+    save_options = {}
+    if not cfg["enabled"]:
+        return report, save_options
+
+    seed_material = f"expert-refinement-v1:{creator_id}:{seed_extra}:{image.width}x{image.height}"
+    seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest()[:16], 16) & 0xFFFFFFFF
+    rng = np.random.default_rng(seed)
+    report["seed"] = seed
+
+    pixel = cfg["techniques"]["pixel_alignment_break"]
+    if pixel["enabled"] and pixel["effective"] > 0:
+        scale = 1.02 + pixel["effective"] * 0.14
+        image.paste(resample_roundtrip(image, scale, scale))
+        report["techniques"]["pixel_alignment_break"] = {
+            "enabled": True,
+            "effective": pixel["effective"],
+            "scale": scale,
+        }
+    else:
+        report["techniques"]["pixel_alignment_break"] = {"enabled": False}
+
+    noise = cfg["techniques"]["sensor_noise_luma"]
+    if noise["enabled"] and noise["effective"] > 0:
+        image.paste(apply_luma_signal_noise(image, rng, noise["effective"]))
+        report["techniques"]["sensor_noise_luma"] = {
+            "enabled": True,
+            "effective": noise["effective"],
+        }
+    else:
+        report["techniques"]["sensor_noise_luma"] = {"enabled": False}
+
+    vignette = cfg["techniques"]["lens_vignette"]
+    if vignette["enabled"] and vignette["effective"] > 0:
+        image.paste(apply_micro_vignette(image, vignette["effective"]))
+        report["techniques"]["lens_vignette"] = {
+            "enabled": True,
+            "effective": vignette["effective"],
+        }
+    else:
+        report["techniques"]["lens_vignette"] = {"enabled": False}
+
+    lens = cfg["techniques"]["lens_character"]
+    if cfg["preserve_straight_lines"] and lens["enabled"]:
+        report["techniques"]["lens_character"] = {
+            "enabled": False,
+            "reason": "preserve_straight_lines",
+        }
+    elif lens["enabled"] and lens["effective"] > 0:
+        image.paste(apply_lens_character(image, lens["effective"]))
+        report["techniques"]["lens_character"] = {
+            "enabled": True,
+            "effective": lens["effective"],
+        }
+    else:
+        report["techniques"]["lens_character"] = {"enabled": False}
+
+    compression = cfg["techniques"]["compression_texture"]
+    if compression["enabled"] and compression["effective"] > 0:
+        quality = int(round(96 - compression["effective"] * 12))
+        quality = max(90, min(96, quality))
+        save_options["jpeg_quality"] = quality
+        save_options["jpeg_subsampling"] = "4:2:0"
+        report["techniques"]["compression_texture"] = {
+            "enabled": True,
+            "effective": compression["effective"],
+            "final_jpeg_quality": quality,
+            "final_jpeg_subsampling": "4:2:0",
+        }
+    else:
+        report["techniques"]["compression_texture"] = {"enabled": False}
+
+    double = cfg["techniques"]["double_quantization"]
+    if double["enabled"] and double["effective"] > 0:
+        quality = int(round(98 - double["effective"] * 10))
+        quality = max(92, min(98, quality))
+        image.paste(jpeg_roundtrip(image, quality=quality, subsampling="4:2:0"))
+        report["techniques"]["double_quantization"] = {
+            "enabled": True,
+            "effective": double["effective"],
+            "intermediate_jpeg_quality": quality,
+            "intermediate_jpeg_subsampling": "4:2:0",
+        }
+    else:
+        report["techniques"]["double_quantization"] = {"enabled": False}
+
+    return report, save_options
+
+
+def normalize_expert_refinement(settings):
+    if not isinstance(settings, dict):
+        settings = {}
+    mode = str(settings.get("mode", "off")).lower()
+    if mode not in EXPERT_REFINEMENT_PRESETS:
+        mode = "off"
+    intensity = clamp_float(settings.get("intensity", 45), 0.0, 100.0)
+    intensity_multiplier = intensity / 100.0
+    preserve = bool(settings.get("preserve_straight_lines", True))
+    requested = settings.get("techniques", {})
+    if not isinstance(requested, dict):
+        requested = {}
+
+    techniques = {}
+    for key in EXPERT_REFINEMENT_TECHNIQUES:
+        preset = EXPERT_REFINEMENT_PRESETS[mode][key]
+        override = requested.get(key, {})
+        if not isinstance(override, dict):
+            override = {}
+        enabled = bool(override.get("enabled", preset["enabled"]))
+        value = clamp_float(override.get("value", preset["value"]), 0.0, 1.0)
+        effective = clamp_float(value * intensity_multiplier, 0.0, 1.0)
+        techniques[key] = {
+            "enabled": enabled,
+            "value": value,
+            "effective": effective if enabled else 0.0,
+        }
+
+    return {
+        "enabled": mode != "off",
+        "mode": mode,
+        "intensity": intensity,
+        "preserve_straight_lines": preserve,
+        "techniques": techniques,
+    }
+
+
 def resample_roundtrip(image, scale_x, scale_y):
     width, height = image.size
     scaled_size = (
@@ -157,6 +329,73 @@ def resample_roundtrip(image, scale_x, scale_y):
     return image.resize(scaled_size, Image.Resampling.LANCZOS).resize(
         (width, height), Image.Resampling.LANCZOS
     )
+
+
+def apply_luma_signal_noise(image, rng, amount):
+    srgb = np.asarray(image).astype(np.float32) / 255.0
+    linear = srgb_to_linear(srgb)
+    luma = (
+        linear[..., 0:1] * 0.2126
+        + linear[..., 1:2] * 0.7152
+        + linear[..., 2:3] * 0.0722
+    )
+    shot_noise = 0.0009 * amount
+    read_noise = 0.0012 * amount
+    variance = luma * shot_noise + read_noise ** 2
+    noise = rng.normal(0.0, np.sqrt(variance).astype(np.float32)).astype(np.float32)
+    linear = np.clip(linear + noise, 0.0, 1.0)
+    refined = np.clip(linear_to_srgb(linear) * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    return Image.fromarray(refined)
+
+
+def apply_micro_vignette(image, amount):
+    width, height = image.size
+    y = np.linspace(-1.0, 1.0, height, dtype=np.float32)[:, None]
+    x = np.linspace(-1.0, 1.0, width, dtype=np.float32)[None, :]
+    radius = np.sqrt(x * x + y * y)
+    falloff = np.clip((radius - 0.28) / 1.12, 0.0, 1.0)
+    strength = 0.035 * amount
+    mask = (1.0 - falloff * falloff * strength)[..., None]
+    srgb = np.asarray(image).astype(np.float32) / 255.0
+    refined = np.clip(srgb * mask * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    return Image.fromarray(refined)
+
+
+def apply_lens_character(image, amount):
+    width, height = image.size
+    pad = 3
+    padded = np.asarray(edge_pad(image, pad)).astype(np.float32)
+    norm_x, norm_y = radial_source_grid(width, height)
+    base_k = -0.0045 * amount
+    ca_k = 0.0018 * amount
+    channels = []
+    for channel, k in enumerate((base_k - ca_k, base_k, base_k + ca_k)):
+        src_x, src_y = apply_radial_k(norm_x, norm_y, width, height, pad, k)
+        sampled = bilinear_sample(padded[..., channel : channel + 1], src_x, src_y)
+        channels.append(sampled)
+    refined = np.concatenate(channels, axis=2)
+    return Image.fromarray(np.clip(refined + 0.5, 0, 255).astype(np.uint8))
+
+
+def radial_source_grid(width, height):
+    y = np.linspace(-1.0, 1.0, height, dtype=np.float32)[:, None]
+    x = np.linspace(-1.0, 1.0, width, dtype=np.float32)[None, :]
+    return x, y
+
+
+def apply_radial_k(norm_x, norm_y, width, height, pad, k):
+    radius2 = norm_x * norm_x + norm_y * norm_y
+    factor = 1.0 + k * radius2
+    src_x = ((norm_x * factor + 1.0) * 0.5 * (width - 1)) + pad
+    src_y = ((norm_y * factor + 1.0) * 0.5 * (height - 1)) + pad
+    return src_x.astype(np.float32), src_y.astype(np.float32)
+
+
+def jpeg_roundtrip(image, quality, subsampling):
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=quality, optimize=True, subsampling=subsampling)
+    buffer.seek(0)
+    return Image.open(buffer).convert("RGB")
 
 
 def subpixel_translate(image, rng, amount):
@@ -228,3 +467,13 @@ def srgb_to_linear(value):
 
 def linear_to_srgb(value):
     return np.where(value <= 0.0031308, value * 12.92, 1.055 * (value ** (1 / 2.4)) - 0.055).astype(np.float32)
+
+
+def clamp_float(value, low, high):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = low
+    if not np.isfinite(parsed):
+        parsed = low
+    return max(low, min(high, parsed))

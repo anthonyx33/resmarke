@@ -50,6 +50,7 @@ Deno.serve(async (request) => {
         creator_id: job.creator_id || user.email || user.id,
         profile: workerProfile,
         output_mode: job.output_mode,
+        expert_refinement: requestedOptions.expert_refinement ?? null,
         input_url: inputSigned.signedUrl,
         input_path: job.input_path,
         output_path: job.output_path,

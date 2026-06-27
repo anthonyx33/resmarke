@@ -12,7 +12,11 @@ import requests
 import runpod
 from PIL import Image, ImageDraw, ImageFont
 
-from photo_naturalization import PHOTO_NATURALIZATION_PROFILES, apply_photo_naturalization
+from photo_naturalization import (
+    PHOTO_NATURALIZATION_PROFILES,
+    apply_expert_refinement,
+    apply_photo_naturalization,
+)
 
 # The cleaning engine is ComfyUI running the Remarkee Max workflow, started
 # as a localhost service by start.sh (see comfyui_client.py). The workflow
@@ -118,6 +122,7 @@ def handler(job):
                 output_mode=payload.get("output_mode", "sealed"),
                 creator_id=creator_id,
                 naturalization=cfg["naturalization"],
+                expert_refinement=payload.get("expert_refinement"),
                 seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
             )
 
@@ -143,7 +148,8 @@ def handler(job):
                         "creator_id_hash": short_hash(creator_id),
                         "engine": engine_report,
                         "quality": quality,
-                        "photo_naturalization": naturalization_report,
+                        "photo_naturalization": naturalization_report["photo_naturalization"],
+                        "expert_refinement": naturalization_report["expert_refinement"],
                         "identify_before": before_report,
                         "identify_after": after_report,
                     },
@@ -394,7 +400,15 @@ def quality_check(input_path, output_path):
     return {"ok": True, "psnr": psnr, "variance": variance}
 
 
-def finalize_output(cleaned_path, output_path, output_mode, creator_id, naturalization, seed_extra=""):
+def finalize_output(
+    cleaned_path,
+    output_path,
+    output_mode,
+    creator_id,
+    naturalization,
+    expert_refinement=None,
+    seed_extra="",
+):
     # Preserve the creator's native resolution. The engine already restored the
     # cleaned image to the original size; here we just cap the final export
     # (keeps JPEGs sane on huge inputs) and apply the Fibonacci-88 seal at that
@@ -408,6 +422,12 @@ def finalize_output(cleaned_path, output_path, output_mode, creator_id, naturali
         image,
         creator_id,
         naturalization,
+        seed_extra=seed_extra,
+    )
+    expert_report, expert_save_options = apply_expert_refinement(
+        image,
+        expert_refinement,
+        creator_id,
         seed_extra=seed_extra,
     )
 
@@ -427,16 +447,22 @@ def finalize_output(cleaned_path, output_path, output_mode, creator_id, naturali
 
     save_kwargs = {
         "format": "JPEG",
-        "quality": naturalization["jpeg_quality"],
+        "quality": expert_save_options.get("jpeg_quality", naturalization["jpeg_quality"]),
         "optimize": True,
     }
-    jpeg_subsampling = naturalization.get("jpeg_subsampling")
+    jpeg_subsampling = expert_save_options.get(
+        "jpeg_subsampling",
+        naturalization.get("jpeg_subsampling"),
+    )
     if jpeg_subsampling:
         save_kwargs["subsampling"] = jpeg_subsampling
     image.save(output_path, **save_kwargs)
-    naturalization_report["final_jpeg_quality"] = naturalization["jpeg_quality"]
+    naturalization_report["final_jpeg_quality"] = save_kwargs["quality"]
     naturalization_report["final_jpeg_subsampling"] = jpeg_subsampling or "pillow-default"
-    return naturalization_report
+    return {
+        "photo_naturalization": naturalization_report,
+        "expert_refinement": expert_report,
+    }
 
 
 def apply_fibonacci_88(image, creator_id):
