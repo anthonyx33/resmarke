@@ -63,6 +63,7 @@ type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
 type DeepCleanProfileSelection =
   | DeepCleanProfile
+  | "max-remint"
   | "max-optical-pro"
   | "max-neural-texture-lab"
   | "max-content-repair-lab";
@@ -533,6 +534,7 @@ export default function App() {
     setDeepCleanProfile(profile);
     if (profile !== "max") setDeepCleanMicroTextureJitter(false);
     if (
+      profile === "max-remint" ||
       profile === "max-optical-pro" ||
       profile === "max-neural-texture-lab" ||
       profile === "max-content-repair-lab"
@@ -1141,6 +1143,7 @@ export default function App() {
                     <option value="strong">Strong</option>
                     <option value="max">Max (Expert)</option>
                     <option value="max-mint">Max Mint</option>
+                    <option value="max-remint">Max ReMint</option>
                     {isAdminUi ? <option value="max-optical-pro">Optical Pro Lab</option> : null}
                     {isAdminUi ? (
                       <option value="max-neural-texture-lab">Neural Texture Lab</option>
@@ -1174,20 +1177,29 @@ export default function App() {
                 </button>
               </div>
 
-              {deepCleanProfile === "max-optical-pro" ||
+              {deepCleanProfile === "max-remint" ||
+              deepCleanProfile === "max-optical-pro" ||
               deepCleanProfile === "max-neural-texture-lab" ||
               deepCleanProfile === "max-content-repair-lab" ? (
                 <div className="expert-refinement">
                   <div className="expert-refinement-head">
                     <div>
                       <div className="card-label">
-                        {deepCleanProfile === "max-content-repair-lab"
+                        {deepCleanProfile === "max-remint"
+                          ? "Max ReMint"
+                          : deepCleanProfile === "max-content-repair-lab"
                           ? "Content Repair Lab"
                           : deepCleanProfile === "max-neural-texture-lab"
                           ? "Neural Texture Lab"
                           : "Optical Pro Lab"}
                       </div>
-                      {deepCleanProfile === "max-content-repair-lab" ? (
+                      {deepCleanProfile === "max-remint" ? (
+                        <p>
+                          Non-generative max path: skips global regeneration, applies
+                          statistical reshaping, optional local repair candidates, quality
+                          gates, and light acquisition finalization.
+                        </p>
+                      ) : deepCleanProfile === "max-content-repair-lab" ? (
                         <p>
                           Hidden internal test: automatic text/glyph and geometry/grid
                           localizer, max 3 regions, one-pass repair, light grid offset, and
