@@ -266,14 +266,16 @@ def apply_expert_refinement(image, settings, creator_id, seed_extra=""):
         }
 
     if cfg["mode"] == "content-repair-lab":
-        image.paste(apply_luma_signal_noise(image, rng, amount=0.16))
+        image.paste(apply_acquisition_noise_rgb(image, rng, amount=0.16))
         shifted, shift_x, shift_y = subpixel_translate(image, rng, amount=8.0)
         image.paste(shifted)
-        report["pipeline"] = "content_repair_lab_light_finalization"
+        report["pipeline"] = "content_repair_lab_unified_finalization_v2"
         report["techniques"] = {
-            "sensor_noise_luma": {
+            "acquisition_noise_rgb": {
                 "enabled": True,
                 "amount": 0.16,
+                "components": ["luma_shot_read", "chroma_per_channel"],
+                "purpose": "unify_repaired_regions_under_one_acquisition_signature",
             },
             "jpeg_grid_offset": {
                 "enabled": True,
@@ -512,6 +514,40 @@ def apply_luma_signal_noise(image, rng, amount):
     variance = luma * shot_noise + read_noise ** 2
     noise = rng.normal(0.0, np.sqrt(variance).astype(np.float32)).astype(np.float32)
     linear = np.clip(linear + noise, 0.0, 1.0)
+    refined = np.clip(linear_to_srgb(linear) * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    return Image.fromarray(refined)
+
+
+def apply_acquisition_noise_rgb(image, rng, amount):
+    """Full-spectrum camera acquisition noise for the content-repair-lab path.
+
+    v1's finalization added luma shot/read noise only. Repaired regions still
+    stuck out spectrally because they lacked the per-channel chroma noise a real
+    camera produces. This applies signal-dependent luma shot+read noise AND
+    independent per-channel chroma noise in linear light, so repaired and
+    un-repaired regions inherit one uniform RGB acquisition signature -- the
+    texture unification the v1 luma-only pass could not provide. Conservative
+    amounts keep it below the visible-artifact threshold.
+    """
+    srgb = np.asarray(image).astype(np.float32) / 255.0
+    linear = srgb_to_linear(srgb)
+    luma = (
+        linear[..., 0:1] * 0.2126
+        + linear[..., 1:2] * 0.7152
+        + linear[..., 2:3] * 0.0722
+    )
+    shot = 0.0009 * amount
+    read = 0.0012 * amount
+    luma_var = luma * shot + read ** 2
+    luma_noise = rng.normal(0.0, np.sqrt(luma_var).astype(np.float32)).astype(np.float32)
+    # Per-channel chroma noise: independent per CFA channel, signal-scaled --
+    # this is the component that unifies repaired patches with their surround.
+    chroma_std = 0.0006 * amount
+    chroma_var = np.maximum(linear, 0.0) * (chroma_std ** 2) + (0.0004 * amount) ** 2
+    chroma_noise = rng.normal(
+        0.0, np.sqrt(chroma_var).astype(np.float32), size=linear.shape
+    ).astype(np.float32)
+    linear = np.clip(linear + luma_noise + chroma_noise, 0.0, 1.0)
     refined = np.clip(linear_to_srgb(linear) * 255.0 + 0.5, 0, 255).astype(np.uint8)
     return Image.fromarray(refined)
 

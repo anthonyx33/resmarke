@@ -13,6 +13,7 @@ import runpod
 from PIL import Image, ImageDraw, ImageFont
 
 from content_repair import apply_content_repair_lab, is_content_repair_lab
+from max_remint import apply_max_remint, is_max_remint
 from photo_naturalization import (
     PHOTO_NATURALIZATION_PROFILES,
     apply_expert_refinement,
@@ -107,34 +108,52 @@ def handler(job):
             input_sha = sha256_file(input_path)
             before_report = identify_image(input_path)
 
-            engine_report = run_deepclean(
-                input_path=input_path,
-                output_path=cleaned_path,
-                profile=profile,
-            )
+            expert_refinement = payload.get("expert_refinement")
+
+            if is_max_remint(expert_refinement):
+                # Max ReMint is NON-GENERATIVE: it deliberately bypasses
+                # run_deepclean (the global Qwen regeneration). Global regen is
+                # what both degrades quality (VAE round-trips) and re-flags the
+                # image (fresh diffusion fingerprint). Max ReMint reshapes
+                # statistics + repairs local tells on the ORIGINAL instead.
+                engine_report = apply_max_remint(
+                    input_path=input_path,
+                    output_path=cleaned_path,
+                    creator_id=creator_id,
+                    settings=expert_refinement,
+                    seed_extra=f"{job_id}:{input_sha}",
+                )
+                cleaned_sha = sha256_file(cleaned_path)
+                neural_texture_report = {"enabled": False, "reason": "integrated_into_max_remint"}
+                content_repair_report = {"enabled": False, "reason": "integrated_into_max_remint"}
+            else:
+                engine_report = run_deepclean(
+                    input_path=input_path,
+                    output_path=cleaned_path,
+                    profile=profile,
+                )
+                cleaned_sha = sha256_file(cleaned_path)
+
+                neural_texture_report = maybe_apply_neural_texture_lab(
+                    cleaned_path=cleaned_path,
+                    expert_refinement=expert_refinement,
+                    creator_id=creator_id,
+                    seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
+                )
+                if neural_texture_report.get("applied"):
+                    cleaned_sha = sha256_file(cleaned_path)
+                content_repair_report = maybe_apply_content_repair_lab(
+                    cleaned_path=cleaned_path,
+                    expert_refinement=expert_refinement,
+                    creator_id=creator_id,
+                    seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
+                )
+                if content_repair_report.get("applied"):
+                    cleaned_sha = sha256_file(cleaned_path)
 
             quality = quality_check(input_path, cleaned_path)
             if not quality["ok"]:
                 raise RuntimeError(quality["reason"])
-            cleaned_sha = sha256_file(cleaned_path)
-
-            expert_refinement = payload.get("expert_refinement")
-            neural_texture_report = maybe_apply_neural_texture_lab(
-                cleaned_path=cleaned_path,
-                expert_refinement=expert_refinement,
-                creator_id=creator_id,
-                seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
-            )
-            if neural_texture_report.get("applied"):
-                cleaned_sha = sha256_file(cleaned_path)
-            content_repair_report = maybe_apply_content_repair_lab(
-                cleaned_path=cleaned_path,
-                expert_refinement=expert_refinement,
-                creator_id=creator_id,
-                seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
-            )
-            if content_repair_report.get("applied"):
-                cleaned_sha = sha256_file(cleaned_path)
 
             naturalization_report = finalize_output(
                 cleaned_path=cleaned_path,
@@ -430,7 +449,11 @@ def maybe_apply_content_repair_lab(cleaned_path, expert_refinement, creator_id, 
 
 
 def final_naturalization_config(cfg, expert_refinement):
-    if is_neural_texture_lab(expert_refinement) or is_content_repair_lab(expert_refinement):
+    if (
+        is_neural_texture_lab(expert_refinement)
+        or is_content_repair_lab(expert_refinement)
+        or is_max_remint(expert_refinement)
+    ):
         return PHOTO_NATURALIZATION_PROFILES["off"]
     return cfg["naturalization"]
 

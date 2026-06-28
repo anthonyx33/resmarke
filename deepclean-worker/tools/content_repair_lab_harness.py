@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from content_repair import (  # noqa: E402
     apply_content_repair_lab,
+    evaluate_detector_gate,
     localize_content_artifacts,
     mask_precision_recall,
     normalize_content_repair_settings,
@@ -58,6 +59,12 @@ def main() -> int:
         help="Optional directory of ground-truth masks named like the input stem.",
     )
     parser.add_argument("--preset", choices=["conservative", "balanced", "aggressive"], default="balanced")
+    parser.add_argument(
+        "--engine",
+        choices=["qwen", "telea"],
+        default="qwen",
+        help="Repair engine. qwen (default, v2) or telea (offline A/B diagnosis only).",
+    )
     parser.add_argument("--negative-control-max-rise", type=float, default=5.0)
     args = parser.parse_args()
 
@@ -74,7 +81,7 @@ def main() -> int:
         for path in images:
             source = Image.open(path).convert("RGB")
             label = lookup_record(labels, path) or {}
-            settings = content_repair_settings(args.preset)
+            settings = content_repair_settings(args.preset, args.engine)
             cfg = normalize_content_repair_settings(settings)
 
             candidates, localizer_report = localize_content_artifacts(np.asarray(source), cfg)
@@ -118,6 +125,11 @@ def main() -> int:
             output_scores = lookup_record(detector_scores, out_path)
             input_to_output_delta = detector_score_delta(input_scores, output_scores)
             input_to_repair_delta = detector_score_delta(input_scores, repair_scores)
+            # The ship-original-if-worse gate (v2). With the v1 run this would
+            # have flagged ship_original=true for deep 96.7->99.6 / stat 59->97,
+            # surfacing the failure in the ledger instead of silently shipping it.
+            repair_gate = evaluate_detector_gate(input_scores, repair_scores)
+            output_gate = evaluate_detector_gate(input_scores, output_scores)
             negative_control_gate = build_negative_control_gate(
                 bool(label.get("negative_control", False)),
                 len(candidates),
@@ -147,6 +159,10 @@ def main() -> int:
                     "input_to_repair_delta": input_to_repair_delta,
                     "input_to_output_delta": input_to_output_delta,
                 },
+                "detector_gate": {
+                    "post_repair": repair_gate,
+                    "post_finalize": output_gate,
+                },
                 "fingerprint_gate": negative_control_gate,
                 "promotion_checks": promotion_checks(calibration, negative_control_gate),
             }
@@ -158,7 +174,7 @@ def main() -> int:
     return 0
 
 
-def content_repair_settings(preset):
+def content_repair_settings(preset, engine="qwen"):
     return {
         "mode": "content-repair-lab",
         "intensity": 100,
@@ -173,6 +189,7 @@ def content_repair_settings(preset):
             "max_regions": 3,
             "mask_dilation_px": 10,
             "mask_feather_px": 20,
+            "engine": engine,
         },
     }
 

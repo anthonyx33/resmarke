@@ -12,6 +12,7 @@ type CreateJobBody = {
     | "strong"
     | "max"
     | "max-mint"
+    | "max-remint"
     | "max-optical-pro"
     | "max-neural-texture-lab"
     | "max-content-repair-lab";
@@ -42,6 +43,7 @@ Deno.serve(async (request) => {
         "strong",
         "max",
         "max-mint",
+        "max-remint",
         "max-optical-pro",
         "max-neural-texture-lab",
         "max-content-repair-lab"
@@ -75,6 +77,8 @@ Deno.serve(async (request) => {
         ? "standard"
         : requestedProfile === "max-mint"
         ? "max"
+        : requestedProfile === "max-remint"
+        ? "max"
         : requestedProfile === "max-optical-pro"
         ? "max"
         : requestedProfile === "max-neural-texture-lab"
@@ -84,6 +88,7 @@ Deno.serve(async (request) => {
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
+      requestedProfile === "max-remint" ||
       requestedProfile === "max-optical-pro" ||
       requestedProfile === "max-neural-texture-lab" ||
       requestedProfile === "max-content-repair-lab"
@@ -92,6 +97,8 @@ Deno.serve(async (request) => {
     const expertRefinement =
       requestedProfile === "max-mint"
         ? maxMintExpertRefinement()
+        : requestedProfile === "max-remint"
+        ? maxReMintExpertRefinement()
         : requestedProfile === "max-optical-pro"
         ? opticalProExpertRefinement()
         : requestedProfile === "max-neural-texture-lab"
@@ -135,6 +142,8 @@ Deno.serve(async (request) => {
           profile_layout:
             requestedProfile === "max-mint"
               ? "max-mint"
+              : requestedProfile === "max-remint"
+              ? "max-remint"
               : requestedProfile === "max-optical-pro"
               ? "max-optical-pro"
               : requestedProfile === "max-neural-texture-lab"
@@ -192,6 +201,7 @@ function normalizeExpertRefinement(input: unknown) {
     "balanced",
     "optical",
     "optical-pro",
+    "max-remint",
     "neural-texture-lab",
     "content-repair-lab"
   ];
@@ -253,6 +263,30 @@ function opticalProExpertRefinement() {
     intensity: 100,
     preserve_straight_lines: true,
     techniques: {}
+  };
+}
+
+function maxReMintExpertRefinement() {
+  return {
+    mode: "max-remint",
+    intensity: 100,
+    preserve_straight_lines: true,
+    techniques: {},
+    max_remint: {
+      preset: "balanced",
+      optical_enabled: true,
+      fft_strength: 0.35,
+      fft_alpha: 2.0,
+      fft_noise_floor: 0.012,
+      repair_enabled: true,
+      repair_preset: "balanced",
+      repair_engine: "qwen",
+      text_denoise: 0.72,
+      geometry_denoise: 0.28,
+      unify_amount: 0.16,
+      min_psnr_db: 28.0,
+      psnr_retry_steps: 3
+    }
   };
 }
 

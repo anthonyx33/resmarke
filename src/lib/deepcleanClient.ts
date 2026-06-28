@@ -51,6 +51,7 @@ export async function createDeepCleanJob(params: {
   creatorId: string;
   profile:
     | DeepCleanProfile
+    | "max-remint"
     | "max-optical-pro"
     | "max-neural-texture-lab"
     | "max-content-repair-lab";

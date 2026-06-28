@@ -63,6 +63,7 @@ import { supabase } from "./lib/supabase";
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
+type MintDeepCleanProfile = DeepCleanProfile | "max-remint";
 
 const expertRefinementPresets: Record<
   ExpertRefinementMode,
@@ -204,7 +205,7 @@ export default function MintApp() {
   const [customWidth, setCustomWidth] = useState(0);
   const [customHeight, setCustomHeight] = useState(0);
   const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
-  const [deepCleanProfile, setDeepCleanProfile] = useState<DeepCleanProfile>("standard");
+  const [deepCleanProfile, setDeepCleanProfile] = useState<MintDeepCleanProfile>("standard");
   const [deepCleanMicroTextureJitter, setDeepCleanMicroTextureJitter] = useState(false);
   const [expertRefinementMode, setExpertRefinementMode] =
     useState<ExpertRefinementMode>("off");
@@ -241,12 +242,13 @@ export default function MintApp() {
   }, [outputFormat, sizeMode]);
 
   const maxCost = useMemo(() => {
-    const profileBase: Record<DeepCleanProfile, number> = {
+    const profileBase: Record<MintDeepCleanProfile, number> = {
       standard: 6,
       "standard-plus": 7,
       strong: 8,
       max: 10,
-      "max-mint": 12
+      "max-mint": 12,
+      "max-remint": 12
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -569,9 +571,17 @@ export default function MintApp() {
     setExpertRefinementTechniques(cloneExpertPreset(mode));
   }
 
-  function chooseDeepCleanProfile(profile: DeepCleanProfile) {
+  function chooseDeepCleanProfile(profile: MintDeepCleanProfile) {
     setDeepCleanProfile(profile);
     if (profile !== "max") setDeepCleanMicroTextureJitter(false);
+    if (profile === "max-remint") {
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
+      return;
+    }
     if (profile !== "max-mint") return;
 
     setDeepCleanOutputMode("stripped");
@@ -943,8 +953,8 @@ export default function MintApp() {
                   </h3>
                   <p>
                     For stubborn, deeply embedded watermarks, Re-Mint Max runs an optional cloud GPU
-                    pass that regenerates the image far beyond what local processing can do. You only
-                    pay after a job completes successfully.
+                    pass with advanced profile choices far beyond what local processing can do. You
+                    only pay after a job completes successfully.
                   </p>
                   <div className="rm-spotlight-feats">
                     <span>
@@ -1346,7 +1356,7 @@ export default function MintApp() {
                         Re-Mint Max <span className="rm-badge">GPU</span>
                       </div>
                       <div className="rm-card-sub">
-                        <Cpu size={11} aria-hidden="true" /> Cloud regeneration · Beta
+                        <Cpu size={11} aria-hidden="true" /> Cloud GPU processing · Beta
                       </div>
                     </div>
                     <span className="rm-cost rm-cost-max" title="Heavier profiles, refinement and stamping cost more credits.">
@@ -1355,7 +1365,7 @@ export default function MintApp() {
                     </span>
                   </div>
                   <p className="rm-card-desc">
-                    Cloud GPU regeneration for stubborn, deeply embedded watermarks — far beyond what a
+                    Cloud GPU processing for stubborn, deeply embedded watermarks — far beyond what a
                     browser can do.
                   </p>
 
@@ -1365,13 +1375,14 @@ export default function MintApp() {
                       <select
                         className="rm-select"
                         value={deepCleanProfile}
-                        onChange={(event) => chooseDeepCleanProfile(event.target.value as DeepCleanProfile)}
+                        onChange={(event) => chooseDeepCleanProfile(event.target.value as MintDeepCleanProfile)}
                       >
                         <option value="standard">Standard</option>
                         <option value="standard-plus">Standard+</option>
                         <option value="strong">Strong</option>
                         <option value="max">Max (Expert)</option>
                         <option value="max-mint">Max Mint</option>
+                        <option value="max-remint">Max ReMint</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -1402,6 +1413,13 @@ export default function MintApp() {
                     </label>
                   ) : null}
 
+                  {deepCleanProfile === "max-remint" ? (
+                    <div className="rm-disc-note">
+                      Max ReMint skips global regeneration and uses non-generative statistical
+                      reshaping, local repair candidates, and quality gates for creator-AI images.
+                    </div>
+                  ) : null}
+
                   <button
                     className="rm-btn rm-btn-max rm-btn-lg rm-btn-block"
                     type="button"
@@ -1411,116 +1429,118 @@ export default function MintApp() {
                     <Cloud size={18} aria-hidden="true" /> Queue GPU job · {maxCost} credits
                   </button>
 
-                  <details className="rm-disc">
-                    <summary>
-                      <SlidersHorizontal size={15} aria-hidden="true" /> Expert refinement
-                      <ChevronDown className="rm-chev" size={16} aria-hidden="true" />
-                    </summary>
-                    <div className="rm-disc-body">
-                      <p className="rm-disc-note">
-                        Optional final camera-style texture pass for difficult outputs.
-                      </p>
-                      <div className="rm-field">
-                        <span className="rm-field-label">Mode</span>
-                        <div className="rm-seg" aria-label="Expert refinement mode">
-                          {(["off", "light", "balanced", "optical"] as ExpertRefinementMode[]).map((mode) => (
-                            <button
-                              className={expertRefinementMode === mode ? "is-active" : ""}
-                              key={mode}
-                              type="button"
-                              onClick={() => chooseExpertRefinementMode(mode)}
-                            >
-                              {mode === "off"
-                                ? "Off"
-                                : mode === "light"
-                                  ? "Light"
-                                  : mode === "balanced"
-                                    ? "Balanced"
-                                    : "Optical"}
-                            </button>
-                          ))}
+                  {deepCleanProfile !== "max-remint" ? (
+                    <details className="rm-disc">
+                      <summary>
+                        <SlidersHorizontal size={15} aria-hidden="true" /> Expert refinement
+                        <ChevronDown className="rm-chev" size={16} aria-hidden="true" />
+                      </summary>
+                      <div className="rm-disc-body">
+                        <p className="rm-disc-note">
+                          Optional final camera-style texture pass for difficult outputs.
+                        </p>
+                        <div className="rm-field">
+                          <span className="rm-field-label">Mode</span>
+                          <div className="rm-seg" aria-label="Expert refinement mode">
+                            {(["off", "light", "balanced", "optical"] as ExpertRefinementMode[]).map((mode) => (
+                              <button
+                                className={expertRefinementMode === mode ? "is-active" : ""}
+                                key={mode}
+                                type="button"
+                                onClick={() => chooseExpertRefinementMode(mode)}
+                              >
+                                {mode === "off"
+                                  ? "Off"
+                                  : mode === "light"
+                                    ? "Light"
+                                    : mode === "balanced"
+                                      ? "Balanced"
+                                      : "Optical"}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <label className="rm-range">
-                        <span className="rm-field-label">
-                          Intensity <em>{expertRefinementIntensity}%</em>
-                        </span>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={expertRefinementIntensity}
-                          disabled={expertRefinementMode === "off"}
-                          onChange={(event) => setExpertRefinementIntensity(Number(event.target.value))}
-                        />
-                      </label>
+                        <label className="rm-range">
+                          <span className="rm-field-label">
+                            Intensity <em>{expertRefinementIntensity}%</em>
+                          </span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={expertRefinementIntensity}
+                            disabled={expertRefinementMode === "off"}
+                            onChange={(event) => setExpertRefinementIntensity(Number(event.target.value))}
+                          />
+                        </label>
 
-                      <details className="rm-disc rm-disc-nested">
-                        <summary>
-                          Manual technique controls
-                          <ChevronDown className="rm-chev" size={15} aria-hidden="true" />
-                        </summary>
-                        <div className="rm-disc-body">
-                          {expertTechniqueRows.map((row) => {
-                            const techConfig = expertRefinementTechniques[row.key];
-                            const disabled = expertRefinementMode === "off";
-                            const lockedByLines =
-                              row.key === "lens_character" && expertRefinementPreserveLines;
-                            return (
-                              <div className="rm-tech" key={row.key}>
-                                <label className="rm-switch rm-switch-sm">
-                                  <input
-                                    type="checkbox"
-                                    checked={lockedByLines ? false : techConfig.enabled}
-                                    disabled={disabled || lockedByLines}
-                                    onChange={(event) =>
-                                      updateExpertTechnique(row.key, { enabled: event.target.checked })
-                                    }
-                                  />
-                                  <span className="rm-switch-track" aria-hidden="true">
-                                    <span className="rm-switch-thumb" />
-                                  </span>
-                                  <span>{row.label}</span>
-                                </label>
-                                <label className="rm-range rm-tech-range">
-                                  <span className="rm-field-label">
-                                    <em>
-                                      {techConfig.value.toFixed(2)}
-                                      {lockedByLines ? " · guarded" : ""}
-                                    </em>
-                                  </span>
-                                  <input
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.01"
-                                    value={techConfig.value}
-                                    disabled={disabled || !techConfig.enabled || lockedByLines}
-                                    onChange={(event) =>
-                                      updateExpertTechnique(row.key, { value: Number(event.target.value) })
-                                    }
-                                  />
-                                </label>
-                                <p className="rm-tech-detail">{row.detail}</p>
-                              </div>
-                            );
-                          })}
-                          <label className="rm-switch">
-                            <input
-                              type="checkbox"
-                              checked={expertRefinementPreserveLines}
-                              disabled={expertRefinementMode === "off"}
-                              onChange={(event) => setExpertRefinementPreserveLines(event.target.checked)}
-                            />
-                            <span className="rm-switch-track" aria-hidden="true">
-                              <span className="rm-switch-thumb" />
-                            </span>
-                            <span>Preserve straight lines for architecture/interiors</span>
-                          </label>
-                        </div>
-                      </details>
-                    </div>
-                  </details>
+                        <details className="rm-disc rm-disc-nested">
+                          <summary>
+                            Manual technique controls
+                            <ChevronDown className="rm-chev" size={15} aria-hidden="true" />
+                          </summary>
+                          <div className="rm-disc-body">
+                            {expertTechniqueRows.map((row) => {
+                              const techConfig = expertRefinementTechniques[row.key];
+                              const disabled = expertRefinementMode === "off";
+                              const lockedByLines =
+                                row.key === "lens_character" && expertRefinementPreserveLines;
+                              return (
+                                <div className="rm-tech" key={row.key}>
+                                  <label className="rm-switch rm-switch-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={lockedByLines ? false : techConfig.enabled}
+                                      disabled={disabled || lockedByLines}
+                                      onChange={(event) =>
+                                        updateExpertTechnique(row.key, { enabled: event.target.checked })
+                                      }
+                                    />
+                                    <span className="rm-switch-track" aria-hidden="true">
+                                      <span className="rm-switch-thumb" />
+                                    </span>
+                                    <span>{row.label}</span>
+                                  </label>
+                                  <label className="rm-range rm-tech-range">
+                                    <span className="rm-field-label">
+                                      <em>
+                                        {techConfig.value.toFixed(2)}
+                                        {lockedByLines ? " · guarded" : ""}
+                                      </em>
+                                    </span>
+                                    <input
+                                      type="range"
+                                      min="0"
+                                      max="1"
+                                      step="0.01"
+                                      value={techConfig.value}
+                                      disabled={disabled || !techConfig.enabled || lockedByLines}
+                                      onChange={(event) =>
+                                        updateExpertTechnique(row.key, { value: Number(event.target.value) })
+                                      }
+                                    />
+                                  </label>
+                                  <p className="rm-tech-detail">{row.detail}</p>
+                                </div>
+                              );
+                            })}
+                            <label className="rm-switch">
+                              <input
+                                type="checkbox"
+                                checked={expertRefinementPreserveLines}
+                                disabled={expertRefinementMode === "off"}
+                                onChange={(event) => setExpertRefinementPreserveLines(event.target.checked)}
+                              />
+                              <span className="rm-switch-track" aria-hidden="true">
+                                <span className="rm-switch-thumb" />
+                              </span>
+                              <span>Preserve straight lines for architecture/interiors</span>
+                            </label>
+                          </div>
+                        </details>
+                      </div>
+                    </details>
+                  ) : null}
 
                   <p className="rm-status">
                     {hasSupabaseConfig
@@ -1541,7 +1561,7 @@ export default function MintApp() {
                         ) : (
                           <div className="rm-jobempty">
                             <Loader2 className="rm-spin" size={24} aria-hidden="true" />
-                            <span>GPU worker is regenerating…</span>
+                            <span>GPU worker is processing…</span>
                           </div>
                         )}
                       </div>
@@ -1569,7 +1589,7 @@ export default function MintApp() {
                           {deepCleanJob.failureReason || "Re-Mint Max failed; your credit was released."}
                         </p>
                       ) : (
-                        <p className="rm-status">Hang tight — regenerating on the GPU…</p>
+                        <p className="rm-status">Hang tight — processing on the GPU…</p>
                       )}
                     </div>
                   ) : null}

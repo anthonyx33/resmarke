@@ -1,18 +1,25 @@
-"""Internal Automatic Content Repair Lab v1.
+"""Internal Automatic Content Repair Lab v2.
 
 Narrow scope on purpose:
-- automatic localizer
-- text/glyph + geometry/grid candidates only
+- automatic localizer (text/glyph + geometry/grid heuristics)
 - one pass, max three regions
-- deterministic local repair and measurable ledger fields
+- measurable ledger fields
 
-The repair engine is currently local Telea inpaint. The module is structured so
-the region repair function can be swapped for a ComfyUI/Qwen masked repair path
-after the automatic localizer proves useful.
+v2 swaps the repair engine from the incapable OpenCV Telea placeholder to Qwen
+masked inpaint (Qwen-Image-2512 + Lightning 4-step, via the localhost ComfyUI
+service). v1's Telea fill produced smooth featureless patches that spiked the
+statistical detector (59->97 High); Qwen regenerates realistic texture in the
+masked region instead. Node names in run_qwen_masked_inpaint are taken verbatim
+from the production remarkee-max-v2.api.json export. On Qwen failure the region
+is skipped (ship pre-repair pixels) -- never a silent Telea fallback. Telea is
+retained only as an explicit opt-in engine for offline A/B diagnosis.
 """
 
 import hashlib
+import io
+import tempfile
 import time
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -32,9 +39,20 @@ DEFAULT_SETTINGS = {
     "mask_dilation_px": 10,
     "mask_feather_px": 20,
     "merge_iou": 0.30,
+    # NOTE: text_denoise / geometry_denoise are now REAL Qwen KSampler denoise
+    # values (v2 swap), not the old Telea blend alpha. Text regions need a
+    # strong denoise to replace gibberish glyphs with clean surface; geometry
+    # regions need a light denoise to straighten warble without erasing structure.
     "text_denoise": 0.72,
     "geometry_denoise": 0.28,
     "max_global_delta": 0.15,
+    # Qwen masked-inpaint engine (v2 swap of the incapable Telea placeholder).
+    # engine "qwen" uses ComfyUI + Qwen-Image-2512 + Lightning 4-step on the
+    # localizer's mask. "telea" is retained ONLY as an explicit, opt-in fallback
+    # for offline diagnosis -- never the default, never a silent fallback.
+    "engine": "qwen",
+    "qwen_timeout": 240.0,
+    "qwen_grow_mask_by": 6,
 }
 
 
@@ -46,17 +64,28 @@ def apply_content_repair_lab(input_path, output_path, creator_id, settings=None,
     cfg = normalize_content_repair_settings(settings)
     report = {
         "enabled": bool(cfg["enabled"]),
-        "pipeline": "auto_content_repair_lab_v1",
+        "pipeline": "auto_content_repair_lab_v2",
         "applied": False,
-        "repair_engine": "opencv_telea_inpaint_v1",
+        "repair_engine": (
+            "qwen_image2512_masked_inpaint_v2"
+            if cfg.get("engine", "qwen") == "qwen"
+            else "opencv_telea_inpaint_v1"
+        ),
         "settings": public_settings(cfg),
         "localizer": {},
         "regions": [],
         "quality_gates": {},
+        # Measurement is the recurring failure point (Neural Texture Lab and
+        # Content Repair v1 both shipped stubbed gates and got surprised). v2
+        # makes the gate DECISION real: when detector scores are supplied (via
+        # the worker's detector callable / joined JSON), ship_original_if_worse
+        # is computed here, not hand-waved. Until scores are supplied the field
+        # is honestly "not_evaluated" rather than silently "external_required".
         "measurement": {
-            "detector_scores": "external_required",
+            "detector_scores": "not_evaluated",
             "realism_gate": "proxy_metrics",
-            "self_fingerprint_gate": "external_required",
+            "self_fingerprint_gate": "not_evaluated",
+            "ship_original_if_worse": "not_evaluated",
         },
     }
     if not cfg["enabled"]:
@@ -134,6 +163,7 @@ def normalize_content_repair_settings(settings):
         "max_regions",
         "mask_dilation_px",
         "mask_feather_px",
+        "qwen_grow_mask_by",
     ):
         if key in repair:
             cfg[key] = int(clamp_float(repair[key], 1, 4096))
@@ -147,6 +177,11 @@ def normalize_content_repair_settings(settings):
     ):
         if key in repair:
             cfg[key] = clamp_float(repair[key], 0.0, 1.0)
+    if "engine" in repair:
+        engine = str(repair["engine"]).strip().lower()
+        cfg["engine"] = engine if engine in ("qwen", "telea") else "qwen"
+    if "qwen_timeout" in repair:
+        cfg["qwen_timeout"] = clamp_float(repair["qwen_timeout"], 30.0, 900.0)
     return cfg
 
 
@@ -165,6 +200,9 @@ def public_settings(cfg):
             "merge_iou",
             "text_denoise",
             "geometry_denoise",
+            "engine",
+            "qwen_grow_mask_by",
+            "qwen_timeout",
         )
     }
 
@@ -348,34 +386,160 @@ def build_region_mask(rgb, edges, candidate, cfg):
 
 
 def repair_region(rgb, candidate, cfg, seed):
-    _ = seed
     mask = candidate.get("mask")
     if mask is None or np.count_nonzero(mask) == 0:
         return rgb, {"applied": False, "reason": "empty_mask"}
 
-    if candidate["type"] == "text_glyph":
-        radius = 5
-        blend_strength = float(cfg["text_denoise"])
-        strategy = "remove_fill_no_glyph_regeneration"
+    region_type = candidate["type"]
+    if region_type == "text_glyph":
+        denoise = float(cfg["text_denoise"])
+        strategy = "qwen_remove_fill_no_glyph_regeneration"
     else:
-        radius = 3
-        blend_strength = float(cfg["geometry_denoise"])
-        strategy = "structure_preserving_line_fill"
+        denoise = float(cfg["geometry_denoise"])
+        strategy = "qwen_structure_preserving_fill"
 
+    engine = cfg.get("engine", "qwen")
+    mask_pixels = int(np.count_nonzero(mask))
+
+    if engine == "telea":
+        # Explicit opt-in offline path only. Never the default and never a
+        # silent fallback: Telea cannot produce realistic texture and was the
+        # dominant cause of the v1 statistical 59->97 spike.
+        return _repair_region_telea(rgb, mask, region_type, denoise, cfg), {
+            "applied": True,
+            "engine": "telea",
+            "strategy": strategy.replace("qwen_", "telea_"),
+            "denoise": denoise,
+            "blend_alpha": denoise,
+            "mask_pixels": mask_pixels,
+        }
+
+    # --- Qwen masked inpaint (default v2 engine) ---
+    try:
+        inpainted_rgb = run_qwen_masked_inpaint(
+            rgb,
+            mask,
+            region_type=region_type,
+            denoise=denoise,
+            grow_mask_by=int(cfg.get("qwen_grow_mask_by", 6)),
+            timeout=float(cfg.get("qwen_timeout", 240.0)),
+            seed=int(seed),
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Fail-safe: skip this region, keep the pre-repair pixels. We do NOT
+        # fall back to Telea silently -- that would re-introduce the v1 failure.
+        # Shipping the un-repaired region yields the baseline (~96.7%), never
+        # the 99.6% Telea spike. The error is surfaced in the report.
+        return rgb, {
+            "applied": False,
+            "engine": "qwen",
+            "strategy": strategy,
+            "denoise": denoise,
+            "mask_pixels": mask_pixels,
+            "reason": "qwen_inpaint_failed",
+            "error": str(exc)[:500],
+        }
+
+    original = rgb.astype(np.float32)
+    filled = inpainted_rgb.astype(np.float32)
+    # Full-strength feathered composite: accept the Qwen fill completely inside
+    # the mask, feather only at the edge. (v1 multiplied alpha by denoise, which
+    # was a Telea-weakener -- wrong for a real generative fill.)
+    alpha = feather_mask(mask, int(cfg["mask_feather_px"]))[..., None]
+    repaired = np.clip(original * (1.0 - alpha) + filled * alpha, 0, 255).astype(np.uint8)
+    return repaired, {
+        "applied": True,
+        "engine": "qwen",
+        "strategy": strategy,
+        "denoise": denoise,
+        "mask_pixels": mask_pixels,
+    }
+
+
+def _repair_region_telea(rgb, mask, region_type, denoise, cfg):
+    """Classical Telea inpaint. Retained for offline A/B diagnosis only; never
+    the default engine. denoise is reused as the blend alpha for parity with v1."""
+    radius = 5 if region_type == "text_glyph" else 3
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     inpainted = cv2.inpaint(bgr, mask, radius, cv2.INPAINT_TELEA)
     inpainted_rgb = cv2.cvtColor(inpainted, cv2.COLOR_BGR2RGB).astype(np.float32)
     original = rgb.astype(np.float32)
+    alpha = feather_mask(mask, int(cfg["mask_feather_px"]))[..., None] * float(denoise)
+    return np.clip(original * (1.0 - alpha) + inpainted_rgb * alpha, 0, 255).astype(np.uint8)
 
-    alpha = feather_mask(mask, int(cfg["mask_feather_px"]))[..., None] * blend_strength
-    repaired = np.clip(original * (1.0 - alpha) + inpainted_rgb * alpha, 0, 255).astype(np.uint8)
-    return repaired, {
-        "applied": True,
-        "strategy": strategy,
-        "inpaint_radius": radius,
-        "blend_strength": blend_strength,
-        "mask_pixels": int(np.count_nonzero(mask)),
-    }
+
+def run_qwen_masked_inpaint(rgb, mask, region_type, denoise, grow_mask_by, timeout, seed):
+    """Run Qwen-Image-2512 masked inpaint on the full image for one mask.
+
+    Graph node names are taken verbatim from the production
+    remarkee-max-v2.api.json export (UnetLoaderGGUF + CLIPLoaderGGUF lumina2 +
+    VAELoader qwen_image_vae + Power Lora Loader Lightning-4step @0.8 +
+    KSampler steps=4 cfg=1 dpmpp_2m/sgm_uniform), so this is a proven node set,
+    not a hand-guessed graph. VAEEncodeForInpaint noise-fills only the masked
+    latent region; KSampler regenerates there; the unmasked area round-trips
+    through VAE and is discarded by the feathered composite in repair_region.
+    """
+    import comfyui_client as cc
+
+    height, width = rgb.shape[:2]
+
+    if region_type == "text_glyph":
+        positive = "smooth clean plain surface, no text, no letters, no glyphs, no watermark, no logo, even background"
+        negative = "text, letters, glyphs, writing, watermark, logo, signature, scribbles"
+    else:
+        positive = "clean straight regular grid lines, even consistent geometry"
+        negative = "warped, wavy, bent, curved, irregular, crooked lines"
+
+    with tempfile.TemporaryDirectory(prefix="content-repair-qwen-") as tmpd:
+        tmp = Path(tmpd)
+        img_png = tmp / "src.png"
+        mask_png = tmp / "mask.png"
+
+        Image.fromarray(rgb, mode="RGB").save(img_png, format="PNG")
+        # Save mask as RGB so ComfyUI LoadImage + ImageToMask(channel=red) get a
+        # clean single-channel signal regardless of how LoadImage decodes it.
+        mask_rgb = np.repeat(mask[..., None], 3, axis=2)
+        Image.fromarray(mask_rgb, mode="RGB").save(mask_png, format="PNG")
+
+        img_filename = cc.upload_image(str(img_png))
+        mask_filename = cc.upload_image(str(mask_png))
+
+        graph = {
+            "1": {"class_type": "LoadImage", "inputs": {"image": img_filename}},
+            "2": {"class_type": "LoadImage", "inputs": {"image": mask_filename}},
+            "3": {"class_type": "ImageToMask", "inputs": {"image": ["2", 0], "channel": "red"}},
+            "10": {"class_type": "UnetLoaderGGUF",
+                   "inputs": {"unet_name": "qwen-image-2512-Q4_K_M.gguf"}},
+            "11": {"class_type": "CLIPLoaderGGUF",
+                   "inputs": {"clip_name": "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf", "type": "lumina2"}},
+            "12": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_vae.safetensors"}},
+            "13": {"class_type": "Power Lora Loader (rgthree)", "inputs": {
+                "PowerLoraLoaderHeaderWidget": {"type": "PowerLoraLoaderHeaderWidget"},
+                "lora_1": {"on": True, "lora": "Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors", "strength": 0.8},
+                "model": ["10", 0], "clip": ["11", 0]}},
+            "20": {"class_type": "CLIPTextEncode", "inputs": {"text": positive, "clip": ["13", 1]}},
+            "21": {"class_type": "CLIPTextEncode", "inputs": {"text": negative, "clip": ["13", 1]}},
+            "30": {"class_type": "VAEEncodeForInpaint", "inputs": {
+                "pixels": ["1", 0], "vae": ["12", 0], "mask": ["3", 0],
+                "grow_mask_by": int(grow_mask_by)}},
+            "40": {"class_type": "KSampler", "inputs": {
+                "seed": int(seed), "steps": 4, "cfg": 1.0,
+                "sampler_name": "dpmpp_2m", "scheduler": "sgm_uniform",
+                "denoise": float(denoise), "model": ["13", 0],
+                "positive": ["20", 0], "negative": ["21", 0],
+                "latent_image": ["30", 0]}},
+            "50": {"class_type": "VAEDecode", "inputs": {"samples": ["40", 0], "vae": ["12", 0]}},
+            "60": {"class_type": "SaveImage", "inputs": {
+                "filename_prefix": "remarkee_content_repair", "images": ["50", 0]}},
+        }
+
+        prompt_id = cc.post_prompt(graph)
+        entry = cc.wait_for_prompt(prompt_id, timeout=timeout)
+        out_bytes = cc.get_output_image(entry)
+        image = Image.open(io.BytesIO(out_bytes)).convert("RGB")
+        if image.size != (width, height):
+            image = image.resize((width, height), Image.Resampling.LANCZOS)
+        return np.asarray(image)
 
 
 def content_repair_quality_gates(metrics, cfg):
@@ -392,6 +556,69 @@ def content_repair_quality_gates(metrics, cfg):
         "accepted": not failures,
         "failures": failures,
         "version": "content-repair-local-quality-v1",
+    }
+
+
+def evaluate_detector_gate(baseline_scores, repaired_scores, tolerance=1.0):
+    """The ship-original-if-worse gate -- the one that would have stopped the v1
+    failure (deep 96.7->99.6, stat 59->97) from ever being shipped.
+
+    Pure and unit-testable; called by the harness after it joins the external
+    detector scores to the job. Inputs are normalized confidence dicts:
+        {"deep": 96.7, "statistical": 59.0}   # 0..100, higher = more AI
+    The harness is responsible for extracting each detector's confidence into
+    this flat numeric form (the raw detector JSON schemas differ per provider).
+
+    Rule: if ANY detector's repaired confidence exceeds its baseline by more
+    than `tolerance` points, the repair made the image MORE detectable and the
+    original (pre-repair) output must be shipped instead. A neutral/small
+    improvement ships the repaired output.
+    """
+    deltas = {}
+    failures = []
+    for name, base in (baseline_scores or {}).items():
+        rep = (repaired_scores or {}).get(name)
+        if rep is None:
+            continue
+        delta = float(rep) - float(base)
+        deltas[name] = round(delta, 3)
+        if delta > float(tolerance):
+            failures.append(f"{name}_worsened_by_{abs(round(delta,2))}")
+    ship_original = bool(failures)
+    return {
+        "ship_original": ship_original,
+        "deltas": deltas,
+        "failures": failures,
+        "tolerance": float(tolerance),
+        "rule": "ship_original_if_any_detector_worsened_beyond_tolerance",
+        "version": "detector-gate-v1",
+    }
+
+
+def evaluate_self_fingerprint(output_path, fingerprint_detector=None):
+    """Self-fingerprint gate: run a GAN / universal-fake detector on the OUTPUT
+    to catch repaired regions carrying a fresh diffusion fingerprint with
+    mismatched acquisition stats vs their surroundings (the next likely failure
+    mode after the Telea swap). The detector is an injected callable:
+    fingerprint_detector(path) -> {"confidence": 0..1, "label": str}.
+
+    Returns "not_evaluated" honestly when no detector is wired, rather than the
+    v1 "external_required" stub. The worker/harness wires the callable on the
+    box where the detector model lives.
+    """
+    if fingerprint_detector is None:
+        return {"status": "not_evaluated", "reason": "no_fingerprint_detector_wired"}
+    try:
+        result = fingerprint_detector(output_path)
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "error", "error": str(exc)[:500]}
+    confidence = float(result.get("confidence", 0.0)) if isinstance(result, dict) else 0.0
+    return {
+        "status": "evaluated",
+        "confidence": confidence,
+        "label": (result or {}).get("label") if isinstance(result, dict) else None,
+        "flagged": confidence >= 0.5,
+        "version": "self-fingerprint-v1",
     }
 
 
