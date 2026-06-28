@@ -120,7 +120,7 @@ def normalize_max_optimised_remint_settings(settings):
     cfg["process_cap"] = int(cfg["process_cap"])
     cfg["timeout"] = int(cfg["timeout"])
     cfg["unsharp_radius"] = float(cfg["unsharp_radius"])
-    cfg["unsharp_percent"] = float(cfg["unsharp_percent"])
+    cfg["unsharp_percent"] = int(round(_clamp(cfg["unsharp_percent"], 0.0, 500.0)))
     cfg["unsharp_threshold"] = int(cfg["unsharp_threshold"])
     if "skip_if_processed" in sub:
         cfg["skip_if_processed"] = bool(sub["skip_if_processed"])
