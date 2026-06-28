@@ -12,6 +12,7 @@ import requests
 import runpod
 from PIL import Image, ImageDraw, ImageFont
 
+from content_repair import apply_content_repair_lab, is_content_repair_lab
 from photo_naturalization import (
     PHOTO_NATURALIZATION_PROFILES,
     apply_expert_refinement,
@@ -126,6 +127,14 @@ def handler(job):
             )
             if neural_texture_report.get("applied"):
                 cleaned_sha = sha256_file(cleaned_path)
+            content_repair_report = maybe_apply_content_repair_lab(
+                cleaned_path=cleaned_path,
+                expert_refinement=expert_refinement,
+                creator_id=creator_id,
+                seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
+            )
+            if content_repair_report.get("applied"):
+                cleaned_sha = sha256_file(cleaned_path)
 
             naturalization_report = finalize_output(
                 cleaned_path=cleaned_path,
@@ -160,6 +169,7 @@ def handler(job):
                         "engine": engine_report,
                         "quality": quality,
                         "neural_texture": neural_texture_report,
+                        "content_repair": content_repair_report,
                         "photo_naturalization": naturalization_report["photo_naturalization"],
                         "expert_refinement": naturalization_report["expert_refinement"],
                         "identify_before": before_report,
@@ -402,8 +412,25 @@ def maybe_apply_neural_texture_lab(cleaned_path, expert_refinement, creator_id, 
     return report
 
 
+def maybe_apply_content_repair_lab(cleaned_path, expert_refinement, creator_id, seed_extra):
+    if not is_content_repair_lab(expert_refinement):
+        return {"enabled": False}
+
+    output_path = Path(cleaned_path).with_name("content_repair.png")
+    report = apply_content_repair_lab(
+        input_path=cleaned_path,
+        output_path=output_path,
+        creator_id=creator_id,
+        settings=expert_refinement,
+        seed_extra=seed_extra,
+    )
+    if report.get("applied"):
+        shutil.copyfile(output_path, cleaned_path)
+    return report
+
+
 def final_naturalization_config(cfg, expert_refinement):
-    if is_neural_texture_lab(expert_refinement):
+    if is_neural_texture_lab(expert_refinement) or is_content_repair_lab(expert_refinement):
         return PHOTO_NATURALIZATION_PROFILES["off"]
     return cfg["naturalization"]
 

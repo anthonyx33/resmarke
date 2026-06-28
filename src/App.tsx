@@ -61,7 +61,11 @@ import { supabase } from "./lib/supabase";
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
-type DeepCleanProfileSelection = DeepCleanProfile | "max-optical-pro" | "max-neural-texture-lab";
+type DeepCleanProfileSelection =
+  | DeepCleanProfile
+  | "max-optical-pro"
+  | "max-neural-texture-lab"
+  | "max-content-repair-lab";
 
 const expertRefinementPresets: Record<
   ExpertRefinementMode,
@@ -528,7 +532,11 @@ export default function App() {
   function chooseDeepCleanProfile(profile: DeepCleanProfileSelection) {
     setDeepCleanProfile(profile);
     if (profile !== "max") setDeepCleanMicroTextureJitter(false);
-    if (profile === "max-optical-pro" || profile === "max-neural-texture-lab") {
+    if (
+      profile === "max-optical-pro" ||
+      profile === "max-neural-texture-lab" ||
+      profile === "max-content-repair-lab"
+    ) {
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -1137,6 +1145,9 @@ export default function App() {
                     {isAdminUi ? (
                       <option value="max-neural-texture-lab">Neural Texture Lab</option>
                     ) : null}
+                    {isAdminUi ? (
+                      <option value="max-content-repair-lab">Content Repair Lab</option>
+                    ) : null}
                   </select>
                 </label>
                 <label className="field">
@@ -1163,16 +1174,26 @@ export default function App() {
                 </button>
               </div>
 
-              {deepCleanProfile === "max-optical-pro" || deepCleanProfile === "max-neural-texture-lab" ? (
+              {deepCleanProfile === "max-optical-pro" ||
+              deepCleanProfile === "max-neural-texture-lab" ||
+              deepCleanProfile === "max-content-repair-lab" ? (
                 <div className="expert-refinement">
                   <div className="expert-refinement-head">
                     <div>
                       <div className="card-label">
-                        {deepCleanProfile === "max-neural-texture-lab"
+                        {deepCleanProfile === "max-content-repair-lab"
+                          ? "Content Repair Lab"
+                          : deepCleanProfile === "max-neural-texture-lab"
                           ? "Neural Texture Lab"
                           : "Optical Pro Lab"}
                       </div>
-                      {deepCleanProfile === "max-neural-texture-lab" ? (
+                      {deepCleanProfile === "max-content-repair-lab" ? (
+                        <p>
+                          Hidden internal test: automatic text/glyph and geometry/grid
+                          localizer, max 3 regions, one-pass repair, light grid offset, and
+                          final JPEG 92 / 4:2:2.
+                        </p>
+                      ) : deepCleanProfile === "max-neural-texture-lab" ? (
                         <p>
                           Hidden internal test: Real-ESRGAN x4plus, alpha 0.60 with QA
                           retries, light grid offset, and final JPEG 92 / 4:2:2.

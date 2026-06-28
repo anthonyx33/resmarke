@@ -13,7 +13,8 @@ type CreateJobBody = {
     | "max"
     | "max-mint"
     | "max-optical-pro"
-    | "max-neural-texture-lab";
+    | "max-neural-texture-lab"
+    | "max-content-repair-lab";
   micro_texture_jitter?: boolean;
   expert_refinement?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
@@ -42,7 +43,8 @@ Deno.serve(async (request) => {
         "max",
         "max-mint",
         "max-optical-pro",
-        "max-neural-texture-lab"
+        "max-neural-texture-lab",
+        "max-content-repair-lab"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -77,11 +79,14 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "max-neural-texture-lab"
         ? "max"
+        : requestedProfile === "max-content-repair-lab"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
       requestedProfile === "max-optical-pro" ||
-      requestedProfile === "max-neural-texture-lab"
+      requestedProfile === "max-neural-texture-lab" ||
+      requestedProfile === "max-content-repair-lab"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -91,6 +96,8 @@ Deno.serve(async (request) => {
         ? opticalProExpertRefinement()
         : requestedProfile === "max-neural-texture-lab"
         ? neuralTextureLabExpertRefinement()
+        : requestedProfile === "max-content-repair-lab"
+        ? contentRepairLabExpertRefinement()
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -132,6 +139,8 @@ Deno.serve(async (request) => {
               ? "max-optical-pro"
               : requestedProfile === "max-neural-texture-lab"
               ? "max-neural-texture-lab"
+              : requestedProfile === "max-content-repair-lab"
+              ? "max-content-repair-lab"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -177,7 +186,15 @@ function photoStyleOutputName(): string {
 }
 
 function normalizeExpertRefinement(input: unknown) {
-  const modes = ["off", "light", "balanced", "optical", "optical-pro", "neural-texture-lab"];
+  const modes = [
+    "off",
+    "light",
+    "balanced",
+    "optical",
+    "optical-pro",
+    "neural-texture-lab",
+    "content-repair-lab"
+  ];
   const techniqueKeys = [
     "pixel_alignment_break",
     "sensor_noise_luma",
@@ -248,6 +265,25 @@ function neuralTextureLabExpertRefinement() {
     neural_texture: {
       alpha: 0.6,
       model_name: "RealESRGAN_x4plus.pth"
+    }
+  };
+}
+
+function contentRepairLabExpertRefinement() {
+  return {
+    mode: "content-repair-lab",
+    intensity: 100,
+    preserve_straight_lines: true,
+    techniques: {},
+    content_repair: {
+      preset: "balanced",
+      patch_size: 256,
+      stride: 128,
+      candidate_threshold: 0.8,
+      min_region_area_ratio: 0.004,
+      max_regions: 3,
+      mask_dilation_px: 10,
+      mask_feather_px: 20
     }
   };
 }
