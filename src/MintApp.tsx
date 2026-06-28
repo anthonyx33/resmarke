@@ -63,7 +63,7 @@ import { supabase } from "./lib/supabase";
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
-type MintDeepCleanProfile = DeepCleanProfile | "max-remint";
+type MintDeepCleanProfile = DeepCleanProfile | "max-remint" | "max-optimised-remint";
 
 const expertRefinementPresets: Record<
   ExpertRefinementMode,
@@ -248,7 +248,8 @@ export default function MintApp() {
       strong: 8,
       max: 10,
       "max-mint": 12,
-      "max-remint": 12
+      "max-remint": 12,
+      "max-optimised-remint": 12
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -574,7 +575,7 @@ export default function MintApp() {
   function chooseDeepCleanProfile(profile: MintDeepCleanProfile) {
     setDeepCleanProfile(profile);
     if (profile !== "max") setDeepCleanMicroTextureJitter(false);
-    if (profile === "max-remint") {
+    if (profile === "max-remint" || profile === "max-optimised-remint") {
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -1383,6 +1384,7 @@ export default function MintApp() {
                         <option value="max">Max (Expert)</option>
                         <option value="max-mint">Max Mint</option>
                         <option value="max-remint">Max ReMint</option>
+                        <option value="max-optimised-remint">Max Optimised ReMint</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -1413,10 +1415,11 @@ export default function MintApp() {
                     </label>
                   ) : null}
 
-                  {deepCleanProfile === "max-remint" ? (
+                  {deepCleanProfile === "max-remint" || deepCleanProfile === "max-optimised-remint" ? (
                     <div className="rm-disc-note">
-                      Max ReMint skips global regeneration and uses non-generative statistical
-                      reshaping, local repair candidates, and quality gates for creator-AI images.
+                      {deepCleanProfile === "max-remint"
+                        ? "Max ReMint skips global regeneration and uses non-generative statistical reshaping, local repair candidates, and quality gates for creator-AI images."
+                        : "Max Optimised ReMint uses moderate regeneration with idempotency, unsharp restoration, PSNR/SSIM gates, and light optimised finalization."}
                     </div>
                   ) : null}
 
@@ -1429,7 +1432,7 @@ export default function MintApp() {
                     <Cloud size={18} aria-hidden="true" /> Queue GPU job · {maxCost} credits
                   </button>
 
-                  {deepCleanProfile !== "max-remint" ? (
+                  {deepCleanProfile !== "max-remint" && deepCleanProfile !== "max-optimised-remint" ? (
                     <details className="rm-disc">
                       <summary>
                         <SlidersHorizontal size={15} aria-hidden="true" /> Expert refinement

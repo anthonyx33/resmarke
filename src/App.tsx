@@ -64,6 +64,7 @@ type AuthMode = "signin" | "signup" | "reset" | "update";
 type DeepCleanProfileSelection =
   | DeepCleanProfile
   | "max-remint"
+  | "max-optimised-remint"
   | "max-optical-pro"
   | "max-neural-texture-lab"
   | "max-content-repair-lab";
@@ -535,6 +536,7 @@ export default function App() {
     if (profile !== "max") setDeepCleanMicroTextureJitter(false);
     if (
       profile === "max-remint" ||
+      profile === "max-optimised-remint" ||
       profile === "max-optical-pro" ||
       profile === "max-neural-texture-lab" ||
       profile === "max-content-repair-lab"
@@ -1144,6 +1146,7 @@ export default function App() {
                     <option value="max">Max (Expert)</option>
                     <option value="max-mint">Max Mint</option>
                     <option value="max-remint">Max ReMint</option>
+                    <option value="max-optimised-remint">Max Optimised ReMint</option>
                     {isAdminUi ? <option value="max-optical-pro">Optical Pro Lab</option> : null}
                     {isAdminUi ? (
                       <option value="max-neural-texture-lab">Neural Texture Lab</option>
@@ -1178,6 +1181,7 @@ export default function App() {
               </div>
 
               {deepCleanProfile === "max-remint" ||
+              deepCleanProfile === "max-optimised-remint" ||
               deepCleanProfile === "max-optical-pro" ||
               deepCleanProfile === "max-neural-texture-lab" ||
               deepCleanProfile === "max-content-repair-lab" ? (
@@ -1187,6 +1191,8 @@ export default function App() {
                       <div className="card-label">
                         {deepCleanProfile === "max-remint"
                           ? "Max ReMint"
+                          : deepCleanProfile === "max-optimised-remint"
+                          ? "Max Optimised ReMint"
                           : deepCleanProfile === "max-content-repair-lab"
                           ? "Content Repair Lab"
                           : deepCleanProfile === "max-neural-texture-lab"
@@ -1198,6 +1204,11 @@ export default function App() {
                           Non-generative max path: skips global regeneration, applies
                           statistical reshaping, optional local repair candidates, quality
                           gates, and light acquisition finalization.
+                        </p>
+                      ) : deepCleanProfile === "max-optimised-remint" ? (
+                        <p>
+                          Moderate regeneration path with idempotency, unsharp restoration,
+                          tight PSNR/SSIM gates, and light optimised finalization.
                         </p>
                       ) : deepCleanProfile === "max-content-repair-lab" ? (
                         <p>

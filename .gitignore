@@ -9,3 +9,4 @@ __pycache__/
 .supabase/
 supabase/.temp/
 supabase/.branches/
+deepclean-worker/workflows/logs-resmarke-deepclean-prod*.txt

@@ -13,6 +13,7 @@ import runpod
 from PIL import Image, ImageDraw, ImageFont
 
 from content_repair import apply_content_repair_lab, is_content_repair_lab
+from max_optimised_remint import apply_max_optimised_remint, is_max_optimised_remint
 from max_remint import apply_max_remint, is_max_remint
 from photo_naturalization import (
     PHOTO_NATURALIZATION_PROFILES,
@@ -77,6 +78,20 @@ PROFILE_CONFIG = {
         "adaptive_level": 8,
         "naturalization": PHOTO_NATURALIZATION_PROFILES["max-jitter"],
     },
+    # Max Optimised Re Mint: quality-preserving SynthID removal. The engine
+    # branch is is_max_optimised_remint (see handler); this PROFILE_CONFIG entry
+    # only feeds final_naturalization_config + warmup fallback. Purification
+    # itself runs in max_optimised_remint._run_purification at adaptive_level 4
+    # (not 8) -- the primary quality lever. naturalization is the light
+    # `optimised` profile, not the grainy `max`.
+    "max-optimised-remint": {
+        "timeout": 360,
+        "process_cap": 1800,
+        "upscale_back": "lanczos",
+        "face_path": False,
+        "adaptive_level": 4,
+        "naturalization": PHOTO_NATURALIZATION_PROFILES["optimised"],
+    },
 }
 
 
@@ -126,6 +141,24 @@ def handler(job):
                 cleaned_sha = sha256_file(cleaned_path)
                 neural_texture_report = {"enabled": False, "reason": "integrated_into_max_remint"}
                 content_repair_report = {"enabled": False, "reason": "integrated_into_max_remint"}
+            elif is_max_optimised_remint(expert_refinement):
+                # Max Optimised Re Mint: quality-preserving SynthID removal via
+                # MODERATE-strength regeneration (adaptive_level 4, not 8) +
+                # unsharp quality restoration + a tight PSNR/SSIM gate. It runs
+                # its own ComfyUI purification pass (single VAE round-trip,
+                # original resolution preserved) and is idempotent (skips
+                # regen on an already-processed image). finalize_output below
+                # applies the light `optimised` naturalization + the seal.
+                engine_report = apply_max_optimised_remint(
+                    input_path=input_path,
+                    output_path=cleaned_path,
+                    creator_id=creator_id,
+                    settings=expert_refinement,
+                    seed_extra=f"{job_id}:{input_sha}",
+                )
+                cleaned_sha = sha256_file(cleaned_path)
+                neural_texture_report = {"enabled": False, "reason": "integrated_into_max_optimised_remint"}
+                content_repair_report = {"enabled": False, "reason": "integrated_into_max_optimised_remint"}
             else:
                 engine_report = run_deepclean(
                     input_path=input_path,
@@ -454,7 +487,14 @@ def final_naturalization_config(cfg, expert_refinement):
         or is_content_repair_lab(expert_refinement)
         or is_max_remint(expert_refinement)
     ):
+        # Max ReMint does its own acquisition-noise in-module; no double pass.
         return PHOTO_NATURALIZATION_PROFILES["off"]
+    if is_max_optimised_remint(expert_refinement):
+        # Force the light `optimised` grain regardless of the `profile` field so
+        # the polish is consistent even if a caller sends profile=standard with
+        # the max-optimised-remint mode. Applied AFTER regeneration + unsharp
+        # restoration as the "looks less like AI" finalization.
+        return PHOTO_NATURALIZATION_PROFILES["optimised"]
     return cfg["naturalization"]
 
 
@@ -499,7 +539,13 @@ def finalize_output(
     # (keeps JPEGs sane on huge inputs) and apply the Fibonacci-88 seal at that
     # size. The seal's 8x8 block distribution works at any dimension.
     MAX_FINAL = 2048
-    image = Image.open(cleaned_path).convert("RGB")
+    with Image.open(cleaned_path) as cleaned_image:
+        existing_exif = cleaned_image.info.get("exif")
+        if not existing_exif:
+            cleaned_exif = cleaned_image.getexif() if hasattr(cleaned_image, "getexif") else None
+            if cleaned_exif:
+                existing_exif = cleaned_exif.tobytes()
+        image = cleaned_image.convert("RGB")
     if max(image.width, image.height) > MAX_FINAL:
         image.thumbnail((MAX_FINAL, MAX_FINAL), Image.Resampling.LANCZOS)
 
@@ -541,6 +587,14 @@ def finalize_output(
     )
     if jpeg_subsampling:
         save_kwargs["subsampling"] = jpeg_subsampling
+    # Preserve the ResMarke idempotency marker that Max Optimised Re Mint
+    # writes on the cleaned PNG so a re-upload of the final JPEG skips regen
+    # (the death-spiral fix). The cleaned image is POST-regeneration, so its
+    # EXIF carries only our marker tag -- this does NOT re-introduce any source
+    # AI metadata that the cleaning pass stripped. Other profiles' cleaned
+    # images have no EXIF, so existing_exif is None and behavior is unchanged.
+    if existing_exif:
+        save_kwargs["exif"] = existing_exif
     image.save(output_path, **save_kwargs)
     naturalization_report["final_jpeg_quality"] = save_kwargs["quality"]
     naturalization_report["final_jpeg_subsampling"] = jpeg_subsampling or "pillow-default"

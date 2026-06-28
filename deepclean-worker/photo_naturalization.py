@@ -74,6 +74,24 @@ PHOTO_NATURALIZATION_PROFILES = {
         "jpeg_quality": 91,
         "jpeg_subsampling": "4:2:2",
     },
+    "optimised": {
+        # Light organic texture for Max Optimised Re Mint: add just enough
+        # camera-like grain to shed the plastic AI look, WITHOUT the heavy
+        # blur/jitter that made the max profile read as grainy/over-processed.
+        # Quality preservation is the point, so blur and noise stay subtle.
+        "enabled": True,
+        "blur_radius": 0.10,
+        "chroma_blur_multiplier": 1.05,
+        "shot_noise": 0.00035,
+        "read_noise": 0.0009,
+        "luma_texture": 0.00070,
+        "chroma_texture": 0.00032,
+        "subpixel_shift": 0.10,
+        "micro_texture_jitter": False,
+        "micro_texture_jitter_sigma": 0.0,
+        "jpeg_quality": 95,
+        "jpeg_subsampling": "4:2:2",
+    },
     "off": {
         "enabled": False,
         "blur_radius": 0.0,

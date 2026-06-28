@@ -28,7 +28,7 @@ def main() -> int:
     parser.add_argument(
         "--profiles",
         nargs="+",
-        default=["standard", "standard-plus", "strong", "max", "max-jitter"],
+        default=["standard", "standard-plus", "strong", "max", "max-jitter", "optimised"],
     )
     parser.add_argument("--creator-id", default="acceptance-set")
     args = parser.parse_args()
