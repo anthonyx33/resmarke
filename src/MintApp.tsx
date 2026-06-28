@@ -715,7 +715,7 @@ export default function MintApp() {
   return (
     <div className="remint rm-app">
       <header className="rm-nav">
-        <a className="rm-brand" href="/mint">
+        <a className="rm-brand" href="/">
           <span className="rm-brand-mark">
             <Leaf size={18} aria-hidden="true" />
           </span>
@@ -1715,7 +1715,7 @@ export default function MintApp() {
 
       <footer className="rm-footer">
         <div className="rm-footer-inner">
-          <a className="rm-brand rm-brand-sm" href="/mint">
+          <a className="rm-brand rm-brand-sm" href="/">
             <span className="rm-brand-mark">
               <Leaf size={15} aria-hidden="true" />
             </span>
