@@ -5,7 +5,7 @@ ResMarke implements the bootstrap launch plan:
 - Privacy-Max local processing in the browser.
 - Metadata stripping by browser re-encode.
 - Conservative visible AI corner-mark cleanup.
-- Fibonacci-88 creator sealing.
+- Custom creator seal.
 - 1800 x 1800 JPEG export.
 - DeepClean GPU job scaffolding for Supabase + RunPod.
 
@@ -37,7 +37,7 @@ Privacy-Max is entirely client-side. The browser:
 1. Decodes the image.
 2. Draws it to an 1800 x 1800 canvas.
 3. Optionally applies conservative corner-only visible mark cleanup.
-4. Applies the Fibonacci-88 creator mark.
+4. Applies your custom creator seal.
 5. Exports a fresh JPEG, which strips ordinary metadata.
 
 This mode does not claim invisible SynthID removal.
@@ -73,4 +73,4 @@ HF_TOKEN=
 - Users must own or control the images they process.
 - DeepClean should be sold as advanced hidden-watermark reduction, not permanent undetectability.
 - Credits are captured only after successful DeepClean completion.
-- Fibonacci-88 is a creator mark, not proof of original provenance.
+- The creator seal is a creator mark, not proof of original provenance.

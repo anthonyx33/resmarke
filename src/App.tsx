@@ -915,7 +915,7 @@ export default function App() {
                           : "None"
                       }
                     />
-                    <Metric label="Seal" value="Fibonacci-88" />
+                    <Metric label="Seal" value="Creator Seal" />
                     <Metric label="Hash" value={resultHash.slice(0, 12)} />
                   </div>
                 )}
@@ -1097,7 +1097,7 @@ export default function App() {
                       </label>
 
                       <label className="range-field">
-                        <span>Fibonacci-88 strength: {markStrength}</span>
+                        <span>Creator Seal strength: {markStrength}</span>
                         <input
                           type="range"
                           min="1"
@@ -1163,7 +1163,7 @@ export default function App() {
                     }
                   >
                     <option value="stripped">Stripped only</option>
-                    <option value="sealed">Stripped + Fibonacci-88</option>
+                    <option value="sealed">Stripped + Creator Seal</option>
                     <option value="sealed-stamped">Stripped + seal + stamp</option>
                   </select>
                 </label>
@@ -1523,7 +1523,7 @@ export default function App() {
                 />
                 <Feature
                   icon={<Fingerprint size={20} aria-hidden="true" />}
-                  title="Fibonacci-88 seal"
+                  title="Creator Seal"
                   body="A subtle creator mark sealed into your export — yours, and recognizably so."
                 />
               </div>
@@ -1541,7 +1541,7 @@ export default function App() {
                 <Step
                   n={2}
                   title="Clean & seal"
-                  body="We strip metadata, remove visible AI marks, and seal it with your Fibonacci-88 mark."
+                  body="We strip metadata, remove visible AI marks, and seal it with your custom creator seal."
                 />
                 <Step
                   n={3}
@@ -1581,7 +1581,7 @@ export default function App() {
                   name="Free"
                   price="$0"
                   period="forever"
-                  features={["3 Privacy-Max exports", "Local, private processing", "Fibonacci-88 seal"]}
+                  features={["3 Privacy-Max exports", "Local, private processing", "Creator Seal"]}
                   cta="Start free"
                   onClick={openPicker}
                 />
@@ -1638,8 +1638,8 @@ export default function App() {
                   a="All EXIF and metadata (GPS, device, software tags), via a clean pixel re-encode — plus optional removal of visible AI corner marks."
                 />
                 <FaqItem
-                  q="What is the Fibonacci-88 seal?"
-                  a="A subtle creator mark sealed into your export so your work is recognizably yours. It's a creator mark, not a claim of original provenance."
+                  q="What is the Creator Seal?"
+                  a="A subtle custom creator seal embedded into your export so your work is recognizably yours. It's a creator mark, not a claim of original provenance."
                 />
                 <FaqItem
                   q="Which formats and sizes can I export?"
@@ -1677,7 +1677,7 @@ export default function App() {
       <footer className="footer">
         <div className="footer-inner">
           <span>
-            Use only on images you own or control. Fibonacci-88 is a creator mark, not proof of
+            Use only on images you own or control. The Creator Seal is a creator mark, not proof of
             provenance.
           </span>
           <span>© {new Date().getFullYear()} ResMarke</span>

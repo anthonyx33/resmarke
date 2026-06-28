@@ -910,7 +910,7 @@ export default function MintApp() {
                   <Zap size={14} aria-hidden="true" /> Instant, on-device
                 </span>
                 <span>
-                  <Fingerprint size={14} aria-hidden="true" /> Fibonacci-88 seal
+                  <Fingerprint size={14} aria-hidden="true" /> Creator Seal
                 </span>
               </div>
             </section>
@@ -928,7 +928,7 @@ export default function MintApp() {
                   n={2}
                   icon={<Sparkles size={18} aria-hidden="true" />}
                   title="Re-Mint it"
-                  body="Strip metadata, lift visible AI marks, and seal it with your Fibonacci-88 mark."
+                  body="Strip metadata, lift visible AI marks, and seal it with your custom creator seal."
                 />
                 <Step
                   n={3}
@@ -992,7 +992,7 @@ export default function MintApp() {
                   name="Free"
                   price="$0"
                   period="forever"
-                  features={["3 Re-Mint exports", "Local, private processing", "Fibonacci-88 seal"]}
+                  features={["3 Re-Mint exports", "Local, private processing", "Creator Seal"]}
                   cta="Start free"
                   onClick={openPicker}
                 />
@@ -1040,8 +1040,8 @@ export default function MintApp() {
                   a="All EXIF and metadata (GPS, device, software tags), via a clean pixel re-encode — plus optional removal of visible AI corner marks."
                 />
                 <Faq
-                  q="What is the Fibonacci-88 seal?"
-                  a="A subtle creator mark sealed into your export so your work is recognizably yours. It's a creator mark, not a claim of original provenance."
+                  q="What is the Creator Seal?"
+                  a="A subtle custom creator seal embedded into your export so your work is recognizably yours. It's a creator mark, not a claim of original provenance."
                 />
                 <Faq
                   q="Which formats and sizes can I export?"
@@ -1127,7 +1127,7 @@ export default function MintApp() {
                       label="Visible cleanup"
                       value={report.visibleCleanupApplied ? `${report.visibleCleanupPixels} px` : "None"}
                     />
-                    <RmMetric label="Seal" value="Fibonacci-88" />
+                    <RmMetric label="Seal" value="Creator Seal" />
                     <RmMetric label="Hash" value={resultHash.slice(0, 12)} />
                   </div>
                 ) : null}
@@ -1331,7 +1331,7 @@ export default function MintApp() {
 
                       <label className="rm-range">
                         <span className="rm-field-label">
-                          Fibonacci-88 strength <em>{markStrength}</em>
+                          Creator Seal strength <em>{markStrength}</em>
                         </span>
                         <input
                           type="range"
@@ -1393,7 +1393,7 @@ export default function MintApp() {
                         onChange={(event) => setDeepCleanOutputMode(event.target.value as DeepCleanOutputMode)}
                       >
                         <option value="stripped">Stripped only</option>
-                        <option value="sealed">Stripped + Fibonacci-88</option>
+                        <option value="sealed">Stripped + Creator Seal</option>
                         <option value="sealed-stamped">Stripped + seal + stamp</option>
                       </select>
                     </label>
@@ -1724,7 +1724,7 @@ export default function MintApp() {
             </span>
           </a>
           <span className="rm-footer-note">
-            Use only on images you own or control. Fibonacci-88 is a creator mark, not proof of
+            Use only on images you own or control. The Creator Seal is a creator mark, not proof of
             provenance.
           </span>
           <span className="rm-footer-copy">© {new Date().getFullYear()} Re-Mint It</span>
