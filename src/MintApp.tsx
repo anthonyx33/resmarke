@@ -62,6 +62,7 @@ import {
   updateAdminRunpodEndpoint,
   type AdminRunpodEndpoint
 } from "./lib/adminRunpodClient";
+import { reframeImageFile } from "./lib/reframe";
 import { supabase } from "./lib/supabase";
 
 type ProcessingState = "idle" | "processing" | "done" | "error";
@@ -72,10 +73,15 @@ type MintDeepCleanProfile =
   | "max-remint"
   | "max-optimised-remint"
   | "max-cx-remint"
-  | "max-cx-remint-v2";
+  | "max-cx-remint-v2"
+  | "max-cx-remint-v3";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
-  return profile === "max-cx-remint" || profile === "max-cx-remint-v2";
+  return (
+    profile === "max-cx-remint" ||
+    profile === "max-cx-remint-v2" ||
+    profile === "max-cx-remint-v3"
+  );
 }
 
 // Quality-floor slider stops: index 0 = strongest carrier break / most
@@ -250,6 +256,8 @@ export default function MintApp() {
   const [cxEngineMode, setCxEngineMode] = useState<CxRemintEngineMode>("template");
   const [cxIphoneExif, setCxIphoneExif] = useState(true);
   const [cxDevice, setCxDevice] = useState<CxRemintDevice>("auto");
+  // Browser-side reframe (zoom + tilt + shift) applied before upload. No GPU.
+  const [cxReframe, setCxReframe] = useState(true);
   const [deepCleanStatus, setDeepCleanStatus] = useState("");
   const [deepCleanJob, setDeepCleanJob] = useState<DeepCleanJob | null>(null);
   const deepCleanPollRef = useRef<number | null>(null);
@@ -286,8 +294,9 @@ export default function MintApp() {
       "max-optimised-remint": 12,
       // Non-generative, so no GPU regen bill — priced below the regen profiles.
       "max-cx-remint": 10,
-      // v2 regenerates on GPU (to break SynthID) then launders — priciest.
-      "max-cx-remint-v2": 13
+      // v2/v3 regenerate on GPU (to break SynthID) then launder — priciest.
+      "max-cx-remint-v2": 13,
+      "max-cx-remint-v3": 13
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -617,8 +626,19 @@ export default function MintApp() {
       });
       createdJob = job;
       setDeepCleanJob(job);
+      // Optional browser-side reframe (zoom + tilt + shift) before upload —
+      // desyncs the watermark/fingerprint grid with zero GPU cost.
+      let uploadFile = file;
+      if (isCxProfile(deepCleanProfile) && cxReframe) {
+        try {
+          setDeepCleanStatus("Reframing (browser-side)...");
+          uploadFile = await reframeImageFile(file);
+        } catch {
+          uploadFile = file; // reframe is best-effort; never block the job
+        }
+      }
       setDeepCleanStatus("Uploading private input...");
-      await uploadDeepCleanInput(job, file);
+      await uploadDeepCleanInput(job, uploadFile);
       setDeepCleanStatus("Dispatching GPU worker...");
       await dispatchDeepCleanJob(job.id);
       await spendCredits(maxCost);
@@ -650,6 +670,13 @@ export default function MintApp() {
       setExpertRefinementIntensity(100);
       setExpertRefinementPreserveLines(true);
       setExpertRefinementTechniques(cloneExpertPreset("off"));
+      // Deep (v2/v3) regenerate, and the flux fingerprint only dies at the lower
+      // resolutions (live tests: clean at ~960px, still flagged at 1280px). Snap
+      // the quality-floor slider to the Strong (960px) sweet spot when switching
+      // to a Deep profile so the default actually clears Hive.
+      if (profile === "max-cx-remint-v2" || profile === "max-cx-remint-v3") {
+        setCxQualityFloor("strong");
+      }
       return;
     }
     if (profile === "max-remint" || profile === "max-optimised-remint") {
@@ -1464,6 +1491,7 @@ export default function MintApp() {
                         <option value="max-optimised-remint">Max Optimised ReMint</option>
                         <option value="max-cx-remint">CX Remint (non-generative)</option>
                         <option value="max-cx-remint-v2">CX Remint v2 · Deep (removes SynthID)</option>
+                        <option value="max-cx-remint-v3">CX Remint v3 · Deep + colour restore (recommended)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -1567,6 +1595,18 @@ export default function MintApp() {
                         <span>Rebuild iPhone photo metadata (EXIF)</span>
                       </label>
 
+                      <label className="rm-switch">
+                        <input
+                          type="checkbox"
+                          checked={cxReframe}
+                          onChange={(event) => setCxReframe(event.target.checked)}
+                        />
+                        <span className="rm-switch-track" aria-hidden="true">
+                          <span className="rm-switch-thumb" />
+                        </span>
+                        <span>Reframe: subtle zoom + tilt (browser-side, no GPU)</span>
+                      </label>
+
                       {cxIphoneExif ? (
                         <label className="rm-field">
                           <span className="rm-field-label">Device</span>
@@ -1588,9 +1628,11 @@ export default function MintApp() {
                       ) : null}
 
                       <div className="rm-disc-note">
-                        {deepCleanProfile === "max-cx-remint-v2"
-                          ? "CX Remint v2 (Deep) regenerates the frame to actually remove Google SynthID — the one thing non-generative passes can't do — then launders off the diffusion fingerprint with resampling + spectral reshaping and re-acquires a real-camera signature. Use this when the image is SynthID-watermarked (flagged as “made with Google AI”). Heavier quality trade than v1, but it clears the watermark."
-                          : "CX Remint is non-generative: it breaks the diffusion fingerprint by resampling and re-acquires a real-camera signature without stamping a new one. Note: it does NOT remove Google SynthID — if the image is SynthID-watermarked, use v2 (Deep). Output never drops below 896px."}
+                        {deepCleanProfile === "max-cx-remint-v3"
+                          ? "CX Remint v3 (recommended) regenerates to remove Google SynthID, then restores the ORIGINAL's colour palette onto the result — fixing the washed-out look regeneration causes — before laundering off the diffusion fingerprint. Keep the quality floor at Strong (~960px): the fingerprint clears there but survives at higher resolutions. Note: a general “this looks AI” classifier may still flag it, because the underlying content genuinely is AI-generated — that's a ceiling no watermark removal can fully cross."
+                          : deepCleanProfile === "max-cx-remint-v2"
+                          ? "CX Remint v2 (Deep) regenerates the frame to remove Google SynthID, then launders off the diffusion fingerprint with resampling + spectral reshaping. v3 adds colour restoration on top — prefer v3 unless you're A/B testing."
+                          : "CX Remint is non-generative: it breaks the diffusion fingerprint by resampling and re-acquires a real-camera signature without stamping a new one. Note: it does NOT remove Google SynthID — if the image is SynthID-watermarked, use v3 (Deep). Output never drops below 896px."}
                       </div>
                     </div>
                   ) : null}

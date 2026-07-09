@@ -112,6 +112,14 @@ DEFAULT_SETTINGS = {
     "spectral_strength": 0.5,
     "spectral_alpha": 2.0,
     "spectral_noise_floor": 0.012,
+    # --- v3: colour restoration (the quality fix) ----------------------------
+    # Regeneration repaints the frame and shifts the palette away from the
+    # original (the "colours drop, nowhere near nano banana" report). We transfer
+    # the ORIGINAL's per-channel colour statistics (mean/std) onto the
+    # regenerated structure. Global colour stats do NOT carry SynthID's spatial
+    # pattern, so this restores the palette without re-importing the watermark.
+    "color_restore": False,           # v3 sets True
+    "color_restore_strength": 0.8,
     # Final camera-like JPEG (a real edited iPhone JPEG, not a diffusion PNG).
     "jpeg_quality": 92,
     "jpeg_subsampling": "4:2:0",
@@ -156,6 +164,8 @@ def normalize_cx_remint_settings(settings):
     cfg["spectral_strength"] = float(_clamp(sub.get("spectral_strength", cfg["spectral_strength"]), 0.0, 1.0))
     cfg["spectral_alpha"] = float(_clamp(sub.get("spectral_alpha", cfg["spectral_alpha"]), 0.5, 4.0))
     cfg["spectral_noise_floor"] = float(_clamp(sub.get("spectral_noise_floor", cfg["spectral_noise_floor"]), 0.0, 0.2))
+    cfg["color_restore"] = bool(sub.get("color_restore", cfg["color_restore"]))
+    cfg["color_restore_strength"] = float(_clamp(sub.get("color_restore_strength", cfg["color_restore_strength"]), 0.0, 1.0))
 
     cfg["jpeg_quality"] = int(_clamp(sub.get("jpeg_quality", cfg["jpeg_quality"]), 60, 100))
     sub_sampling = sub.get("jpeg_subsampling", cfg["jpeg_subsampling"])
@@ -211,6 +221,17 @@ def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_ext
                 Path(regen_path).unlink()
             except OSError:
                 pass
+
+        # v3 colour restoration: pull the regen's palette back to the original's
+        # (global colour stats only -> restores nano-banana look, no SynthID
+        # re-import). Runs on the regen output before laundering.
+        if cfg["color_restore"]:
+            base = _color_transfer(base, original, cfg["color_restore_strength"])
+            report["layers"]["color_restore"] = {
+                "method": "per_channel_mean_std_match_to_original",
+                "strength": cfg["color_restore_strength"],
+                "reimports_synthid": False,
+            }
 
     src_long = max(base.size)
 
@@ -387,6 +408,26 @@ def _run_regen(input_path, output_path, cfg, seed):
     return report
 
 
+def _color_transfer(source, reference, strength):
+    """Match `source`'s per-channel mean/std to `reference` (classic global
+    colour transfer). Reference is resized to the source grid first. Only global
+    per-channel statistics move -- no spatial content is copied, so the
+    reference's SynthID spatial pattern is NOT re-introduced. `strength` blends
+    the corrected result with the source (1.0 = full match)."""
+    if strength <= 0.0:
+        return source
+    s = np.asarray(source).astype(np.float32)
+    ref = reference if reference.size == source.size else reference.resize(source.size, Image.Resampling.LANCZOS)
+    r = np.asarray(ref).astype(np.float32)
+    out = s.copy()
+    for c in range(3):
+        s_mean, s_std = float(s[..., c].mean()), float(s[..., c].std()) + 1e-5
+        r_mean, r_std = float(r[..., c].mean()), float(r[..., c].std()) + 1e-5
+        matched = (s[..., c] - s_mean) * (r_std / s_std) + r_mean
+        out[..., c] = s[..., c] * (1.0 - strength) + matched * strength
+    return Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8), mode="RGB")
+
+
 def _fft_radial_amplitude_match(image, strength, alpha, noise_floor):
     """Reshape each channel's amplitude spectrum toward a real-camera
     1/f^alpha + noise-floor envelope, phase-preserving (spatial structure kept).
@@ -543,6 +584,7 @@ def _public_settings(cfg):
         "ai_threshold", "max_rungs",
         "pre_regen", "regen_level", "regen_process_cap", "regen_timeout",
         "spectral_reshape", "spectral_strength", "spectral_alpha", "spectral_noise_floor",
+        "color_restore", "color_restore_strength",
     )}
 
 
