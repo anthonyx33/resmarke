@@ -61,6 +61,9 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY bootstrap_models.py /app/bootstrap_models.py
 COPY comfyui_client.py /app/comfyui_client.py
 COPY content_repair.py /app/content_repair.py
+COPY deepclean_detector.py /app/deepclean_detector.py
+COPY iphone_exif.py /app/iphone_exif.py
+COPY max_cx_remint.py /app/max_cx_remint.py
 COPY max_optimised_remint.py /app/max_optimised_remint.py
 COPY max_remint.py /app/max_remint.py
 COPY neural_texture.py /app/neural_texture.py
