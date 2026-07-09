@@ -17,7 +17,8 @@ type CreateJobBody = {
     | "max-optical-pro"
     | "max-neural-texture-lab"
     | "max-content-repair-lab"
-    | "max-cx-remint";
+    | "max-cx-remint"
+    | "max-cx-remint-v2";
   micro_texture_jitter?: boolean;
   expert_refinement?: unknown;
   // CX Remint is the only Max profile with user-facing options (quality-floor
@@ -54,7 +55,8 @@ Deno.serve(async (request) => {
         "max-optical-pro",
         "max-neural-texture-lab",
         "max-content-repair-lab",
-        "max-cx-remint"
+        "max-cx-remint",
+        "max-cx-remint-v2"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -97,6 +99,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "max-cx-remint"
         ? "max"
+        : requestedProfile === "max-cx-remint-v2"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -105,7 +109,8 @@ Deno.serve(async (request) => {
       requestedProfile === "max-optical-pro" ||
       requestedProfile === "max-neural-texture-lab" ||
       requestedProfile === "max-content-repair-lab" ||
-      requestedProfile === "max-cx-remint"
+      requestedProfile === "max-cx-remint" ||
+      requestedProfile === "max-cx-remint-v2"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -122,7 +127,9 @@ Deno.serve(async (request) => {
         : requestedProfile === "max-content-repair-lab"
         ? contentRepairLabExpertRefinement()
         : requestedProfile === "max-cx-remint"
-        ? cxRemintExpertRefinement(body.cx_remint)
+        ? cxRemintExpertRefinement(body.cx_remint, false)
+        : requestedProfile === "max-cx-remint-v2"
+        ? cxRemintExpertRefinement(body.cx_remint, true)
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -172,6 +179,8 @@ Deno.serve(async (request) => {
               ? "max-content-repair-lab"
               : requestedProfile === "max-cx-remint"
               ? "max-cx-remint"
+              : requestedProfile === "max-cx-remint-v2"
+              ? "max-cx-remint-v2"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -369,10 +378,15 @@ function contentRepairLabExpertRefinement() {
   };
 }
 
-function cxRemintExpertRefinement(input: unknown) {
+function cxRemintExpertRefinement(input: unknown, deep: boolean) {
   // CX Remint: non-generative de-flag + camera re-acquisition. User options are
   // whitelisted here so the client can never smuggle an out-of-range value or a
   // sub-768 output floor to the worker.
+  //
+  // `deep` (v2) forces the pre-regeneration that actually removes SynthID (the
+  // one thing non-generative passes cannot do) plus FFT spectral reshaping to
+  // strip the diffusion fingerprint the regen introduces. Both flags are set
+  // server-side, not client-controllable.
   const raw = isRecord(input) ? input : {};
   const engineModes = ["template", "adaptive"];
   const qualityFloors = ["studio", "high", "balanced", "strong", "floor"];
@@ -418,7 +432,14 @@ function cxRemintExpertRefinement(input: unknown) {
       jpeg_quality: 92,
       jpeg_subsampling: "4:2:0",
       ai_threshold: 0.5,
-      max_rungs: 5
+      max_rungs: 5,
+      // v2 "Deep": regenerate to break SynthID, then spectral-reshape to strip
+      // the diffusion fingerprint. regen_level 8 is the level that removed
+      // SynthID in the live test.
+      pre_regen: deep,
+      regen_level: 8,
+      spectral_reshape: deep,
+      spectral_strength: 0.3
     }
   };
 }

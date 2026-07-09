@@ -93,6 +93,25 @@ DEFAULT_SETTINGS = {
     "acquisition": "balanced",        # key into ACQUISITION_PRESETS
     "iphone_exif": True,              # coherent iPhone EXIF (user toggle)
     "device": "auto",                 # iphone_exif device key or "auto"
+    # --- v2: pre-regeneration (the SynthID killer) ---------------------------
+    # SynthID is robust by design: every non-generative pass we tried left it at
+    # ~99% (Max ReMint, CX v1@896, Max Optimised L4). Only a full-frame VAE
+    # regeneration actually removes it. v2 regenerates FIRST to break SynthID,
+    # then the non-generative laundering below strips the diffusion (flux)
+    # fingerprint the regen leaves -- which IS fragile, unlike SynthID. This is
+    # the one combination the earlier profiles never assembled.
+    "pre_regen": False,               # v2 sets True
+    "regen_level": 8,                 # adaptive_level; 8 = the level that removed SynthID live
+    "regen_process_cap": 1536,        # cap long edge fed to ComfyUI
+    "regen_timeout": 300,
+    # --- v2: FFT spectral reshaping (the statistical-classifier killer) -------
+    # Phase-preserving reshape of the amplitude spectrum toward a real-camera
+    # 1/f^alpha + noise-floor envelope. Attacks exactly what Hive's statistical
+    # model reads (too-clean, too-steep diffusion spectrum). Non-generative.
+    "spectral_reshape": False,        # v2 sets True
+    "spectral_strength": 0.5,
+    "spectral_alpha": 2.0,
+    "spectral_noise_floor": 0.012,
     # Final camera-like JPEG (a real edited iPhone JPEG, not a diffusion PNG).
     "jpeg_quality": 92,
     "jpeg_subsampling": "4:2:0",
@@ -128,6 +147,16 @@ def normalize_cx_remint_settings(settings):
 
     cfg["iphone_exif"] = bool(sub.get("iphone_exif", cfg["iphone_exif"]))
     cfg["device"] = str(sub.get("device", cfg["device"]))
+
+    cfg["pre_regen"] = bool(sub.get("pre_regen", cfg["pre_regen"]))
+    cfg["regen_level"] = int(_clamp(sub.get("regen_level", cfg["regen_level"]), 3, 10))
+    cfg["regen_process_cap"] = int(_clamp(sub.get("regen_process_cap", cfg["regen_process_cap"]), 512, 4096))
+    cfg["regen_timeout"] = int(_clamp(sub.get("regen_timeout", cfg["regen_timeout"]), 30, 900))
+    cfg["spectral_reshape"] = bool(sub.get("spectral_reshape", cfg["spectral_reshape"]))
+    cfg["spectral_strength"] = float(_clamp(sub.get("spectral_strength", cfg["spectral_strength"]), 0.0, 1.0))
+    cfg["spectral_alpha"] = float(_clamp(sub.get("spectral_alpha", cfg["spectral_alpha"]), 0.5, 4.0))
+    cfg["spectral_noise_floor"] = float(_clamp(sub.get("spectral_noise_floor", cfg["spectral_noise_floor"]), 0.0, 0.2))
+
     cfg["jpeg_quality"] = int(_clamp(sub.get("jpeg_quality", cfg["jpeg_quality"]), 60, 100))
     sub_sampling = sub.get("jpeg_subsampling", cfg["jpeg_subsampling"])
     cfg["jpeg_subsampling"] = sub_sampling if sub_sampling in ("4:2:0", "4:2:2", "4:4:4") else "4:2:0"
@@ -148,9 +177,9 @@ def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_ext
     cfg = normalize_cx_remint_settings(settings)
     report = {
         "enabled": bool(cfg["enabled"]),
-        "pipeline": "cx_remint_v1",
+        "pipeline": "cx_remint_v2" if cfg["pre_regen"] else "cx_remint_v1",
         "engine": "cx_remint",
-        "generative": False,
+        "generative": bool(cfg["pre_regen"]),
         "applied": False,
         "settings": _public_settings(cfg),
         "layers": {},
@@ -163,7 +192,27 @@ def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_ext
 
     started = time.time()
     original = Image.open(input_path).convert("RGB")
-    src_long = max(original.size)
+
+    # --- v2 layer 0: pre-regeneration (SynthID killer). --------------------
+    # Runs BEFORE the laundering so the rest of the pipeline operates on a
+    # SynthID-free frame and only has to strip the (fragile) diffusion
+    # fingerprint the regen introduces. base = what we launder + measure
+    # against; the true original is kept only for a transparency metric.
+    base = original
+    if cfg["pre_regen"]:
+        regen_path = Path(output_path).with_name(".cx-remint-regen.png")
+        try:
+            regen_report = _run_regen(input_path, str(regen_path), cfg,
+                                      _seed(creator_id, seed_extra, original.size, 900))
+            base = Image.open(regen_path).convert("RGB")
+            report["layers"]["pre_regeneration"] = regen_report
+        finally:
+            try:
+                Path(regen_path).unlink()
+            except OSError:
+                pass
+
+    src_long = max(base.size)
 
     preset = QUALITY_FLOOR_PRESETS[cfg["quality_floor"]]
     target = cfg["target_long_edge"] or preset["target_long_edge"]
@@ -183,10 +232,12 @@ def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_ext
     chosen = None
     for rung_index in range(rung_count):
         rung = _rung_config(rung_index, target, preset, cfg)
-        seed = _seed(creator_id, seed_extra, original.size, rung_index)
-        candidate = _process_once(original, rung, seed)
+        seed = _seed(creator_id, seed_extra, base.size, rung_index)
+        candidate = _process_once(base, rung, seed, cfg)
 
-        metrics = compare_images(original.resize(candidate.size, Image.Resampling.LANCZOS), candidate)
+        # Gate on laundering damage vs the base (regen output for v2, original
+        # for v1) -- that is what the laundering is allowed to degrade.
+        metrics = compare_images(base.resize(candidate.size, Image.Resampling.LANCZOS), candidate)
         floor_ok = float(metrics.get("ssim_luma_window11_mean", 0.0)) >= rung["min_ssim"]
 
         attempt = {
@@ -272,9 +323,9 @@ def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_ext
 # Pipeline
 # ---------------------------------------------------------------------------
 
-def _process_once(original, rung, seed):
+def _process_once(base, rung, seed, cfg):
     rng = np.random.default_rng(seed)
-    work = original.copy()
+    work = base.copy()
 
     # 1. De-grid pre-shift: break the watermark/diffusion grid alignment.
     work, _sx, _sy = subpixel_translate(work, rng, amount=rung["degrid_shift"])
@@ -293,7 +344,19 @@ def _process_once(original, rung, seed):
     # 4. Structure-preserving restoration (classical, non-generative).
     work = work.filter(ImageFilter.UnsharpMask(radius=1.1, percent=rung["sharpen"], threshold=2))
 
-    # 5. Camera re-acquisition: real optical + sensor signature.
+    # 5. Spectral reshape (v2): pull the amplitude spectrum toward a real-camera
+    #    1/f^alpha + noise-floor envelope. Phase-preserving, non-generative.
+    #    This is what neutralises the diffusion "too-clean spectrum" the general
+    #    AI classifier keys on, on top of the regen that killed SynthID.
+    if cfg.get("spectral_reshape") and cfg.get("spectral_strength", 0.0) > 0:
+        work = _fft_radial_amplitude_match(
+            work,
+            strength=cfg["spectral_strength"],
+            alpha=cfg["spectral_alpha"],
+            noise_floor=cfg["spectral_noise_floor"],
+        )
+
+    # 6. Camera re-acquisition: real optical + sensor signature.
     optical, _optical_report = apply_optical_pro_capture(work, rng)
     work = optical
     work = apply_acquisition_noise_rgb(work, rng, amount=rung["noise"])
@@ -301,6 +364,89 @@ def _process_once(original, rung, seed):
         work = apply_micro_vignette(work, rung["vignette"])
 
     return work.convert("RGB")
+
+
+def _run_regen(input_path, output_path, cfg, seed):
+    """v2 pre-regeneration. Reuses the SAME proven ComfyUI purification pass that
+    Max Optimised Re Mint runs in production (single VAE round-trip at a given
+    adaptive_level, original resolution restored). At regen_level 8 this is the
+    pass that removed SynthID in the live test. Raises on ComfyUI failure so the
+    worker fails the job honestly rather than shipping a still-watermarked image.
+    """
+    from max_optimised_remint import _run_purification  # proven; ComfyUI-backed
+
+    report = _run_purification(
+        input_path=input_path,
+        output_path=output_path,
+        adaptive_level=cfg["regen_level"],
+        process_cap=cfg["regen_process_cap"],
+        timeout=cfg["regen_timeout"],
+        seed=seed,
+    )
+    report["purpose"] = "break_synthid_carrier_before_laundering"
+    return report
+
+
+def _fft_radial_amplitude_match(image, strength, alpha, noise_floor):
+    """Reshape each channel's amplitude spectrum toward a real-camera
+    1/f^alpha + noise-floor envelope, phase-preserving (spatial structure kept).
+
+    Ported from max_remint.fft_radial_amplitude_match. AI images tend to have a
+    too-steep, too-clean radial amplitude falloff; real sensors carry a shallower
+    falloff plus a high-frequency noise floor. Blending the input's radial
+    amplitude profile toward that target attacks the statistical AI classifier
+    without regenerating anything.
+    """
+    if strength <= 0.0:
+        return image
+    arr = np.asarray(image).astype(np.float32)
+    h, w, _ = arr.shape
+    cy, cx = h / 2.0, w / 2.0
+    yy, xx = np.indices((h, w))
+    dist = np.sqrt(((yy - cy) / max(cy, 1.0)) ** 2 + ((xx - cx) / max(cx, 1.0)) ** 2).astype(np.float32)
+    max_r = float(dist.max())
+    n_bins = max(8, min(96, int(max_r * 64)))
+    bin_idx = np.clip((dist / max(max_r, 1e-6) * n_bins).astype(np.int32), 0, n_bins - 1)
+
+    out = np.empty_like(arr)
+    for c in range(arr.shape[2]):
+        plane = arr[..., c]
+        f = np.fft.fftshift(np.fft.fft2(plane))
+        mag = np.abs(f).astype(np.float32)
+        phase = np.angle(f).astype(np.float32)
+        bin_sum = np.bincount(bin_idx.ravel(), weights=mag.ravel(), minlength=n_bins)
+        bin_cnt = np.bincount(bin_idx.ravel(), minlength=n_bins).astype(np.float32)
+        bin_cnt[bin_cnt == 0] = 1.0
+        radial_in = (bin_sum / bin_cnt).astype(np.float32)
+
+        d_bins = np.linspace(0.0, max_r, n_bins, dtype=np.float32)
+        target_raw = 1.0 / (d_bins + 1.0) ** alpha + noise_floor
+        low_ref = max(radial_in[0], 1e-6)
+        tgt_low = max(target_raw[0], 1e-6)
+        target = target_raw * (low_ref / tgt_low)
+
+        scale = np.ones_like(radial_in)
+        nz = radial_in > 1e-8
+        # Tighter clamp than max_remint's [0.25, 4.0]: CX applies this AFTER a
+        # regen + resample, so we only want a gentle nudge of the falloff shape,
+        # never a magnitude swing large enough to ring edges / crush contrast.
+        scale[nz] = np.clip(target[nz] / radial_in[nz], 0.6, 1.7)
+        scale = _smooth(scale, passes=3)
+
+        scale_plane = scale[bin_idx]
+        blended_mag = (1.0 - strength) * mag + strength * (mag * scale_plane)
+        new_f = blended_mag * np.exp(1j * phase)
+        out[..., c] = np.real(np.fft.ifft2(np.fft.ifftshift(new_f)))
+
+    return Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def _smooth(values, passes=2):
+    smoothed = values.astype(np.float32).copy()
+    for _ in range(max(0, passes)):
+        padded = np.pad(smoothed, (1, 1), mode="edge")
+        smoothed = (padded[:-2] + padded[1:-1] + padded[2:]) / 3.0
+    return smoothed
 
 
 def _rung_config(index, target, preset, cfg):
@@ -395,6 +541,8 @@ def _public_settings(cfg):
         "engine_mode", "quality_floor", "target_long_edge", "acquisition",
         "iphone_exif", "device", "jpeg_quality", "jpeg_subsampling",
         "ai_threshold", "max_rungs",
+        "pre_regen", "regen_level", "regen_process_cap", "regen_timeout",
+        "spectral_reshape", "spectral_strength", "spectral_alpha", "spectral_noise_floor",
     )}
 
 

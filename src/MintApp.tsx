@@ -71,7 +71,12 @@ type MintDeepCleanProfile =
   | DeepCleanProfile
   | "max-remint"
   | "max-optimised-remint"
-  | "max-cx-remint";
+  | "max-cx-remint"
+  | "max-cx-remint-v2";
+
+function isCxProfile(profile: MintDeepCleanProfile): boolean {
+  return profile === "max-cx-remint" || profile === "max-cx-remint-v2";
+}
 
 // Quality-floor slider stops: index 0 = strongest carrier break / most
 // resolution loss, last = max quality. Every stop stays > the competitor's
@@ -280,7 +285,9 @@ export default function MintApp() {
       "max-remint": 12,
       "max-optimised-remint": 12,
       // Non-generative, so no GPU regen bill — priced below the regen profiles.
-      "max-cx-remint": 10
+      "max-cx-remint": 10,
+      // v2 regenerates on GPU (to break SynthID) then launders — priciest.
+      "max-cx-remint-v2": 13
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -290,10 +297,10 @@ export default function MintApp() {
     };
     let cost = profileBase[deepCleanProfile];
     // Expert refinement only applies to the non-CX profiles.
-    if (deepCleanProfile !== "max-cx-remint") cost += refineAdd[expertRefinementMode];
+    if (!isCxProfile(deepCleanProfile)) cost += refineAdd[expertRefinementMode];
     if (deepCleanProfile === "max" && deepCleanMicroTextureJitter) cost += 1;
     // Adaptive CX Remint runs repeated real-detector probes — reflect that.
-    if (deepCleanProfile === "max-cx-remint" && cxEngineMode === "adaptive") cost += 2;
+    if (isCxProfile(deepCleanProfile) && cxEngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
   }, [
@@ -595,18 +602,18 @@ export default function MintApp() {
         profile: deepCleanProfile,
         outputMode: deepCleanOutputMode,
         microTextureJitter: deepCleanProfile === "max" && deepCleanMicroTextureJitter,
-        expertRefinement:
-          deepCleanProfile === "max-cx-remint" ? undefined : buildExpertRefinementSettings(),
-        cxRemint:
-          deepCleanProfile === "max-cx-remint"
-            ? {
-                engineMode: cxEngineMode,
-                qualityFloor: cxQualityFloor,
-                acquisition: "balanced",
-                iphoneExif: cxIphoneExif,
-                device: cxDevice
-              }
-            : undefined
+        expertRefinement: isCxProfile(deepCleanProfile)
+          ? undefined
+          : buildExpertRefinementSettings(),
+        cxRemint: isCxProfile(deepCleanProfile)
+          ? {
+              engineMode: cxEngineMode,
+              qualityFloor: cxQualityFloor,
+              acquisition: "balanced",
+              iphoneExif: cxIphoneExif,
+              device: cxDevice
+            }
+          : undefined
       });
       createdJob = job;
       setDeepCleanJob(job);
@@ -635,7 +642,7 @@ export default function MintApp() {
   function chooseDeepCleanProfile(profile: MintDeepCleanProfile) {
     setDeepCleanProfile(profile);
     if (profile !== "max") setDeepCleanMicroTextureJitter(false);
-    if (profile === "max-cx-remint") {
+    if (isCxProfile(profile)) {
       // CX Remint outputs a stripped, camera-re-acquired JPEG; expert refinement
       // and the seal-by-default do not apply.
       setDeepCleanOutputMode("stripped");
@@ -1455,7 +1462,8 @@ export default function MintApp() {
                         <option value="max-mint">Max Mint</option>
                         <option value="max-remint">Max ReMint</option>
                         <option value="max-optimised-remint">Max Optimised ReMint</option>
-                        <option value="max-cx-remint">CX Remint (recommended)</option>
+                        <option value="max-cx-remint">CX Remint (non-generative)</option>
+                        <option value="max-cx-remint-v2">CX Remint v2 · Deep (removes SynthID)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -1494,7 +1502,7 @@ export default function MintApp() {
                     </div>
                   ) : null}
 
-                  {deepCleanProfile === "max-cx-remint" ? (
+                  {isCxProfile(deepCleanProfile) ? (
                     <div className="rm-cx-panel">
                       <div className="rm-field">
                         <span className="rm-field-label">Mode</span>
@@ -1580,10 +1588,9 @@ export default function MintApp() {
                       ) : null}
 
                       <div className="rm-disc-note">
-                        CX Remint is non-generative: it breaks the SynthID / diffusion fingerprint by
-                        resampling and re-acquires a real-camera signature — so it removes the
-                        false-flag without stamping a new one (the trap that re-flagged Max Mint).
-                        Output never drops below 896px — always sharper than the competitor's free tier.
+                        {deepCleanProfile === "max-cx-remint-v2"
+                          ? "CX Remint v2 (Deep) regenerates the frame to actually remove Google SynthID — the one thing non-generative passes can't do — then launders off the diffusion fingerprint with resampling + spectral reshaping and re-acquires a real-camera signature. Use this when the image is SynthID-watermarked (flagged as “made with Google AI”). Heavier quality trade than v1, but it clears the watermark."
+                          : "CX Remint is non-generative: it breaks the diffusion fingerprint by resampling and re-acquires a real-camera signature without stamping a new one. Note: it does NOT remove Google SynthID — if the image is SynthID-watermarked, use v2 (Deep). Output never drops below 896px."}
                       </div>
                     </div>
                   ) : null}
@@ -1599,7 +1606,7 @@ export default function MintApp() {
 
                   {deepCleanProfile !== "max-remint" &&
                   deepCleanProfile !== "max-optimised-remint" &&
-                  deepCleanProfile !== "max-cx-remint" ? (
+                  !isCxProfile(deepCleanProfile) ? (
                     <details className="rm-disc">
                       <summary>
                         <SlidersHorizontal size={15} aria-hidden="true" /> Expert refinement
