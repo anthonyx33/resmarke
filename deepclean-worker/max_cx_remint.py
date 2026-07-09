@@ -132,6 +132,15 @@ DEFAULT_SETTINGS = {
     # general "looks-AI" classifier. Honest limit: the content is genuinely
     # AI-generated, so this reduces but may not zero such a detector.
     "realism_boost": 0.0,                 # v4 sets ~0.35 (0..1)
+    # --- v5: decouple process resolution from OUTPUT resolution ---------------
+    # The fingerprint dies best at low resolution, but the delivered image must
+    # meet a minimum size (>=1080). Process at the (low) quality-floor for
+    # maximum removal, THEN upscale to output_upscale_to. Upscaling is
+    # interpolation -- it cannot recreate the destroyed fingerprint, so it does
+    # NOT re-introduce detection; it only costs sharpness, which the enhance pass
+    # (Lanczos + unsharp + fresh sensor grain) restores. None = ship at floor.
+    "output_upscale_to": None,            # v5 sets e.g. 1440
+    "upscale_enhance_strength": 0.5,
     # Final camera-like JPEG (a real edited iPhone JPEG, not a diffusion PNG).
     "jpeg_quality": 92,
     "jpeg_subsampling": "4:2:0",
@@ -182,6 +191,11 @@ def normalize_cx_remint_settings(settings):
     cfg["color_restore_method"] = method if method in ("mean_std", "histogram") else "mean_std"
     cfg["sharpen_percent"] = int(_clamp(sub.get("sharpen_percent", cfg["sharpen_percent"]), 0, 200))
     cfg["realism_boost"] = float(_clamp(sub.get("realism_boost", cfg["realism_boost"]), 0.0, 1.0))
+    if sub.get("output_upscale_to") is not None:
+        cfg["output_upscale_to"] = int(_clamp(sub["output_upscale_to"], 256, 8192))
+    else:
+        cfg["output_upscale_to"] = None
+    cfg["upscale_enhance_strength"] = float(_clamp(sub.get("upscale_enhance_strength", cfg["upscale_enhance_strength"]), 0.0, 1.0))
 
     cfg["jpeg_quality"] = int(_clamp(sub.get("jpeg_quality", cfg["jpeg_quality"]), 60, 100))
     sub_sampling = sub.get("jpeg_subsampling", cfg["jpeg_subsampling"])
@@ -335,6 +349,23 @@ def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_ext
             "strength": cfg["color_restore_strength"],
         }
 
+    # v5 output upscale: process happened at the (low) floor for maximum
+    # fingerprint removal; now scale up to the delivered resolution and enhance.
+    # Done as the LAST pixel step so EXIF dimensions below match the output.
+    process_long_edge = max(final_image.size)
+    if cfg["output_upscale_to"] and cfg["output_upscale_to"] > process_long_edge:
+        upscale_rng = np.random.default_rng(_seed(creator_id, seed_extra, final_image.size, 700))
+        final_image = _upscale_enhance(
+            final_image, cfg["output_upscale_to"], cfg["upscale_enhance_strength"], upscale_rng
+        )
+        report["layers"]["output_upscale"] = {
+            "process_long_edge": process_long_edge,
+            "output_long_edge": max(final_image.size),
+            "method": "lanczos + unsharp + fresh_sensor_grain",
+            "reintroduces_fingerprint": False,
+            "non_generative": True,
+        }
+
     exif_report = {"enabled": False}
     if cfg["iphone_exif"]:
         _, exif_report = iphone_exif.build_iphone_exif(
@@ -475,6 +506,25 @@ def _color_transfer(source, reference, strength):
         matched = (s[..., c] - s_mean) * (r_std / s_std) + r_mean
         out[..., c] = s[..., c] * (1.0 - strength) + matched * strength
     return Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def _upscale_enhance(image, target_long, strength, rng):
+    """Upscale to `target_long` (long edge) and restore perceived quality without
+    a GPU/neural SR. Lanczos gives the sharpest classical resample; a light
+    unsharp recovers edge crispness; a touch of fresh sensor grain stops the
+    result looking plastic-soft (and keeps a camera high-frequency signature at
+    the OUTPUT resolution). Interpolation cannot recreate the destroyed diffusion
+    fingerprint, so this does not re-introduce detection."""
+    w, h = image.size
+    long_edge = max(w, h)
+    if target_long <= long_edge:
+        return image
+    scale = target_long / float(long_edge)
+    up = image.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.Resampling.LANCZOS)
+    if strength > 0:
+        up = up.filter(ImageFilter.UnsharpMask(radius=1.6, percent=int(round(70 * strength)), threshold=2))
+        up = apply_acquisition_noise_rgb(up, rng, amount=0.12 * strength)
+    return up.convert("RGB")
 
 
 def _histogram_match(source, reference, strength):
@@ -662,6 +712,7 @@ def _public_settings(cfg):
         "spectral_reshape", "spectral_strength", "spectral_alpha", "spectral_noise_floor",
         "color_restore", "color_restore_strength", "color_restore_method",
         "sharpen_percent", "realism_boost",
+        "output_upscale_to", "upscale_enhance_strength",
     )}
 
 

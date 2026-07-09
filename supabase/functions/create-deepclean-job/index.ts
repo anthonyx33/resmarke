@@ -20,7 +20,8 @@ type CreateJobBody = {
     | "max-cx-remint"
     | "max-cx-remint-v2"
     | "max-cx-remint-v3"
-    | "max-cx-remint-v4";
+    | "max-cx-remint-v4"
+    | "max-cx-remint-v5";
   micro_texture_jitter?: boolean;
   expert_refinement?: unknown;
   // CX Remint is the only Max profile with user-facing options (quality-floor
@@ -60,7 +61,8 @@ Deno.serve(async (request) => {
         "max-cx-remint",
         "max-cx-remint-v2",
         "max-cx-remint-v3",
-        "max-cx-remint-v4"
+        "max-cx-remint-v4",
+        "max-cx-remint-v5"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -109,6 +111,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "max-cx-remint-v4"
         ? "max"
+        : requestedProfile === "max-cx-remint-v5"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -120,7 +124,8 @@ Deno.serve(async (request) => {
       requestedProfile === "max-cx-remint" ||
       requestedProfile === "max-cx-remint-v2" ||
       requestedProfile === "max-cx-remint-v3" ||
-      requestedProfile === "max-cx-remint-v4"
+      requestedProfile === "max-cx-remint-v4" ||
+      requestedProfile === "max-cx-remint-v5"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -144,6 +149,8 @@ Deno.serve(async (request) => {
         ? cxRemintExpertRefinement(body.cx_remint, "deep-color")
         : requestedProfile === "max-cx-remint-v4"
         ? cxRemintExpertRefinement(body.cx_remint, "deep-hist")
+        : requestedProfile === "max-cx-remint-v5"
+        ? cxRemintExpertRefinement(body.cx_remint, "deep-hist-up")
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -199,6 +206,8 @@ Deno.serve(async (request) => {
               ? "max-cx-remint-v3"
               : requestedProfile === "max-cx-remint-v4"
               ? "max-cx-remint-v4"
+              : requestedProfile === "max-cx-remint-v5"
+              ? "max-cx-remint-v5"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -398,7 +407,7 @@ function contentRepairLabExpertRefinement() {
 
 function cxRemintExpertRefinement(
   input: unknown,
-  tier: "plain" | "deep" | "deep-color" | "deep-hist"
+  tier: "plain" | "deep" | "deep-color" | "deep-hist" | "deep-hist-up"
 ) {
   // CX Remint: non-generative de-flag + camera re-acquisition. User options are
   // whitelisted here so the client can never smuggle an out-of-range value or a
@@ -411,9 +420,13 @@ function cxRemintExpertRefinement(
   //   deep-hist   (v4) - deep + FULL histogram tone match (fixes the S-curve
   //                      over-contrast v3 left), lower unsharp, final tone lock
   //                      and a camera-realism boost. The recommended tier.
-  const deep = tier === "deep" || tier === "deep-color" || tier === "deep-hist";
-  const colorRestore = tier === "deep-color" || tier === "deep-hist";
-  const histogram = tier === "deep-hist";
+  const deep = tier !== "plain";
+  const colorRestore = tier === "deep-color" || tier === "deep-hist" || tier === "deep-hist-up";
+  const histogram = tier === "deep-hist" || tier === "deep-hist-up";
+  // v5: process at the lowest floor for maximum fingerprint removal, then
+  // upscale the delivered image back up (interpolation can't re-add the removed
+  // fingerprint) so the output still meets the >=1080 size requirement.
+  const upscale = tier === "deep-hist-up";
   const raw = isRecord(input) ? input : {};
   const engineModes = ["template", "adaptive"];
   const qualityFloors = ["studio", "high", "balanced", "strong", "floor"];
@@ -474,7 +487,10 @@ function cxRemintExpertRefinement(
       // sharpen, and a camera-realism boost aimed at general AI classifiers.
       color_restore_method: histogram ? "histogram" : "mean_std",
       sharpen_percent: histogram ? 24 : 42,
-      realism_boost: histogram ? 0.35 : 0.0
+      realism_boost: histogram ? 0.35 : 0.0,
+      // v5: deliver a >=1080 image even though removal ran at the low floor.
+      output_upscale_to: upscale ? 1440 : null,
+      upscale_enhance_strength: 0.5
     }
   };
 }

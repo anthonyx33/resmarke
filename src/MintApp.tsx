@@ -80,14 +80,16 @@ type MintDeepCleanProfile =
   | "max-cx-remint"
   | "max-cx-remint-v2"
   | "max-cx-remint-v3"
-  | "max-cx-remint-v4";
+  | "max-cx-remint-v4"
+  | "max-cx-remint-v5";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
     profile === "max-cx-remint" ||
     profile === "max-cx-remint-v2" ||
     profile === "max-cx-remint-v3" ||
-    profile === "max-cx-remint-v4"
+    profile === "max-cx-remint-v4" ||
+    profile === "max-cx-remint-v5"
   );
 }
 
@@ -95,7 +97,8 @@ function isCxDeepProfile(profile: MintDeepCleanProfile): boolean {
   return (
     profile === "max-cx-remint-v2" ||
     profile === "max-cx-remint-v3" ||
-    profile === "max-cx-remint-v4"
+    profile === "max-cx-remint-v4" ||
+    profile === "max-cx-remint-v5"
   );
 }
 
@@ -312,10 +315,11 @@ export default function MintApp() {
       "max-optimised-remint": 12,
       // Non-generative, so no GPU regen bill — priced below the regen profiles.
       "max-cx-remint": 10,
-      // v2/v3/v4 regenerate on GPU (to break SynthID) then launder — priciest.
+      // v2/v3/v4/v5 regenerate on GPU (to break SynthID) then launder — priciest.
       "max-cx-remint-v2": 13,
       "max-cx-remint-v3": 13,
-      "max-cx-remint-v4": 13
+      "max-cx-remint-v4": 13,
+      "max-cx-remint-v5": 13
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -697,9 +701,13 @@ export default function MintApp() {
       setExpertRefinementTechniques(cloneExpertPreset("off"));
       // Deep (v2/v3/v4) regenerate, and the flux fingerprint only dies at the
       // lower resolutions (live tests: clean at ~960px, still flagged at
-      // 1280px). Snap the quality-floor slider to the Strong (960px) sweet spot
-      // when switching to a Deep profile so the default actually clears Hive.
-      if (isCxDeepProfile(profile)) {
+      // 1280px). Snap the quality-floor slider to the Strong (960px) sweet spot.
+      // v5 processes even lower (Floor 896, maximum removal) because it upscales
+      // the OUTPUT back to >=1080 afterwards, so the floor is free of the size
+      // requirement.
+      if (profile === "max-cx-remint-v5") {
+        setCxQualityFloor("floor");
+      } else if (isCxDeepProfile(profile)) {
         setCxQualityFloor("strong");
       }
       return;
@@ -1517,7 +1525,8 @@ export default function MintApp() {
                         <option value="max-cx-remint">CX Remint (non-generative)</option>
                         <option value="max-cx-remint-v2">CX Remint v2 · Deep (removes SynthID)</option>
                         <option value="max-cx-remint-v3">CX Remint v3 · Deep + colour restore</option>
-                        <option value="max-cx-remint-v4">CX Remint v4 · Deep + tone match + realism (recommended)</option>
+                        <option value="max-cx-remint-v4">CX Remint v4 · Deep + tone match + realism</option>
+                        <option value="max-cx-remint-v5">CX Remint v5 · Max removal + upscale to 1080+ (recommended)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -1714,8 +1723,10 @@ export default function MintApp() {
                       ) : null}
 
                       <div className="rm-disc-note">
-                        {deepCleanProfile === "max-cx-remint-v4"
-                          ? "CX Remint v4 (recommended) regenerates to remove Google SynthID, then FULL-histogram tone-matches the result to the original — fixing the over-contrast/blown-lights v3 still had — with softer sharpening, a final tone lock and a camera-realism pass. Keep the quality floor at Strong (~960px) and reframe on (it's the biggest fingerprint lever). Honest limit: a general “this looks AI” classifier (e.g. TruthScan basic) may still flag it, because the content genuinely is AI-generated — zeroing that out needs quality-destroying levels of change we deliberately avoid."
+                        {deepCleanProfile === "max-cx-remint-v5"
+                          ? "CX Remint v5 (recommended) processes at the LOWEST floor (896px) for maximum fingerprint removal, then upscales the delivered image back to ~1440px with sharpening + fresh grain — so you get both max removal AND a 1080+ output. Upscaling can't re-add the removed fingerprint, so detection stays clean. Everything from v4 (SynthID regen, histogram tone match, realism) is included. Detector scores are stochastic run-to-run — for CONSISTENT clears, wire the live detector and use Adaptive mode."
+                          : deepCleanProfile === "max-cx-remint-v4"
+                          ? "CX Remint v4 regenerates to remove SynthID, full-histogram tone-matches to the original (fixes over-contrast), with realism boost. v5 adds max-removal-at-low-res + upscale-back — prefer v5 for the 1080+ requirement."
                           : deepCleanProfile === "max-cx-remint-v3"
                           ? "CX Remint v3 regenerates to remove SynthID then restores the original's colour palette (mean/std). v4 adds full tone matching + realism — prefer v4 unless A/B testing."
                           : deepCleanProfile === "max-cx-remint-v2"

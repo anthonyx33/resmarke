@@ -80,7 +80,8 @@ export async function createDeepCleanJob(params: {
     | "max-cx-remint"
     | "max-cx-remint-v2"
     | "max-cx-remint-v3"
-    | "max-cx-remint-v4";
+    | "max-cx-remint-v4"
+    | "max-cx-remint-v5";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;
