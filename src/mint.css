@@ -1441,6 +1441,15 @@ html[data-theme="dark"] .rm-grad {
   cursor: pointer;
   accent-color: var(--rm-mint);
 }
+.rm-cx-subpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 13px;
+  border-radius: 10px;
+  border: 1px solid var(--rm-border);
+  background: var(--rm-surface);
+}
 .rm-range-ends {
   display: flex;
   justify-content: space-between;

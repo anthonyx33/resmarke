@@ -19,7 +19,8 @@ type CreateJobBody = {
     | "max-content-repair-lab"
     | "max-cx-remint"
     | "max-cx-remint-v2"
-    | "max-cx-remint-v3";
+    | "max-cx-remint-v3"
+    | "max-cx-remint-v4";
   micro_texture_jitter?: boolean;
   expert_refinement?: unknown;
   // CX Remint is the only Max profile with user-facing options (quality-floor
@@ -58,7 +59,8 @@ Deno.serve(async (request) => {
         "max-content-repair-lab",
         "max-cx-remint",
         "max-cx-remint-v2",
-        "max-cx-remint-v3"
+        "max-cx-remint-v3",
+        "max-cx-remint-v4"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -105,6 +107,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "max-cx-remint-v3"
         ? "max"
+        : requestedProfile === "max-cx-remint-v4"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -115,7 +119,8 @@ Deno.serve(async (request) => {
       requestedProfile === "max-content-repair-lab" ||
       requestedProfile === "max-cx-remint" ||
       requestedProfile === "max-cx-remint-v2" ||
-      requestedProfile === "max-cx-remint-v3"
+      requestedProfile === "max-cx-remint-v3" ||
+      requestedProfile === "max-cx-remint-v4"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -137,6 +142,8 @@ Deno.serve(async (request) => {
         ? cxRemintExpertRefinement(body.cx_remint, "deep")
         : requestedProfile === "max-cx-remint-v3"
         ? cxRemintExpertRefinement(body.cx_remint, "deep-color")
+        : requestedProfile === "max-cx-remint-v4"
+        ? cxRemintExpertRefinement(body.cx_remint, "deep-hist")
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -190,6 +197,8 @@ Deno.serve(async (request) => {
               ? "max-cx-remint-v2"
               : requestedProfile === "max-cx-remint-v3"
               ? "max-cx-remint-v3"
+              : requestedProfile === "max-cx-remint-v4"
+              ? "max-cx-remint-v4"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -387,7 +396,10 @@ function contentRepairLabExpertRefinement() {
   };
 }
 
-function cxRemintExpertRefinement(input: unknown, tier: "plain" | "deep" | "deep-color") {
+function cxRemintExpertRefinement(
+  input: unknown,
+  tier: "plain" | "deep" | "deep-color" | "deep-hist"
+) {
   // CX Remint: non-generative de-flag + camera re-acquisition. User options are
   // whitelisted here so the client can never smuggle an out-of-range value or a
   // sub-768 output floor to the worker.
@@ -395,12 +407,13 @@ function cxRemintExpertRefinement(input: unknown, tier: "plain" | "deep" | "deep
   // tier:
   //   plain       (v1) - non-generative only. Does NOT remove SynthID.
   //   deep        (v2) - regenerate (breaks SynthID) + FFT spectral reshape.
-  //   deep-color  (v3) - deep + colour restoration from the original (fixes the
-  //                      palette/quality drop the regen causes). Live tests show
-  //                      the fingerprint dies around ~960px, so v3 defaults the
-  //                      floor to "strong" when the client leaves it at default.
-  const deep = tier === "deep" || tier === "deep-color";
-  const colorRestore = tier === "deep-color";
+  //   deep-color  (v3) - deep + mean/std colour restoration from the original.
+  //   deep-hist   (v4) - deep + FULL histogram tone match (fixes the S-curve
+  //                      over-contrast v3 left), lower unsharp, final tone lock
+  //                      and a camera-realism boost. The recommended tier.
+  const deep = tier === "deep" || tier === "deep-color" || tier === "deep-hist";
+  const colorRestore = tier === "deep-color" || tier === "deep-hist";
+  const histogram = tier === "deep-hist";
   const raw = isRecord(input) ? input : {};
   const engineModes = ["template", "adaptive"];
   const qualityFloors = ["studio", "high", "balanced", "strong", "floor"];
@@ -454,9 +467,14 @@ function cxRemintExpertRefinement(input: unknown, tier: "plain" | "deep" | "deep
       regen_level: 8,
       spectral_reshape: deep,
       spectral_strength: 0.3,
-      // v3 only: restore the original's palette after regen.
+      // v3/v4: restore the original's palette after regen.
       color_restore: colorRestore,
-      color_restore_strength: 0.8
+      color_restore_strength: 0.8,
+      // v4 only: full histogram tone match (fixes over-contrast), softer
+      // sharpen, and a camera-realism boost aimed at general AI classifiers.
+      color_restore_method: histogram ? "histogram" : "mean_std",
+      sharpen_percent: histogram ? 24 : 42,
+      realism_boost: histogram ? 0.35 : 0.0
     }
   };
 }

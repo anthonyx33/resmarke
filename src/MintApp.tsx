@@ -62,7 +62,12 @@ import {
   updateAdminRunpodEndpoint,
   type AdminRunpodEndpoint
 } from "./lib/adminRunpodClient";
-import { reframeImageFile } from "./lib/reframe";
+import {
+  reframeImageFile,
+  reframeOptionsFor,
+  REFRAME_PRESETS,
+  type ReframePreset
+} from "./lib/reframe";
 import { supabase } from "./lib/supabase";
 
 type ProcessingState = "idle" | "processing" | "done" | "error";
@@ -74,13 +79,23 @@ type MintDeepCleanProfile =
   | "max-optimised-remint"
   | "max-cx-remint"
   | "max-cx-remint-v2"
-  | "max-cx-remint-v3";
+  | "max-cx-remint-v3"
+  | "max-cx-remint-v4";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
     profile === "max-cx-remint" ||
     profile === "max-cx-remint-v2" ||
-    profile === "max-cx-remint-v3"
+    profile === "max-cx-remint-v3" ||
+    profile === "max-cx-remint-v4"
+  );
+}
+
+function isCxDeepProfile(profile: MintDeepCleanProfile): boolean {
+  return (
+    profile === "max-cx-remint-v2" ||
+    profile === "max-cx-remint-v3" ||
+    profile === "max-cx-remint-v4"
   );
 }
 
@@ -256,8 +271,11 @@ export default function MintApp() {
   const [cxEngineMode, setCxEngineMode] = useState<CxRemintEngineMode>("template");
   const [cxIphoneExif, setCxIphoneExif] = useState(true);
   const [cxDevice, setCxDevice] = useState<CxRemintDevice>("auto");
-  // Browser-side reframe (zoom + tilt + shift) applied before upload. No GPU.
+  // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
+  const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
+  const [cxReframeZoom, setCxReframeZoom] = useState(REFRAME_PRESETS.balanced.zoom);
+  const [cxReframeTilt, setCxReframeTilt] = useState(REFRAME_PRESETS.balanced.rotationDeg);
   const [deepCleanStatus, setDeepCleanStatus] = useState("");
   const [deepCleanJob, setDeepCleanJob] = useState<DeepCleanJob | null>(null);
   const deepCleanPollRef = useRef<number | null>(null);
@@ -294,9 +312,10 @@ export default function MintApp() {
       "max-optimised-remint": 12,
       // Non-generative, so no GPU regen bill — priced below the regen profiles.
       "max-cx-remint": 10,
-      // v2/v3 regenerate on GPU (to break SynthID) then launder — priciest.
+      // v2/v3/v4 regenerate on GPU (to break SynthID) then launder — priciest.
       "max-cx-remint-v2": 13,
-      "max-cx-remint-v3": 13
+      "max-cx-remint-v3": 13,
+      "max-cx-remint-v4": 13
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -632,7 +651,13 @@ export default function MintApp() {
       if (isCxProfile(deepCleanProfile) && cxReframe) {
         try {
           setDeepCleanStatus("Reframing (browser-side)...");
-          uploadFile = await reframeImageFile(file);
+          uploadFile = await reframeImageFile(
+            file,
+            reframeOptionsFor(cxReframePreset, {
+              zoom: cxReframeZoom,
+              rotationDeg: cxReframeTilt
+            })
+          );
         } catch {
           uploadFile = file; // reframe is best-effort; never block the job
         }
@@ -670,11 +695,11 @@ export default function MintApp() {
       setExpertRefinementIntensity(100);
       setExpertRefinementPreserveLines(true);
       setExpertRefinementTechniques(cloneExpertPreset("off"));
-      // Deep (v2/v3) regenerate, and the flux fingerprint only dies at the lower
-      // resolutions (live tests: clean at ~960px, still flagged at 1280px). Snap
-      // the quality-floor slider to the Strong (960px) sweet spot when switching
-      // to a Deep profile so the default actually clears Hive.
-      if (profile === "max-cx-remint-v2" || profile === "max-cx-remint-v3") {
+      // Deep (v2/v3/v4) regenerate, and the flux fingerprint only dies at the
+      // lower resolutions (live tests: clean at ~960px, still flagged at
+      // 1280px). Snap the quality-floor slider to the Strong (960px) sweet spot
+      // when switching to a Deep profile so the default actually clears Hive.
+      if (isCxDeepProfile(profile)) {
         setCxQualityFloor("strong");
       }
       return;
@@ -1491,7 +1516,8 @@ export default function MintApp() {
                         <option value="max-optimised-remint">Max Optimised ReMint</option>
                         <option value="max-cx-remint">CX Remint (non-generative)</option>
                         <option value="max-cx-remint-v2">CX Remint v2 · Deep (removes SynthID)</option>
-                        <option value="max-cx-remint-v3">CX Remint v3 · Deep + colour restore (recommended)</option>
+                        <option value="max-cx-remint-v3">CX Remint v3 · Deep + colour restore</option>
+                        <option value="max-cx-remint-v4">CX Remint v4 · Deep + tone match + realism (recommended)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -1604,8 +1630,68 @@ export default function MintApp() {
                         <span className="rm-switch-track" aria-hidden="true">
                           <span className="rm-switch-thumb" />
                         </span>
-                        <span>Reframe: subtle zoom + tilt (browser-side, no GPU)</span>
+                        <span>Reframe: zoom + tilt + shear (browser-side, no GPU)</span>
                       </label>
+
+                      {cxReframe ? (
+                        <div className="rm-cx-subpanel">
+                          <div className="rm-field">
+                            <span className="rm-field-label">Reframe strength</span>
+                            <div className="rm-seg rm-seg-sm" role="radiogroup" aria-label="Reframe strength">
+                              {(["subtle", "balanced", "strong"] as ReframePreset[]).map((p) => (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={cxReframePreset === p}
+                                  className={cxReframePreset === p ? "is-active" : ""}
+                                  onClick={() => {
+                                    setCxReframePreset(p);
+                                    setCxReframeZoom(REFRAME_PRESETS[p].zoom);
+                                    setCxReframeTilt(REFRAME_PRESETS[p].rotationDeg);
+                                  }}
+                                >
+                                  {p === "subtle" ? "Subtle" : p === "balanced" ? "Balanced" : "Strong"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rm-field">
+                            <span className="rm-field-label">
+                              Tilt · {cxReframeTilt.toFixed(1)}° (the part that breaks the fingerprint)
+                            </span>
+                            <input
+                              className="rm-cx-slider"
+                              type="range"
+                              min={0}
+                              max={5}
+                              step={0.1}
+                              value={cxReframeTilt}
+                              onChange={(event) => setCxReframeTilt(Number(event.target.value))}
+                            />
+                          </div>
+
+                          <div className="rm-field">
+                            <span className="rm-field-label">
+                              Zoom · {Math.round((cxReframeZoom - 1) * 100)}% crop (keep low for quality)
+                            </span>
+                            <input
+                              className="rm-cx-slider"
+                              type="range"
+                              min={1.0}
+                              max={1.1}
+                              step={0.005}
+                              value={cxReframeZoom}
+                              onChange={(event) => setCxReframeZoom(Number(event.target.value))}
+                            />
+                            <p className="rm-hint">
+                              Zoom auto-raises to whatever the tilt needs to avoid empty corners, so a
+                              low zoom with high tilt still fills the frame.
+                            </p>
+                          </div>
+                        </div>
+                      ) : null}
 
                       {cxIphoneExif ? (
                         <label className="rm-field">
@@ -1628,8 +1714,10 @@ export default function MintApp() {
                       ) : null}
 
                       <div className="rm-disc-note">
-                        {deepCleanProfile === "max-cx-remint-v3"
-                          ? "CX Remint v3 (recommended) regenerates to remove Google SynthID, then restores the ORIGINAL's colour palette onto the result — fixing the washed-out look regeneration causes — before laundering off the diffusion fingerprint. Keep the quality floor at Strong (~960px): the fingerprint clears there but survives at higher resolutions. Note: a general “this looks AI” classifier may still flag it, because the underlying content genuinely is AI-generated — that's a ceiling no watermark removal can fully cross."
+                        {deepCleanProfile === "max-cx-remint-v4"
+                          ? "CX Remint v4 (recommended) regenerates to remove Google SynthID, then FULL-histogram tone-matches the result to the original — fixing the over-contrast/blown-lights v3 still had — with softer sharpening, a final tone lock and a camera-realism pass. Keep the quality floor at Strong (~960px) and reframe on (it's the biggest fingerprint lever). Honest limit: a general “this looks AI” classifier (e.g. TruthScan basic) may still flag it, because the content genuinely is AI-generated — zeroing that out needs quality-destroying levels of change we deliberately avoid."
+                          : deepCleanProfile === "max-cx-remint-v3"
+                          ? "CX Remint v3 regenerates to remove SynthID then restores the original's colour palette (mean/std). v4 adds full tone matching + realism — prefer v4 unless A/B testing."
                           : deepCleanProfile === "max-cx-remint-v2"
                           ? "CX Remint v2 (Deep) regenerates the frame to remove Google SynthID, then launders off the diffusion fingerprint with resampling + spectral reshaping. v3 adds colour restoration on top — prefer v3 unless you're A/B testing."
                           : "CX Remint is non-generative: it breaks the diffusion fingerprint by resampling and re-acquires a real-camera signature without stamping a new one. Note: it does NOT remove Google SynthID — if the image is SynthID-watermarked, use v3 (Deep). Output never drops below 896px."}

@@ -79,7 +79,8 @@ export async function createDeepCleanJob(params: {
     | "max-content-repair-lab"
     | "max-cx-remint"
     | "max-cx-remint-v2"
-    | "max-cx-remint-v3";
+    | "max-cx-remint-v3"
+    | "max-cx-remint-v4";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;

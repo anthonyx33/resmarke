@@ -56,6 +56,7 @@ from PIL import Image, ImageFilter
 from neural_texture import compare_images
 from photo_naturalization import (
     apply_acquisition_noise_rgb,
+    apply_lens_character,
     apply_micro_vignette,
     apply_optical_pro_capture,
     subpixel_translate,
@@ -120,6 +121,17 @@ DEFAULT_SETTINGS = {
     # pattern, so this restores the palette without re-importing the watermark.
     "color_restore": False,           # v3 sets True
     "color_restore_strength": 0.8,
+    # v4: "histogram" matches the ORIGINAL's full per-channel tone distribution
+    # (fixes the S-curve over-contrast + blown lights the regen adds, which
+    # mean/std cannot). "mean_std" is the v3 behaviour.
+    "color_restore_method": "mean_std",   # v4 sets "histogram"
+    # v4: unsharp is the main contrast-adder in the laundering; lower it so the
+    # restored tone is not re-hardened. v1-v3 effectively used 42.
+    "sharpen_percent": 42,                # v4 sets ~24
+    # v4: extra camera realism (grain + chroma aberration + vignette) to push a
+    # general "looks-AI" classifier. Honest limit: the content is genuinely
+    # AI-generated, so this reduces but may not zero such a detector.
+    "realism_boost": 0.0,                 # v4 sets ~0.35 (0..1)
     # Final camera-like JPEG (a real edited iPhone JPEG, not a diffusion PNG).
     "jpeg_quality": 92,
     "jpeg_subsampling": "4:2:0",
@@ -166,6 +178,10 @@ def normalize_cx_remint_settings(settings):
     cfg["spectral_noise_floor"] = float(_clamp(sub.get("spectral_noise_floor", cfg["spectral_noise_floor"]), 0.0, 0.2))
     cfg["color_restore"] = bool(sub.get("color_restore", cfg["color_restore"]))
     cfg["color_restore_strength"] = float(_clamp(sub.get("color_restore_strength", cfg["color_restore_strength"]), 0.0, 1.0))
+    method = str(sub.get("color_restore_method", cfg["color_restore_method"]))
+    cfg["color_restore_method"] = method if method in ("mean_std", "histogram") else "mean_std"
+    cfg["sharpen_percent"] = int(_clamp(sub.get("sharpen_percent", cfg["sharpen_percent"]), 0, 200))
+    cfg["realism_boost"] = float(_clamp(sub.get("realism_boost", cfg["realism_boost"]), 0.0, 1.0))
 
     cfg["jpeg_quality"] = int(_clamp(sub.get("jpeg_quality", cfg["jpeg_quality"]), 60, 100))
     sub_sampling = sub.get("jpeg_subsampling", cfg["jpeg_subsampling"])
@@ -226,9 +242,14 @@ def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_ext
         # (global colour stats only -> restores nano-banana look, no SynthID
         # re-import). Runs on the regen output before laundering.
         if cfg["color_restore"]:
-            base = _color_transfer(base, original, cfg["color_restore_strength"])
+            if cfg["color_restore_method"] == "histogram":
+                base = _histogram_match(base, original, cfg["color_restore_strength"])
+                restore_method = "per_channel_histogram_match_to_original"
+            else:
+                base = _color_transfer(base, original, cfg["color_restore_strength"])
+                restore_method = "per_channel_mean_std_match_to_original"
             report["layers"]["color_restore"] = {
-                "method": "per_channel_mean_std_match_to_original",
+                "method": restore_method,
                 "strength": cfg["color_restore_strength"],
                 "reimports_synthid": False,
             }
@@ -295,6 +316,24 @@ def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_ext
 
     final_image = chosen["image"]
     final_metrics = chosen["metrics"]
+
+    # v4 final tone lock: the laundering (unsharp/optical/spectral) re-hardens
+    # contrast AFTER the post-regen colour restore, which is what still reads as
+    # "over-contrasted". Re-match the finished frame's tone to the original as
+    # the LAST pixel step so the output tone equals the creator's, regardless of
+    # what the laundering did. Preserves the added grain (per-pixel remap only).
+    if cfg["color_restore"] and cfg["pre_regen"]:
+        original_ref = original if original.size == final_image.size else original.resize(
+            final_image.size, Image.Resampling.LANCZOS
+        )
+        if cfg["color_restore_method"] == "histogram":
+            final_image = _histogram_match(final_image, original_ref, cfg["color_restore_strength"])
+        else:
+            final_image = _color_transfer(final_image, original_ref, cfg["color_restore_strength"])
+        report["layers"]["final_tone_lock"] = {
+            "method": cfg["color_restore_method"],
+            "strength": cfg["color_restore_strength"],
+        }
 
     exif_report = {"enabled": False}
     if cfg["iphone_exif"]:
@@ -384,6 +423,16 @@ def _process_once(base, rung, seed, cfg):
     if rung["vignette"] > 0:
         work = apply_micro_vignette(work, rung["vignette"])
 
+    # 7. v4 realism boost: extra sensor grain + lens chromatic aberration +
+    #    vignette, to push a general "looks-AI" classifier toward "camera". Off
+    #    unless realism_boost > 0. Honest limit: cannot make genuinely
+    #    AI-generated content read as fully real without more destruction.
+    if rung.get("realism", 0.0) > 0:
+        r = rung["realism"]
+        work = apply_lens_character(work, amount=0.35 * r)
+        work = apply_acquisition_noise_rgb(work, rng, amount=0.18 * r)
+        work = apply_micro_vignette(work, amount=0.5 * r)
+
     return work.convert("RGB")
 
 
@@ -425,6 +474,32 @@ def _color_transfer(source, reference, strength):
         r_mean, r_std = float(r[..., c].mean()), float(r[..., c].std()) + 1e-5
         matched = (s[..., c] - s_mean) * (r_std / s_std) + r_mean
         out[..., c] = s[..., c] * (1.0 - strength) + matched * strength
+    return Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def _histogram_match(source, reference, strength):
+    """Match `source`'s full per-channel tone distribution (CDF) to `reference`.
+    Unlike mean/std transfer, this corrects the tone-CURVE shape -- the S-curve
+    over-contrast and blown highlights regeneration adds -- not just the mean and
+    spread. Reference is resized to source first; only per-channel intensity
+    remapping happens (no spatial copy), so SynthID's spatial pattern is not
+    re-imported. `strength` blends toward the match (1.0 = full)."""
+    if strength <= 0.0:
+        return source
+    s = np.asarray(source)
+    ref = reference if reference.size == source.size else reference.resize(source.size, Image.Resampling.LANCZOS)
+    r = np.asarray(ref)
+    out = s.astype(np.float32).copy()
+    for c in range(3):
+        s_ch = s[..., c].ravel()
+        r_ch = r[..., c].ravel()
+        s_vals, s_inv, s_counts = np.unique(s_ch, return_inverse=True, return_counts=True)
+        r_vals, r_counts = np.unique(r_ch, return_counts=True)
+        s_cdf = np.cumsum(s_counts).astype(np.float64) / s_ch.size
+        r_cdf = np.cumsum(r_counts).astype(np.float64) / r_ch.size
+        mapped_vals = np.interp(s_cdf, r_cdf, r_vals.astype(np.float64))
+        matched = mapped_vals[s_inv].reshape(s[..., c].shape).astype(np.float32)
+        out[..., c] = s[..., c].astype(np.float32) * (1.0 - strength) + matched * strength
     return Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8), mode="RGB")
 
 
@@ -510,7 +585,8 @@ def _rung_config(index, target, preset, cfg):
         "degrid_shift": step["degrid"],
         "noise": acq["noise"] * step["noise_mult"],
         "vignette": acq["vignette"],
-        "sharpen": 42,
+        "sharpen": cfg["sharpen_percent"],
+        "realism": cfg["realism_boost"],
         "min_ssim": preset["min_ssim"],
     }
 
@@ -584,7 +660,8 @@ def _public_settings(cfg):
         "ai_threshold", "max_rungs",
         "pre_regen", "regen_level", "regen_process_cap", "regen_timeout",
         "spectral_reshape", "spectral_strength", "spectral_alpha", "spectral_noise_floor",
-        "color_restore", "color_restore_strength",
+        "color_restore", "color_restore_strength", "color_restore_method",
+        "sharpen_percent", "realism_boost",
     )}
 
 
