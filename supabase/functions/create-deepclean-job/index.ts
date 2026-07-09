@@ -16,9 +16,14 @@ type CreateJobBody = {
     | "max-optimised-remint"
     | "max-optical-pro"
     | "max-neural-texture-lab"
-    | "max-content-repair-lab";
+    | "max-content-repair-lab"
+    | "max-cx-remint";
   micro_texture_jitter?: boolean;
   expert_refinement?: unknown;
+  // CX Remint is the only Max profile with user-facing options (quality-floor
+  // slider, iPhone EXIF toggle, template/adaptive). They are validated and
+  // clamped server-side in cxRemintExpertRefinement().
+  cx_remint?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
 };
 
@@ -48,7 +53,8 @@ Deno.serve(async (request) => {
         "max-optimised-remint",
         "max-optical-pro",
         "max-neural-texture-lab",
-        "max-content-repair-lab"
+        "max-content-repair-lab",
+        "max-cx-remint"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -89,6 +95,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "max-content-repair-lab"
         ? "max"
+        : requestedProfile === "max-cx-remint"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -96,7 +104,8 @@ Deno.serve(async (request) => {
       requestedProfile === "max-optimised-remint" ||
       requestedProfile === "max-optical-pro" ||
       requestedProfile === "max-neural-texture-lab" ||
-      requestedProfile === "max-content-repair-lab"
+      requestedProfile === "max-content-repair-lab" ||
+      requestedProfile === "max-cx-remint"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -112,6 +121,8 @@ Deno.serve(async (request) => {
         ? neuralTextureLabExpertRefinement()
         : requestedProfile === "max-content-repair-lab"
         ? contentRepairLabExpertRefinement()
+        : requestedProfile === "max-cx-remint"
+        ? cxRemintExpertRefinement(body.cx_remint)
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -159,6 +170,8 @@ Deno.serve(async (request) => {
               ? "max-neural-texture-lab"
               : requestedProfile === "max-content-repair-lab"
               ? "max-content-repair-lab"
+              : requestedProfile === "max-cx-remint"
+              ? "max-cx-remint"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -213,7 +226,8 @@ function normalizeExpertRefinement(input: unknown) {
     "max-remint",
     "max-optimised-remint",
     "neural-texture-lab",
-    "content-repair-lab"
+    "content-repair-lab",
+    "max-cx-remint"
   ];
   const techniqueKeys = [
     "pixel_alignment_break",
@@ -351,6 +365,60 @@ function contentRepairLabExpertRefinement() {
       max_regions: 3,
       mask_dilation_px: 10,
       mask_feather_px: 20
+    }
+  };
+}
+
+function cxRemintExpertRefinement(input: unknown) {
+  // CX Remint: non-generative de-flag + camera re-acquisition. User options are
+  // whitelisted here so the client can never smuggle an out-of-range value or a
+  // sub-768 output floor to the worker.
+  const raw = isRecord(input) ? input : {};
+  const engineModes = ["template", "adaptive"];
+  const qualityFloors = ["studio", "high", "balanced", "strong", "floor"];
+  const acquisitions = ["conservative", "balanced", "aggressive"];
+  const devices = [
+    "auto",
+    "iphone-16-pro-max",
+    "iphone-16-pro",
+    "iphone-16",
+    "iphone-15-pro-max",
+    "iphone-15-pro",
+    "iphone-15",
+    "iphone-14-pro"
+  ];
+
+  const engineMode =
+    typeof raw.engine_mode === "string" && engineModes.includes(raw.engine_mode)
+      ? raw.engine_mode
+      : "template";
+  const qualityFloor =
+    typeof raw.quality_floor === "string" && qualityFloors.includes(raw.quality_floor)
+      ? raw.quality_floor
+      : "balanced";
+  const acquisition =
+    typeof raw.acquisition === "string" && acquisitions.includes(raw.acquisition)
+      ? raw.acquisition
+      : "balanced";
+  const device =
+    typeof raw.device === "string" && devices.includes(raw.device) ? raw.device : "auto";
+  const iphoneExif = typeof raw.iphone_exif === "boolean" ? raw.iphone_exif : true;
+
+  return {
+    mode: "max-cx-remint",
+    intensity: 100,
+    preserve_straight_lines: true,
+    techniques: {},
+    max_cx_remint: {
+      engine_mode: engineMode,
+      quality_floor: qualityFloor,
+      acquisition,
+      iphone_exif: iphoneExif,
+      device,
+      jpeg_quality: 92,
+      jpeg_subsampling: "4:2:0",
+      ai_threshold: 0.5,
+      max_rungs: 5
     }
   };
 }

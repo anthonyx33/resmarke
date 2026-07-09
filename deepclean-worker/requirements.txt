@@ -3,6 +3,7 @@ requests>=2.32,<3
 Pillow>=10,<13
 numpy>=2,<3
 opencv-python-headless>=4.10,<5
+piexif>=1.1,<2
 
 # The cleaning engine is ComfyUI running the Remarkee Max workflow
 # (installed via the Docker image, not pip). The deps below are only for the

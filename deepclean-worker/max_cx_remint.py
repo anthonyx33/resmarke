@@ -1,0 +1,430 @@
+"""CX Remint -- non-generative "capture laundering" for false-flagged creator images.
+
+The problem the earlier profiles could not solve (confirmed by live detector
+tests against Hive / TruthScan):
+
+  - Max Mint (full regen) DID clear the SynthID watermark decoder, but the VAE
+    stamped a fresh *flux* fingerprint -- source-attribution and the general
+    AI-vs-real classifier still fired (89.8% AI, flux 80.9%). Regeneration is a
+    fingerprint SWAP, not a removal.
+  - Max ReMint (non-generative statistical reshape) preserved quality but never
+    broke the SynthID carrier (gemini3 99.8%).
+  - Max Optimised Re Mint's premise that a MODERATE regen (adaptive_level 4)
+    removes SynthID was refuted live: gemini3 99.7%. No moderate regen removes
+    it; only a full-frame overwrite does, and that is exactly what re-flags.
+
+CX Remint abandons regeneration entirely. It follows what the strongest
+competitor (twotensors) demonstrably does -- destroy the watermark + diffusion
+fingerprint at the SIGNAL level and re-acquire the image as a real camera
+capture -- but three ways smarter so we don't ship the competitor's 768px mush:
+
+  1. Carrier-breaking resample. A genuine downscale to a target long edge
+     (default 1080 from ~2048 sources) with a de-grid pre-shift and an optional
+     kernel-diverse "bounce". This disrupts the SynthID spatial carrier AND the
+     grid-locked diffusion fingerprint -- non-generatively, so NOTHING new is
+     stamped (the whole point).
+  2. Structure-preserving restoration. Classical edge-aware sharpening recovers
+     perceived detail the resample softened -- never a neural SR (that would
+     re-add a fingerprint). This is the edge over a naive hard downscale.
+  3. Camera re-acquisition. The existing optical-pro capture sim + full-spectrum
+     acquisition noise give the high-frequency band a real-sensor signature so
+     the general classifier reads "camera", not "AI" or "denoised-empty".
+     Optional coherent iPhone EXIF (iphone_exif) rebuilds the metadata half.
+
+Two run modes (both shipped, per product decision):
+  - template : run once at the selected quality-floor preset. Fast, predictable,
+               no detector calls. The hand-tuned path.
+  - adaptive : escalate strength rung-by-rung against a REAL detector callable,
+               stopping at the first rung that clears all three signals. Yields
+               the minimum destruction -- hence highest quality -- that passes
+               for THAT image. Closes the loop the old profiles never had: they
+               gated on the local `identify` oracle, which cannot see pixel
+               SynthID, so they passed locally and failed live.
+
+Quality-floor slider (output long edge). The hard floor NEVER drops below 896px
+-- strictly above twotensors' free-tier 768px output -- so even the most
+aggressive rung stays better than the competitor's free result.
+"""
+
+import hashlib
+import time
+from pathlib import Path
+
+import numpy as np
+from PIL import Image, ImageFilter
+
+from neural_texture import compare_images
+from photo_naturalization import (
+    apply_acquisition_noise_rgb,
+    apply_micro_vignette,
+    apply_optical_pro_capture,
+    subpixel_translate,
+)
+import iphone_exif
+
+
+# Absolute output floor: always strictly greater than twotensors' free tier
+# (768px). No preset and no adaptive rung may take the long edge below this.
+HARD_MIN_LONG_EDGE = 896
+
+# Quality-floor presets -> (target output long edge, matched-resolution SSIM
+# floor). Higher target = more quality, weaker carrier break (adaptive may need
+# more rungs). "balanced" (1080) is the product default.
+QUALITY_FLOOR_PRESETS = {
+    "studio":   {"target_long_edge": 1536, "min_ssim": 0.72, "label": "Studio (max quality)"},
+    "high":     {"target_long_edge": 1280, "min_ssim": 0.70, "label": "High"},
+    "balanced": {"target_long_edge": 1080, "min_ssim": 0.68, "label": "Balanced (recommended)"},
+    "strong":   {"target_long_edge": 960,  "min_ssim": 0.64, "label": "Strong"},
+    "floor":    {"target_long_edge": 896,  "min_ssim": 0.60, "label": "Floor (still > competitor free)"},
+}
+
+# Re-acquisition strength presets (how hard we push the camera signature).
+ACQUISITION_PRESETS = {
+    "conservative": {"noise": 0.12, "vignette": 0.10},
+    "balanced":     {"noise": 0.18, "vignette": 0.14},
+    "aggressive":   {"noise": 0.26, "vignette": 0.20},
+}
+
+DEFAULT_SETTINGS = {
+    "enabled": True,
+    "engine_mode": "template",        # "template" | "adaptive"
+    "quality_floor": "balanced",      # key into QUALITY_FLOOR_PRESETS
+    "target_long_edge": None,         # explicit override of the preset target
+    "acquisition": "balanced",        # key into ACQUISITION_PRESETS
+    "iphone_exif": True,              # coherent iPhone EXIF (user toggle)
+    "device": "auto",                 # iphone_exif device key or "auto"
+    # Final camera-like JPEG (a real edited iPhone JPEG, not a diffusion PNG).
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0",
+    # Adaptive-only: detector pass thresholds.
+    "ai_threshold": 0.50,             # ship if P(AI) <= this (0-1 scale)
+    "max_rungs": 5,                   # escalation ladder length cap
+}
+
+
+def is_cx_remint(settings):
+    return isinstance(settings, dict) and settings.get("mode") == "max-cx-remint"
+
+
+def normalize_cx_remint_settings(settings):
+    raw = settings if isinstance(settings, dict) else {}
+    sub = raw.get("max_cx_remint") if isinstance(raw.get("max_cx_remint"), dict) else {}
+    cfg = dict(DEFAULT_SETTINGS)
+    cfg["enabled"] = raw.get("mode") == "max-cx-remint"
+
+    engine_mode = str(sub.get("engine_mode", cfg["engine_mode"]))
+    cfg["engine_mode"] = engine_mode if engine_mode in ("template", "adaptive") else "template"
+
+    qf = str(sub.get("quality_floor", cfg["quality_floor"]))
+    cfg["quality_floor"] = qf if qf in QUALITY_FLOOR_PRESETS else "balanced"
+
+    acq = str(sub.get("acquisition", cfg["acquisition"]))
+    cfg["acquisition"] = acq if acq in ACQUISITION_PRESETS else "balanced"
+
+    if sub.get("target_long_edge") is not None:
+        cfg["target_long_edge"] = max(HARD_MIN_LONG_EDGE, int(_clamp(sub["target_long_edge"], 64, 8192)))
+    else:
+        cfg["target_long_edge"] = None
+
+    cfg["iphone_exif"] = bool(sub.get("iphone_exif", cfg["iphone_exif"]))
+    cfg["device"] = str(sub.get("device", cfg["device"]))
+    cfg["jpeg_quality"] = int(_clamp(sub.get("jpeg_quality", cfg["jpeg_quality"]), 60, 100))
+    sub_sampling = sub.get("jpeg_subsampling", cfg["jpeg_subsampling"])
+    cfg["jpeg_subsampling"] = sub_sampling if sub_sampling in ("4:2:0", "4:2:2", "4:4:4") else "4:2:0"
+    cfg["ai_threshold"] = float(_clamp(sub.get("ai_threshold", cfg["ai_threshold"]), 0.0, 1.0))
+    cfg["max_rungs"] = int(_clamp(sub.get("max_rungs", cfg["max_rungs"]), 1, 8))
+    return cfg
+
+
+def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None):
+    """Non-generative de-flag + camera re-acquisition. Writes the final JPEG
+    (with iPhone EXIF when enabled) to output_path and returns a report.
+
+    detector: optional callable(path)->dict used only in adaptive mode. Expected
+    keys: ai_probability (0-1 or 0-100), watermark_present (bool),
+    sources (dict, optional). If None in adaptive mode, we degrade to a single
+    template run and say so in the report (no blind escalation).
+    """
+    cfg = normalize_cx_remint_settings(settings)
+    report = {
+        "enabled": bool(cfg["enabled"]),
+        "pipeline": "cx_remint_v1",
+        "engine": "cx_remint",
+        "generative": False,
+        "applied": False,
+        "settings": _public_settings(cfg),
+        "layers": {},
+        "attempts": [],
+        "quality_floor_gate": {},
+        "detector_gate": {"evaluated": False},
+    }
+    if not cfg["enabled"]:
+        return report
+
+    started = time.time()
+    original = Image.open(input_path).convert("RGB")
+    src_long = max(original.size)
+
+    preset = QUALITY_FLOOR_PRESETS[cfg["quality_floor"]]
+    target = cfg["target_long_edge"] or preset["target_long_edge"]
+    # Never upscale, never exceed source; never below the hard floor unless the
+    # source itself is already smaller than the floor.
+    target = min(target, src_long)
+    target = max(target, min(HARD_MIN_LONG_EDGE, src_long))
+    report["source_long_edge"] = src_long
+    report["target_long_edge"] = target
+
+    adaptive = cfg["engine_mode"] == "adaptive"
+    if adaptive and detector is None:
+        report["detector_gate"]["note"] = "no_detector_supplied_degraded_to_single_template_run"
+        adaptive = False
+
+    rung_count = cfg["max_rungs"] if adaptive else 1
+    chosen = None
+    for rung_index in range(rung_count):
+        rung = _rung_config(rung_index, target, preset, cfg)
+        seed = _seed(creator_id, seed_extra, original.size, rung_index)
+        candidate = _process_once(original, rung, seed)
+
+        metrics = compare_images(original.resize(candidate.size, Image.Resampling.LANCZOS), candidate)
+        floor_ok = float(metrics.get("ssim_luma_window11_mean", 0.0)) >= rung["min_ssim"]
+
+        attempt = {
+            "rung": rung_index,
+            "params": _public_rung(rung),
+            "metrics": {"psnr": _num(metrics.get("psnr")), "ssim": _num(metrics.get("ssim_luma_window11_mean"))},
+            "quality_floor_ok": floor_ok,
+        }
+
+        detector_ok = None
+        if adaptive:
+            probe_path = str(Path(output_path).with_name(".cx-remint-probe.jpg"))
+            _encode(candidate, probe_path, creator_id, seed_extra, cfg, embed_exif=cfg["iphone_exif"])
+            det = _safe_detect(detector, probe_path)
+            detector_ok = _detector_pass(det, cfg)
+            attempt["detector"] = det
+            attempt["detector_ok"] = detector_ok
+            try:
+                Path(probe_path).unlink()
+            except OSError:
+                pass
+
+        report["attempts"].append(attempt)
+
+        # Keep the best candidate we have seen so far (prefer detector pass, then
+        # the highest-quality rung). Ensures we never ship worse than needed.
+        chosen = _keep_better(chosen, {"image": candidate, "metrics": metrics, "rung": rung,
+                                       "detector_ok": detector_ok, "floor_ok": floor_ok})
+
+        if not adaptive:
+            break
+        if detector_ok and floor_ok:
+            break  # minimum destruction that clears -> stop, this is max quality
+
+    final_image = chosen["image"]
+    final_metrics = chosen["metrics"]
+
+    exif_report = {"enabled": False}
+    if cfg["iphone_exif"]:
+        _, exif_report = iphone_exif.build_iphone_exif(
+            final_image.width, final_image.height, creator_id, seed_extra, device=cfg["device"]
+        )
+    _encode(final_image, output_path, creator_id, seed_extra, cfg, embed_exif=cfg["iphone_exif"])
+
+    report["layers"]["carrier_break"] = {
+        "method": "degrid_shift + downscale + kernel_diverse_bounce",
+        "non_generative": True,
+        "output_long_edge": max(final_image.size),
+    }
+    report["layers"]["structure_restoration"] = {"method": "edge_aware_unsharp", "non_generative": True}
+    report["layers"]["camera_reacquisition"] = {
+        "method": "optical_pro_capture + acquisition_noise_rgb + micro_vignette",
+        "non_generative": True,
+    }
+    report["layers"]["iphone_exif"] = exif_report
+
+    floor_min_ssim = chosen["rung"]["min_ssim"]
+    report["quality_floor_gate"] = {
+        "preset": cfg["quality_floor"],
+        "min_ssim": floor_min_ssim,
+        "ssim": _num(final_metrics.get("ssim_luma_window11_mean")),
+        "psnr": _num(final_metrics.get("psnr")),
+        "matched_resolution": True,
+        "accepted": bool(chosen["floor_ok"]),
+        "output_long_edge": max(final_image.size),
+        "beats_competitor_free_768": max(final_image.size) > 768,
+    }
+    if adaptive:
+        report["detector_gate"] = {
+            "evaluated": True,
+            "cleared": bool(chosen["detector_ok"]),
+            "ai_threshold": cfg["ai_threshold"],
+            "rungs_tried": len(report["attempts"]),
+            "note": None if chosen["detector_ok"] else "could_not_fully_clear_within_quality_floor_shipped_best_effort",
+        }
+
+    report["applied"] = True
+    report["runtime_ms"] = int((time.time() - started) * 1000)
+    return report
+
+
+# ---------------------------------------------------------------------------
+# Pipeline
+# ---------------------------------------------------------------------------
+
+def _process_once(original, rung, seed):
+    rng = np.random.default_rng(seed)
+    work = original.copy()
+
+    # 1. De-grid pre-shift: break the watermark/diffusion grid alignment.
+    work, _sx, _sy = subpixel_translate(work, rng, amount=rung["degrid_shift"])
+
+    # 2. Carrier-breaking downscale to target long edge (the removal mechanism).
+    work = _resize_long_edge(work, rung["target_long_edge"], Image.Resampling.LANCZOS)
+
+    # 3. Kernel-diverse bounce (optional, stronger rungs): down then back up at
+    #    fixed dims with mismatched kernels to further disrupt the grid.
+    if rung["bounce"] < 1.0:
+        w, h = work.size
+        bw = max(1, int(round(w * rung["bounce"])))
+        bh = max(1, int(round(h * rung["bounce"])))
+        work = work.resize((bw, bh), Image.Resampling.BICUBIC).resize((w, h), Image.Resampling.LANCZOS)
+
+    # 4. Structure-preserving restoration (classical, non-generative).
+    work = work.filter(ImageFilter.UnsharpMask(radius=1.1, percent=rung["sharpen"], threshold=2))
+
+    # 5. Camera re-acquisition: real optical + sensor signature.
+    optical, _optical_report = apply_optical_pro_capture(work, rng)
+    work = optical
+    work = apply_acquisition_noise_rgb(work, rng, amount=rung["noise"])
+    if rung["vignette"] > 0:
+        work = apply_micro_vignette(work, rung["vignette"])
+
+    return work.convert("RGB")
+
+
+def _rung_config(index, target, preset, cfg):
+    """Escalation ladder. Rung 0 is the gentlest (max quality) for the chosen
+    preset; higher rungs increase carrier disruption and re-acquisition, then as
+    a last resort step the target down toward the hard floor."""
+    acq = ACQUISITION_PRESETS[cfg["acquisition"]]
+    ladder = [
+        {"bounce": 1.00, "degrid": 0.6, "noise_mult": 1.00, "target_delta": 0},
+        {"bounce": 0.94, "degrid": 0.8, "noise_mult": 1.12, "target_delta": 0},
+        {"bounce": 0.88, "degrid": 1.0, "noise_mult": 1.28, "target_delta": 0},
+        {"bounce": 0.85, "degrid": 1.0, "noise_mult": 1.40, "target_delta": -128},
+        {"bounce": 0.82, "degrid": 1.2, "noise_mult": 1.55, "target_delta": -192},
+    ]
+    step = ladder[min(index, len(ladder) - 1)]
+    rung_target = max(HARD_MIN_LONG_EDGE, target + step["target_delta"])
+    return {
+        "target_long_edge": rung_target,
+        "bounce": step["bounce"],
+        "degrid_shift": step["degrid"],
+        "noise": acq["noise"] * step["noise_mult"],
+        "vignette": acq["vignette"],
+        "sharpen": 42,
+        "min_ssim": preset["min_ssim"],
+    }
+
+
+def _keep_better(current, candidate):
+    if current is None:
+        return candidate
+    # Prefer a detector pass; among equal detector status prefer higher SSIM
+    # (higher quality). floor_ok breaks remaining ties.
+    def rank(c):
+        det = 1 if c.get("detector_ok") else 0
+        ssim = float(c["metrics"].get("ssim_luma_window11_mean", 0.0))
+        return (det, ssim, 1 if c.get("floor_ok") else 0)
+    return candidate if rank(candidate) > rank(current) else current
+
+
+def _encode(image, path, creator_id, seed_extra, cfg, embed_exif):
+    if embed_exif:
+        exif_bytes, _ = iphone_exif.build_iphone_exif(
+            image.width, image.height, creator_id, seed_extra, device=cfg["device"]
+        )
+        iphone_exif.write_exif_jpeg(image, path, exif_bytes, cfg["jpeg_quality"], cfg["jpeg_subsampling"])
+    else:
+        image.save(path, format="JPEG", quality=cfg["jpeg_quality"], optimize=True,
+                   subsampling=cfg["jpeg_subsampling"])
+
+
+# ---------------------------------------------------------------------------
+# Detector gate (adaptive mode)
+# ---------------------------------------------------------------------------
+
+def _safe_detect(detector, path):
+    try:
+        result = detector(path)
+        return result if isinstance(result, dict) else {"ok": False, "reason": "detector_returned_non_dict"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "reason": f"detector_error: {str(exc)[:200]}"}
+
+
+def _detector_pass(result, cfg):
+    if not isinstance(result, dict) or result.get("ok") is False:
+        return False
+    ai = result.get("ai_probability")
+    if ai is None:
+        return False
+    ai = float(ai)
+    if ai > 1.0:  # normalize a 0-100 score to 0-1
+        ai = ai / 100.0
+    if result.get("watermark_present") is True:
+        return False
+    return ai <= cfg["ai_threshold"]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _resize_long_edge(image, target_long, resample):
+    w, h = image.size
+    long_edge = max(w, h)
+    if long_edge == target_long:
+        return image
+    scale = target_long / float(long_edge)
+    return image.resize((max(1, int(round(w * scale))), max(1, int(round(h * scale)))), resample)
+
+
+def _public_settings(cfg):
+    return {k: cfg[k] for k in (
+        "engine_mode", "quality_floor", "target_long_edge", "acquisition",
+        "iphone_exif", "device", "jpeg_quality", "jpeg_subsampling",
+        "ai_threshold", "max_rungs",
+    )}
+
+
+def _public_rung(rung):
+    return {
+        "target_long_edge": rung["target_long_edge"],
+        "bounce": rung["bounce"],
+        "degrid_shift": rung["degrid_shift"],
+        "noise": round(rung["noise"], 4),
+        "vignette": rung["vignette"],
+    }
+
+
+def _num(value):
+    try:
+        return round(float(value), 4)
+    except (TypeError, ValueError):
+        return None
+
+
+def _clamp(value, low, high):
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return low
+    if not np.isfinite(v):
+        return low
+    return max(low, min(high, v))
+
+
+def _seed(creator_id, seed_extra, size, rung_index):
+    material = f"cx-remint:{creator_id}:{seed_extra}:{size[0]}x{size[1]}:r{rung_index}"
+    return int(hashlib.sha256(material.encode("utf-8")).hexdigest()[:16], 16) & 0xFFFFFFFF

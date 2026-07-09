@@ -13,6 +13,8 @@ import runpod
 from PIL import Image, ImageDraw, ImageFont
 
 from content_repair import apply_content_repair_lab, is_content_repair_lab
+from deepclean_detector import make_detector
+from max_cx_remint import apply_cx_remint, is_cx_remint
 from max_optimised_remint import apply_max_optimised_remint, is_max_optimised_remint
 from max_remint import apply_max_remint, is_max_remint
 from photo_naturalization import (
@@ -159,6 +161,32 @@ def handler(job):
                 cleaned_sha = sha256_file(cleaned_path)
                 neural_texture_report = {"enabled": False, "reason": "integrated_into_max_optimised_remint"}
                 content_repair_report = {"enabled": False, "reason": "integrated_into_max_optimised_remint"}
+            elif is_cx_remint(expert_refinement):
+                # CX Remint is NON-GENERATIVE and TERMINAL. Regeneration is the
+                # trap the other Max profiles fell into: full regen removed
+                # SynthID but stamped a fresh flux fingerprint (still flagged),
+                # and moderate regen removed nothing. CX Remint instead breaks
+                # the SynthID/diffusion carrier by RESAMPLING (no diffusion pass,
+                # so no new model fingerprint), re-acquires a real-camera
+                # signature, and writes the final camera-like JPEG -- with
+                # coherent iPhone EXIF when the user enabled it -- straight to
+                # cleaned_path. final_naturalization_config returns "off" for
+                # this mode so finalize_output does NOT double-apply grain; it
+                # only caps size, applies the seal, and preserves the EXIF onto
+                # the sealed output. Adaptive mode escalates against the real
+                # detector; make_detector() is None when unconfigured and the
+                # module then degrades to a single template pass (never blind).
+                engine_report = apply_cx_remint(
+                    input_path=input_path,
+                    output_path=cleaned_path,
+                    creator_id=creator_id,
+                    settings=expert_refinement,
+                    seed_extra=f"{job_id}:{input_sha}",
+                    detector=make_detector(),
+                )
+                cleaned_sha = sha256_file(cleaned_path)
+                neural_texture_report = {"enabled": False, "reason": "integrated_into_cx_remint"}
+                content_repair_report = {"enabled": False, "reason": "integrated_into_cx_remint"}
             else:
                 engine_report = run_deepclean(
                     input_path=input_path,
@@ -486,8 +514,11 @@ def final_naturalization_config(cfg, expert_refinement):
         is_neural_texture_lab(expert_refinement)
         or is_content_repair_lab(expert_refinement)
         or is_max_remint(expert_refinement)
+        or is_cx_remint(expert_refinement)
     ):
-        # Max ReMint does its own acquisition-noise in-module; no double pass.
+        # Max ReMint and CX Remint both do their own acquisition-noise / camera
+        # re-acquisition in-module; a finalize naturalization pass on top would
+        # double-apply grain (the death-spiral). No double pass.
         return PHOTO_NATURALIZATION_PROFILES["off"]
     if is_max_optimised_remint(expert_refinement):
         # Force the light `optimised` grain regardless of the `profile` field so

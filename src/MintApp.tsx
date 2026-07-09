@@ -51,7 +51,11 @@ import {
   type DeepCleanProfile,
   type ExpertRefinementMode,
   type ExpertRefinementSettings,
-  type ExpertRefinementTechnique
+  type ExpertRefinementTechnique,
+  type CxRemintOptions,
+  type CxRemintQualityFloor,
+  type CxRemintEngineMode,
+  type CxRemintDevice
 } from "./lib/deepcleanClient";
 import {
   getAdminRunpodEndpoint,
@@ -63,7 +67,27 @@ import { supabase } from "./lib/supabase";
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
-type MintDeepCleanProfile = DeepCleanProfile | "max-remint" | "max-optimised-remint";
+type MintDeepCleanProfile =
+  | DeepCleanProfile
+  | "max-remint"
+  | "max-optimised-remint"
+  | "max-cx-remint";
+
+// Quality-floor slider stops: index 0 = strongest carrier break / most
+// resolution loss, last = max quality. Every stop stays > the competitor's
+// free-tier 768px output. Ordered low->high for a natural left->right slider.
+const CX_QUALITY_FLOOR_STOPS: {
+  value: CxRemintQualityFloor;
+  label: string;
+  longEdge: number;
+  hint: string;
+}[] = [
+  { value: "floor", label: "Floor", longEdge: 896, hint: "Strongest removal · still sharper than competitor free" },
+  { value: "strong", label: "Strong", longEdge: 960, hint: "Heavier removal, small quality trade" },
+  { value: "balanced", label: "Balanced", longEdge: 1080, hint: "Recommended — reliable removal, high quality" },
+  { value: "high", label: "High", longEdge: 1280, hint: "More detail, may need adaptive for stubborn images" },
+  { value: "studio", label: "Studio", longEdge: 1536, hint: "Max quality, weakest carrier break" }
+];
 
 const expertRefinementPresets: Record<
   ExpertRefinementMode,
@@ -216,6 +240,11 @@ export default function MintApp() {
   );
   const [deepCleanOutputMode, setDeepCleanOutputMode] =
     useState<DeepCleanOutputMode>("sealed");
+  // CX Remint controls (quality-floor slider, template/adaptive, iPhone EXIF).
+  const [cxQualityFloor, setCxQualityFloor] = useState<CxRemintQualityFloor>("balanced");
+  const [cxEngineMode, setCxEngineMode] = useState<CxRemintEngineMode>("template");
+  const [cxIphoneExif, setCxIphoneExif] = useState(true);
+  const [cxDevice, setCxDevice] = useState<CxRemintDevice>("auto");
   const [deepCleanStatus, setDeepCleanStatus] = useState("");
   const [deepCleanJob, setDeepCleanJob] = useState<DeepCleanJob | null>(null);
   const deepCleanPollRef = useRef<number | null>(null);
@@ -249,7 +278,9 @@ export default function MintApp() {
       max: 10,
       "max-mint": 12,
       "max-remint": 12,
-      "max-optimised-remint": 12
+      "max-optimised-remint": 12,
+      // Non-generative, so no GPU regen bill — priced below the regen profiles.
+      "max-cx-remint": 10
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -257,11 +288,29 @@ export default function MintApp() {
       balanced: 2,
       optical: 3
     };
-    let cost = profileBase[deepCleanProfile] + refineAdd[expertRefinementMode];
+    let cost = profileBase[deepCleanProfile];
+    // Expert refinement only applies to the non-CX profiles.
+    if (deepCleanProfile !== "max-cx-remint") cost += refineAdd[expertRefinementMode];
     if (deepCleanProfile === "max" && deepCleanMicroTextureJitter) cost += 1;
+    // Adaptive CX Remint runs repeated real-detector probes — reflect that.
+    if (deepCleanProfile === "max-cx-remint" && cxEngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
-  }, [deepCleanProfile, expertRefinementMode, deepCleanMicroTextureJitter, deepCleanOutputMode]);
+  }, [
+    deepCleanProfile,
+    expertRefinementMode,
+    deepCleanMicroTextureJitter,
+    deepCleanOutputMode,
+    cxEngineMode
+  ]);
+
+  // CX Remint quality-floor slider: map the selected preset to its slider index
+  // and metadata for the control's labels.
+  const cxQualityFloorIndex = Math.max(
+    0,
+    CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === cxQualityFloor)
+  );
+  const cxQualityFloorStop = CX_QUALITY_FLOOR_STOPS[cxQualityFloorIndex];
 
   // Re-Mint can run locally in demo mode. Sign-in upgrades to Supabase credits.
   const canProcess = !!file && state !== "processing" && credits.privacyCredits >= instantCost;
@@ -546,7 +595,18 @@ export default function MintApp() {
         profile: deepCleanProfile,
         outputMode: deepCleanOutputMode,
         microTextureJitter: deepCleanProfile === "max" && deepCleanMicroTextureJitter,
-        expertRefinement: buildExpertRefinementSettings()
+        expertRefinement:
+          deepCleanProfile === "max-cx-remint" ? undefined : buildExpertRefinementSettings(),
+        cxRemint:
+          deepCleanProfile === "max-cx-remint"
+            ? {
+                engineMode: cxEngineMode,
+                qualityFloor: cxQualityFloor,
+                acquisition: "balanced",
+                iphoneExif: cxIphoneExif,
+                device: cxDevice
+              }
+            : undefined
       });
       createdJob = job;
       setDeepCleanJob(job);
@@ -575,6 +635,16 @@ export default function MintApp() {
   function chooseDeepCleanProfile(profile: MintDeepCleanProfile) {
     setDeepCleanProfile(profile);
     if (profile !== "max") setDeepCleanMicroTextureJitter(false);
+    if (profile === "max-cx-remint") {
+      // CX Remint outputs a stripped, camera-re-acquired JPEG; expert refinement
+      // and the seal-by-default do not apply.
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
+      return;
+    }
     if (profile === "max-remint" || profile === "max-optimised-remint") {
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
@@ -1385,6 +1455,7 @@ export default function MintApp() {
                         <option value="max-mint">Max Mint</option>
                         <option value="max-remint">Max ReMint</option>
                         <option value="max-optimised-remint">Max Optimised ReMint</option>
+                        <option value="max-cx-remint">CX Remint (recommended)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -1423,6 +1494,100 @@ export default function MintApp() {
                     </div>
                   ) : null}
 
+                  {deepCleanProfile === "max-cx-remint" ? (
+                    <div className="rm-cx-panel">
+                      <div className="rm-field">
+                        <span className="rm-field-label">Mode</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="CX Remint mode">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={cxEngineMode === "template"}
+                            className={cxEngineMode === "template" ? "is-active" : ""}
+                            onClick={() => setCxEngineMode("template")}
+                          >
+                            Optimised template
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={cxEngineMode === "adaptive"}
+                            className={cxEngineMode === "adaptive" ? "is-active" : ""}
+                            onClick={() => setCxEngineMode("adaptive")}
+                          >
+                            Adaptive (detector-gated)
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {cxEngineMode === "template"
+                            ? "Fast, predictable single pass at the quality-floor you pick below."
+                            : "Escalates strength against a live AI detector and stops at the first pass — the least quality loss that clears. +2 credits."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">
+                          Quality floor · {cxQualityFloorStop.label} (~{cxQualityFloorStop.longEdge}px)
+                        </span>
+                        <input
+                          className="rm-cx-slider"
+                          type="range"
+                          min={0}
+                          max={CX_QUALITY_FLOOR_STOPS.length - 1}
+                          step={1}
+                          value={cxQualityFloorIndex}
+                          onChange={(event) =>
+                            setCxQualityFloor(CX_QUALITY_FLOOR_STOPS[Number(event.target.value)].value)
+                          }
+                        />
+                        <div className="rm-range-ends">
+                          <span>Strongest removal</span>
+                          <span>Max quality</span>
+                        </div>
+                        <p className="rm-hint">{cxQualityFloorStop.hint}</p>
+                      </div>
+
+                      <label className="rm-switch">
+                        <input
+                          type="checkbox"
+                          checked={cxIphoneExif}
+                          onChange={(event) => setCxIphoneExif(event.target.checked)}
+                        />
+                        <span className="rm-switch-track" aria-hidden="true">
+                          <span className="rm-switch-thumb" />
+                        </span>
+                        <span>Rebuild iPhone photo metadata (EXIF)</span>
+                      </label>
+
+                      {cxIphoneExif ? (
+                        <label className="rm-field">
+                          <span className="rm-field-label">Device</span>
+                          <select
+                            className="rm-select"
+                            value={cxDevice}
+                            onChange={(event) => setCxDevice(event.target.value as CxRemintDevice)}
+                          >
+                            <option value="auto">Auto (pick a recent iPhone)</option>
+                            <option value="iphone-16-pro-max">iPhone 16 Pro Max</option>
+                            <option value="iphone-16-pro">iPhone 16 Pro</option>
+                            <option value="iphone-16">iPhone 16</option>
+                            <option value="iphone-15-pro-max">iPhone 15 Pro Max</option>
+                            <option value="iphone-15-pro">iPhone 15 Pro</option>
+                            <option value="iphone-15">iPhone 15</option>
+                            <option value="iphone-14-pro">iPhone 14 Pro</option>
+                          </select>
+                        </label>
+                      ) : null}
+
+                      <div className="rm-disc-note">
+                        CX Remint is non-generative: it breaks the SynthID / diffusion fingerprint by
+                        resampling and re-acquires a real-camera signature — so it removes the
+                        false-flag without stamping a new one (the trap that re-flagged Max Mint).
+                        Output never drops below 896px — always sharper than the competitor's free tier.
+                      </div>
+                    </div>
+                  ) : null}
+
                   <button
                     className="rm-btn rm-btn-max rm-btn-lg rm-btn-block"
                     type="button"
@@ -1432,7 +1597,9 @@ export default function MintApp() {
                     <Cloud size={18} aria-hidden="true" /> Queue GPU job · {maxCost} credits
                   </button>
 
-                  {deepCleanProfile !== "max-remint" && deepCleanProfile !== "max-optimised-remint" ? (
+                  {deepCleanProfile !== "max-remint" &&
+                  deepCleanProfile !== "max-optimised-remint" &&
+                  deepCleanProfile !== "max-cx-remint" ? (
                     <details className="rm-disc">
                       <summary>
                         <SlidersHorizontal size={15} aria-hidden="true" /> Expert refinement

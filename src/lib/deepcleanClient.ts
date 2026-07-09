@@ -8,6 +8,27 @@ export type DeepCleanProfile =
   | "max"
   | "max-mint";
 export type DeepCleanOutputMode = "stripped" | "sealed" | "sealed-stamped";
+
+export type CxRemintQualityFloor = "studio" | "high" | "balanced" | "strong" | "floor";
+export type CxRemintEngineMode = "template" | "adaptive";
+export type CxRemintAcquisition = "conservative" | "balanced" | "aggressive";
+export type CxRemintDevice =
+  | "auto"
+  | "iphone-16-pro-max"
+  | "iphone-16-pro"
+  | "iphone-16"
+  | "iphone-15-pro-max"
+  | "iphone-15-pro"
+  | "iphone-15"
+  | "iphone-14-pro";
+
+export type CxRemintOptions = {
+  engineMode: CxRemintEngineMode;
+  qualityFloor: CxRemintQualityFloor;
+  acquisition: CxRemintAcquisition;
+  iphoneExif: boolean;
+  device: CxRemintDevice;
+};
 export type ExpertRefinementMode = "off" | "light" | "balanced" | "optical";
 export type ExpertRefinementTechnique =
   | "pixel_alignment_break"
@@ -55,10 +76,12 @@ export async function createDeepCleanJob(params: {
     | "max-optimised-remint"
     | "max-optical-pro"
     | "max-neural-texture-lab"
-    | "max-content-repair-lab";
+    | "max-content-repair-lab"
+    | "max-cx-remint";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;
+  cxRemint?: CxRemintOptions;
 }): Promise<DeepCleanJob> {
   if (!supabase) {
     throw new Error("Supabase is not configured for Remarkee Max jobs.");
@@ -73,7 +96,16 @@ export async function createDeepCleanJob(params: {
       profile: params.profile,
       output_mode: params.outputMode,
       micro_texture_jitter: Boolean(params.microTextureJitter),
-      expert_refinement: params.expertRefinement
+      expert_refinement: params.expertRefinement,
+      cx_remint: params.cxRemint
+        ? {
+            engine_mode: params.cxRemint.engineMode,
+            quality_floor: params.cxRemint.qualityFloor,
+            acquisition: params.cxRemint.acquisition,
+            iphone_exif: params.cxRemint.iphoneExif,
+            device: params.cxRemint.device
+          }
+        : undefined
     }
   });
 
