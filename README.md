@@ -8,6 +8,8 @@ ResMarke implements the bootstrap launch plan:
 - Custom creator seal.
 - 1800 x 1800 JPEG export.
 - DeepClean GPU job scaffolding for Supabase + RunPod.
+- Ordered Re-Mint Max queues for up to 20 images.
+- Per-image result downloads and client-side ZIP export.
 
 ## Local Development
 
@@ -53,6 +55,13 @@ DeepClean is scaffolded as an async cloud job:
 5. `cancel-deepclean-job` releases reserved credits if upload/dispatch fails.
 6. The RunPod worker processes the image and calls `deepclean-webhook`.
 7. The webhook captures or releases the reserved credit.
+
+The studio accepts up to 20 JPEG, PNG, or WebP files at 25 MB each. Users can
+drag the preview tiles into order before starting. Re-Mint Max processes the
+queue sequentially so the displayed order is deterministic, isolates failures
+to the affected tile, and lets failed items be retried without rerunning
+completed ones. Signed download links are refreshed before individual and ZIP
+downloads.
 
 Deploy the SQL migration and Supabase functions in `supabase/`, then build and publish the worker in `deepclean-worker/`.
 

@@ -23,7 +23,7 @@ export type ReframeOptions = {
 // as small as the tilt allows.
 export const REFRAME_PRESETS: Record<ReframePreset, ReframeOptions> = {
   subtle: { zoom: 1.022, rotationDeg: 1.6, shear: 0.006, aspectJitter: 0.004, driftPx: 4 },
-  balanced: { zoom: 1.035, rotationDeg: 2.6, shear: 0.012, aspectJitter: 0.008, driftPx: 7 },
+  balanced: { zoom: 1.03, rotationDeg: 2.6, shear: 0.012, aspectJitter: 0.008, driftPx: 7 },
   strong: { zoom: 1.05, rotationDeg: 3.6, shear: 0.02, aspectJitter: 0.013, driftPx: 11 }
 };
 

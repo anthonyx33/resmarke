@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowRight,
   Check,
   ChevronDown,
@@ -7,7 +8,9 @@ import {
   Download,
   Fingerprint,
   Gauge,
+  GripVertical,
   ImageOff,
+  Images,
   KeyRound,
   Leaf,
   Loader2,
@@ -20,6 +23,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Sun,
+  Trash2,
   Upload,
   UserRound,
   Wallet,
@@ -73,6 +77,29 @@ import { supabase } from "./lib/supabase";
 type ProcessingState = "idle" | "processing" | "done" | "error";
 type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
+type QueueItemStatus =
+  | "ready"
+  | "preparing"
+  | "uploading"
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed";
+
+type ImageQueueItem = {
+  id: string;
+  file: File;
+  previewUrl: string;
+  width?: number;
+  height?: number;
+  status: QueueItemStatus;
+  job?: DeepCleanJob;
+  error?: string;
+};
+
+const MAX_QUEUE_IMAGES = 20;
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+
 type MintDeepCleanProfile =
   | DeepCleanProfile
   | "max-remint"
@@ -236,9 +263,18 @@ function initialTheme(): Theme {
 
 export default function MintApp() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const queueSequenceRef = useRef(0);
+  const imageQueueRef = useRef<ImageQueueItem[]>([]);
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [imageQueue, setImageQueue] = useState<ImageQueueItem[]>([]);
+  const [activeQueueId, setActiveQueueId] = useState("");
+  const [draggedQueueId, setDraggedQueueId] = useState("");
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchNotice, setBatchNotice] = useState("");
+  const [zipBusy, setZipBusy] = useState(false);
+  const [downloadingItemId, setDownloadingItemId] = useState("");
   const [dragging, setDragging] = useState(false);
   const [stageView, setStageView] = useState<"clean" | "original">("clean");
   const [resultUrl, setResultUrl] = useState<string>("");
@@ -258,7 +294,8 @@ export default function MintApp() {
   const [customWidth, setCustomWidth] = useState(0);
   const [customHeight, setCustomHeight] = useState(0);
   const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
-  const [deepCleanProfile, setDeepCleanProfile] = useState<MintDeepCleanProfile>("standard");
+  const [deepCleanProfile, setDeepCleanProfile] =
+    useState<MintDeepCleanProfile>("max-cx-remint-v5");
   const [deepCleanMicroTextureJitter, setDeepCleanMicroTextureJitter] = useState(false);
   const [expertRefinementMode, setExpertRefinementMode] =
     useState<ExpertRefinementMode>("off");
@@ -268,12 +305,12 @@ export default function MintApp() {
     cloneExpertPreset("off")
   );
   const [deepCleanOutputMode, setDeepCleanOutputMode] =
-    useState<DeepCleanOutputMode>("sealed");
+    useState<DeepCleanOutputMode>("stripped");
   // CX Remint controls (quality-floor slider, template/adaptive, iPhone EXIF).
-  const [cxQualityFloor, setCxQualityFloor] = useState<CxRemintQualityFloor>("balanced");
+  const [cxQualityFloor, setCxQualityFloor] = useState<CxRemintQualityFloor>("strong");
   const [cxEngineMode, setCxEngineMode] = useState<CxRemintEngineMode>("template");
   const [cxIphoneExif, setCxIphoneExif] = useState(true);
-  const [cxDevice, setCxDevice] = useState<CxRemintDevice>("auto");
+  const [cxDevice, setCxDevice] = useState<CxRemintDevice>("iphone-15");
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -281,7 +318,6 @@ export default function MintApp() {
   const [cxReframeTilt, setCxReframeTilt] = useState(REFRAME_PRESETS.balanced.rotationDeg);
   const [deepCleanStatus, setDeepCleanStatus] = useState("");
   const [deepCleanJob, setDeepCleanJob] = useState<DeepCleanJob | null>(null);
-  const deepCleanPollRef = useRef<number | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -352,8 +388,31 @@ export default function MintApp() {
   const cxQualityFloorStop = CX_QUALITY_FLOOR_STOPS[cxQualityFloorIndex];
 
   // Re-Mint can run locally in demo mode. Sign-in upgrades to Supabase credits.
-  const canProcess = !!file && state !== "processing" && credits.privacyCredits >= instantCost;
-  const canQueueMax = !!file && credits.privacyCredits >= maxCost;
+  const pendingBatchItems = imageQueue.filter((item) => item.status !== "completed");
+  const completedBatchItems = imageQueue.filter(
+    (item) => item.status === "completed" && item.job?.outputUrl
+  );
+  const batchRequiredCost = pendingBatchItems.length * maxCost;
+  const canProcess =
+    !!file &&
+    state !== "processing" &&
+    !batchRunning &&
+    !zipBusy &&
+    credits.privacyCredits >= instantCost;
+  const canQueueMax =
+    pendingBatchItems.length > 0 &&
+    !batchRunning &&
+    !zipBusy &&
+    credits.privacyCredits >= batchRequiredCost;
+  const activeQueueItem =
+    imageQueue.find((item) => item.id === activeQueueId) ?? imageQueue[0] ?? null;
+  const activeBatchBusy = Boolean(
+    activeQueueItem &&
+      ["preparing", "uploading", "queued", "processing"].includes(activeQueueItem.status)
+  );
+  const stageResultUrl =
+    resultUrl ||
+    (activeQueueItem?.job?.status === "completed" ? activeQueueItem.job.outputUrl ?? "" : "");
   const isAdminUi =
     !!userEmail &&
     config.adminEmails.length > 0 &&
@@ -376,9 +435,11 @@ export default function MintApp() {
   }, []);
 
   useEffect(() => {
-    return () => {
-      if (deepCleanPollRef.current) window.clearInterval(deepCleanPollRef.current);
-    };
+    imageQueueRef.current = imageQueue;
+  }, [imageQueue]);
+
+  useEffect(() => {
+    return () => imageQueueRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
   }, []);
 
   useEffect(() => {
@@ -511,7 +572,7 @@ export default function MintApp() {
   async function spendCredits(amount: number) {
     if (amount <= 0) return;
     if (!supabase || !userId) {
-      let snapshot = credits;
+      let snapshot = readLocalCredits();
       for (let i = 0; i < amount; i++) snapshot = spendLocalPrivacyCredit();
       setCredits(snapshot);
       return;
@@ -528,7 +589,7 @@ export default function MintApp() {
     });
   }
 
-  function onFileSelected(nextFile: File | null) {
+  function clearActiveResult() {
     setError("");
     setState("idle");
     setReport(null);
@@ -536,39 +597,136 @@ export default function MintApp() {
     setResultBlob(null);
     if (resultUrl) URL.revokeObjectURL(resultUrl);
     setResultUrl("");
+    setStageView("clean");
+  }
 
-    if (!nextFile) {
-      setFile(null);
-      setPreviewUrl("");
-      return;
-    }
+  function selectQueueItem(item: ImageQueueItem) {
+    clearActiveResult();
+    setActiveQueueId(item.id);
+    setFile(item.file);
+    setPreviewUrl(item.previewUrl);
+    setDeepCleanJob(item.job ?? null);
+    setDeepCleanStatus(
+      item.status === "failed"
+        ? item.error || "This image could not be processed."
+        : item.status === "completed"
+          ? "Completed and ready to download."
+          : ""
+    );
 
-    if (!nextFile.type.startsWith("image/")) {
-      setError("Choose a JPEG, PNG, or WebP image.");
-      return;
-    }
-
-    setFile(nextFile);
-    setPreviewUrl(URL.createObjectURL(nextFile));
-
-    // Default output mirrors the input: same format, same dimensions.
-    const nextFormat: OutputFormat = nextFile.type.includes("png")
+    const nextFormat: OutputFormat = item.file.type.includes("png")
       ? "png"
-      : nextFile.type.includes("webp")
+      : item.file.type.includes("webp")
         ? "webp"
         : "jpeg";
     setOutputFormat(nextFormat);
     setSizeMode("original");
-    setInputDims(null);
+    setInputDims(item.width && item.height ? { w: item.width, h: item.height } : null);
+    if (item.width && item.height) {
+      setCustomWidth(item.width);
+      setCustomHeight(item.height);
+    }
+  }
 
-    createImageBitmap(nextFile)
-      .then((bitmap) => {
-        setInputDims({ w: bitmap.width, h: bitmap.height });
-        setCustomWidth(bitmap.width);
-        setCustomHeight(bitmap.height);
-        bitmap.close();
-      })
-      .catch(() => setInputDims(null));
+  function updateQueueItem(id: string, patch: Partial<ImageQueueItem>) {
+    setImageQueue((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...patch } : item))
+    );
+    if (activeQueueId === id && patch.job !== undefined) setDeepCleanJob(patch.job);
+  }
+
+  function addFiles(files: File[]) {
+    if (!files.length || batchRunning) return;
+    setBatchNotice("");
+
+    const supported = files.filter(
+      (candidate) =>
+        ["image/jpeg", "image/png", "image/webp"].includes(candidate.type) &&
+        candidate.size <= MAX_IMAGE_BYTES
+    );
+    const rejected = files.length - supported.length;
+    const availableSlots = Math.max(0, MAX_QUEUE_IMAGES - imageQueue.length);
+    const accepted = supported.slice(0, availableSlots);
+    const overLimit = supported.length - accepted.length;
+
+    if (!accepted.length) {
+      setBatchNotice(
+        availableSlots === 0
+          ? `The queue is full. Remove an image before adding another (maximum ${MAX_QUEUE_IMAGES}).`
+          : "No supported images were added. Use JPEG, PNG, or WebP files up to 25 MB each."
+      );
+      return;
+    }
+
+    const added: ImageQueueItem[] = accepted.map((nextFile) => ({
+      id: `image-${Date.now()}-${queueSequenceRef.current++}`,
+      file: nextFile,
+      previewUrl: URL.createObjectURL(nextFile),
+      status: "ready"
+    }));
+
+    setImageQueue((current) => [...current, ...added]);
+    if (!file) selectQueueItem(added[0]);
+
+    added.forEach((item) => {
+      createImageBitmap(item.file)
+        .then((bitmap) => {
+          const dimensions = { width: bitmap.width, height: bitmap.height };
+          bitmap.close();
+          updateQueueItem(item.id, dimensions);
+          if (item.id === activeQueueId || (!activeQueueId && item.id === added[0].id)) {
+            setInputDims({ w: dimensions.width, h: dimensions.height });
+            setCustomWidth(dimensions.width);
+            setCustomHeight(dimensions.height);
+          }
+        })
+        .catch(() => undefined);
+    });
+
+    const notices = [
+      rejected ? `${rejected} unsupported or oversized ${rejected === 1 ? "file was" : "files were"} skipped.` : "",
+      overLimit
+        ? `${overLimit} ${overLimit === 1 ? "image was" : "images were"} left out to keep the ${MAX_QUEUE_IMAGES}-image limit.`
+        : ""
+    ].filter(Boolean);
+    setBatchNotice(notices.join(" "));
+  }
+
+  function removeQueueItem(id: string) {
+    if (batchRunning) return;
+    const removed = imageQueue.find((item) => item.id === id);
+    if (!removed) return;
+    URL.revokeObjectURL(removed.previewUrl);
+    const nextQueue = imageQueue.filter((item) => item.id !== id);
+    setImageQueue(nextQueue);
+
+    if (activeQueueId === id) {
+      const nextActive = nextQueue[0];
+      if (nextActive) {
+        selectQueueItem(nextActive);
+      } else {
+        clearActiveResult();
+        setActiveQueueId("");
+        setFile(null);
+        setPreviewUrl("");
+        setInputDims(null);
+        setDeepCleanJob(null);
+        setDeepCleanStatus("");
+      }
+    }
+  }
+
+  function moveQueueItem(sourceId: string, targetId: string) {
+    if (!sourceId || sourceId === targetId || batchRunning) return;
+    setImageQueue((current) => {
+      const sourceIndex = current.findIndex((item) => item.id === sourceId);
+      const targetIndex = current.findIndex((item) => item.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      const next = [...current];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
   }
 
   async function processPrivacyMax() {
@@ -612,74 +770,231 @@ export default function MintApp() {
   }
 
   async function startDeepCleanBeta() {
-    if (!file) {
-      setDeepCleanStatus("Choose an image first.");
+    const itemsToProcess = imageQueue.filter((item) => item.status !== "completed");
+    if (!itemsToProcess.length) {
+      setDeepCleanStatus("Add an image to the queue first.");
       return;
     }
     if (hasSupabaseConfig && !userId) {
-      setDeepCleanStatus("Sign in before queueing a Re-Mint Max job.");
+      setDeepCleanStatus("Sign in before starting the Re-Mint Max queue.");
       return;
     }
-    if (credits.privacyCredits < maxCost) {
-      setDeepCleanStatus(`Not enough credits — Re-Mint Max needs ${maxCost}.`);
+    const requiredCredits = itemsToProcess.length * maxCost;
+    if (credits.privacyCredits < requiredCredits) {
+      setDeepCleanStatus(
+        `Not enough credits — this ${itemsToProcess.length}-image queue needs ${requiredCredits}.`
+      );
       return;
     }
 
-    let createdJob: DeepCleanJob | null = null;
-    setDeepCleanStatus("Creating Re-Mint Max job...");
-    try {
-      const job = await createDeepCleanJob({
-        file,
-        creatorId,
-        profile: deepCleanProfile,
-        outputMode: deepCleanOutputMode,
-        microTextureJitter: deepCleanProfile === "max" && deepCleanMicroTextureJitter,
-        expertRefinement: isCxProfile(deepCleanProfile)
-          ? undefined
-          : buildExpertRefinementSettings(),
-        cxRemint: isCxProfile(deepCleanProfile)
-          ? {
-              engineMode: cxEngineMode,
-              qualityFloor: cxQualityFloor,
-              acquisition: "balanced",
-              iphoneExif: cxIphoneExif,
-              device: cxDevice
-            }
-          : undefined
-      });
-      createdJob = job;
-      setDeepCleanJob(job);
-      // Optional browser-side reframe (zoom + tilt + shift) before upload —
-      // desyncs the watermark/fingerprint grid with zero GPU cost.
-      let uploadFile = file;
-      if (isCxProfile(deepCleanProfile) && cxReframe) {
-        try {
-          setDeepCleanStatus("Reframing (browser-side)...");
-          uploadFile = await reframeImageFile(
-            file,
-            reframeOptionsFor(cxReframePreset, {
-              zoom: cxReframeZoom,
-              rotationDeg: cxReframeTilt
-            })
-          );
-        } catch {
-          uploadFile = file; // reframe is best-effort; never block the job
-        }
-      }
-      setDeepCleanStatus("Uploading private input...");
-      await uploadDeepCleanInput(job, uploadFile);
-      setDeepCleanStatus("Dispatching GPU worker...");
-      await dispatchDeepCleanJob(job.id);
-      await spendCredits(maxCost);
-      setDeepCleanStatus(`Job ${job.id} is running · ${maxCost} credits used.`);
-      startDeepCleanPolling(job.id);
-    } catch (nextError) {
-      if (createdJob) {
-        await cancelDeepCleanJob(createdJob.id).catch(() => undefined);
-      }
+    setBatchRunning(true);
+    setBatchNotice("");
+    let completedThisRun = 0;
+    let failedThisRun = 0;
+
+    for (const [index, item] of itemsToProcess.entries()) {
+      let createdJob: DeepCleanJob | null = null;
+      selectQueueItem(item);
+      updateQueueItem(item.id, { status: "preparing", error: undefined, job: undefined });
+      setDeepCleanJob(null);
       setDeepCleanStatus(
-        nextError instanceof Error ? nextError.message : "Re-Mint Max is not configured yet."
+        `Preparing ${index + 1} of ${itemsToProcess.length} · ${item.file.name}`
       );
+
+      try {
+        const job = await createDeepCleanJob({
+          file: item.file,
+          creatorId,
+          profile: deepCleanProfile,
+          outputMode: deepCleanOutputMode,
+          microTextureJitter: deepCleanProfile === "max" && deepCleanMicroTextureJitter,
+          expertRefinement: isCxProfile(deepCleanProfile)
+            ? undefined
+            : buildExpertRefinementSettings(),
+          cxRemint: isCxProfile(deepCleanProfile)
+            ? {
+                engineMode: cxEngineMode,
+                qualityFloor: cxQualityFloor,
+                acquisition: "balanced",
+                iphoneExif: cxIphoneExif,
+                device: cxDevice
+              }
+            : undefined
+        });
+        createdJob = job;
+        updateQueueItem(item.id, { status: "preparing", job });
+        setDeepCleanJob(job);
+
+        let uploadFile = item.file;
+        if (isCxProfile(deepCleanProfile) && cxReframe) {
+          setDeepCleanStatus(
+            `Reframing ${index + 1} of ${itemsToProcess.length} in your browser…`
+          );
+          try {
+            uploadFile = await reframeImageFile(
+              item.file,
+              reframeOptionsFor(cxReframePreset, {
+                zoom: cxReframeZoom,
+                rotationDeg: cxReframeTilt
+              })
+            );
+          } catch {
+            uploadFile = item.file;
+          }
+        }
+
+        updateQueueItem(item.id, { status: "uploading", job });
+        setDeepCleanStatus(`Uploading ${index + 1} of ${itemsToProcess.length} privately…`);
+        await uploadDeepCleanInput(job, uploadFile);
+
+        updateQueueItem(item.id, { status: "queued", job });
+        setDeepCleanStatus(`Sending ${index + 1} of ${itemsToProcess.length} to the GPU…`);
+        await dispatchDeepCleanJob(job.id);
+        await spendCredits(maxCost);
+
+        updateQueueItem(item.id, { status: "processing", job });
+        const completedJob = await waitForDeepCleanJob(
+          job.id,
+          item.id,
+          index + 1,
+          itemsToProcess.length
+        );
+        updateQueueItem(item.id, {
+          status: "completed",
+          job: completedJob,
+          error: undefined
+        });
+        setDeepCleanJob(completedJob);
+        completedThisRun += 1;
+      } catch (nextError) {
+        const message =
+          nextError instanceof Error ? nextError.message : "Re-Mint Max could not process this image.";
+        if (createdJob) {
+          await cancelDeepCleanJob(createdJob.id).catch(() => undefined);
+        }
+        updateQueueItem(item.id, {
+          status: "failed",
+          job: createdJob ?? undefined,
+          error: message
+        });
+        setDeepCleanStatus(`${item.file.name}: ${message}`);
+        failedThisRun += 1;
+      }
+    }
+
+    setBatchRunning(false);
+    if (userId) await refreshSupabaseCredits(userId);
+    setDeepCleanStatus(
+      failedThisRun
+        ? `Queue finished · ${completedThisRun} completed · ${failedThisRun} failed. Failed images can be retried.`
+        : `Queue complete · all ${completedThisRun} ${completedThisRun === 1 ? "image is" : "images are"} ready.`
+    );
+  }
+
+  async function waitForDeepCleanJob(
+    jobId: string,
+    itemId: string,
+    position: number,
+    total: number
+  ): Promise<DeepCleanJob> {
+    for (;;) {
+      const job = await getDeepCleanJob(jobId);
+      setDeepCleanJob(job);
+      if (job.status === "completed") return job;
+      if (job.status === "failed") {
+        throw new Error(job.failureReason || "The GPU worker could not process this image.");
+      }
+
+      updateQueueItem(itemId, {
+        status: job.status === "queued" ? "queued" : "processing",
+        job
+      });
+      setDeepCleanStatus(
+        `Processing ${position} of ${total} · ${job.status === "queued" ? "waiting for GPU" : "GPU pass in progress"}…`
+      );
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 3500));
+    }
+  }
+
+  function outputNameFor(item: ImageQueueItem, position?: number) {
+    const rawBase = item.file.name.replace(/\.[^.]+$/, "");
+    const base = rawBase.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-").slice(0, 90) || "image";
+    const prefix = position === undefined ? "" : `${String(position + 1).padStart(2, "0")}-`;
+    return `${prefix}${base}-remint.jpg`;
+  }
+
+  function saveBlob(blob: Blob, name: string) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function freshCompletedJob(item: ImageQueueItem) {
+    if (!item.job?.id) throw new Error("This image does not have a completed job.");
+    const job = await getDeepCleanJob(item.job.id);
+    if (job.status !== "completed" || !job.outputUrl) {
+      throw new Error("This output is not available yet.");
+    }
+    updateQueueItem(item.id, { job, status: "completed" });
+    return job;
+  }
+
+  async function downloadQueueItem(item: ImageQueueItem) {
+    if (downloadingItemId || zipBusy) return;
+    setDownloadingItemId(item.id);
+    setBatchNotice("");
+    try {
+      const job = await freshCompletedJob(item);
+      const response = await fetch(job.outputUrl as string);
+      if (!response.ok) throw new Error("The secure download link could not be opened.");
+      saveBlob(await response.blob(), outputNameFor(item));
+    } catch (nextError) {
+      setBatchNotice(
+        nextError instanceof Error ? nextError.message : "The image could not be downloaded."
+      );
+    } finally {
+      setDownloadingItemId("");
+    }
+  }
+
+  async function downloadAllCompleted() {
+    const completed = imageQueue.filter((item) => item.status === "completed" && item.job?.id);
+    if (!completed.length || zipBusy) return;
+    setZipBusy(true);
+    setBatchNotice(`Preparing ${completed.length} images for download…`);
+    try {
+      const files: Record<string, Uint8Array> = {};
+      for (const [index, item] of completed.entries()) {
+        const job = await freshCompletedJob(item);
+        const response = await fetch(job.outputUrl as string);
+        if (!response.ok) throw new Error(`Could not download ${item.file.name}.`);
+        files[outputNameFor(item, index)] = new Uint8Array(await response.arrayBuffer());
+        setBatchNotice(`Packaging ${index + 1} of ${completed.length}…`);
+      }
+      const { zip } = await import("fflate");
+      const zipped = await new Promise<Uint8Array>((resolve, reject) => {
+        zip(files, { level: 0 }, (zipError, data) => {
+          if (zipError) reject(zipError);
+          else resolve(data);
+        });
+      });
+      const zipBuffer = zipped.buffer.slice(
+        zipped.byteOffset,
+        zipped.byteOffset + zipped.byteLength
+      ) as ArrayBuffer;
+      saveBlob(new Blob([zipBuffer], { type: "application/zip" }), "remint-images.zip");
+      setBatchNotice(`${completed.length} processed images downloaded as a ZIP.`);
+    } catch (nextError) {
+      setBatchNotice(
+        nextError instanceof Error ? nextError.message : "The ZIP could not be created."
+      );
+    } finally {
+      setZipBusy(false);
     }
   }
 
@@ -699,17 +1014,13 @@ export default function MintApp() {
       setExpertRefinementIntensity(100);
       setExpertRefinementPreserveLines(true);
       setExpertRefinementTechniques(cloneExpertPreset("off"));
-      // Deep (v2/v3/v4) regenerate, and the flux fingerprint only dies at the
+      // Deep (v2/v3/v4/v5) profiles default to the Strong 960px processing
+      // floor. v5 upscales the delivered result back above 1080px.
+      //
+      // The flux fingerprint only dies at the
       // lower resolutions (live tests: clean at ~960px, still flagged at
       // 1280px). Snap the quality-floor slider to the Strong (960px) sweet spot.
-      // v5 processes even lower (Floor 896, maximum removal) because it upscales
-      // the OUTPUT back to >=1080 afterwards, so the floor is free of the size
-      // requirement.
-      if (profile === "max-cx-remint-v5") {
-        setCxQualityFloor("floor");
-      } else if (isCxDeepProfile(profile)) {
-        setCxQualityFloor("strong");
-      }
+      if (isCxDeepProfile(profile)) setCxQualityFloor("strong");
       return;
     }
     if (profile === "max-remint" || profile === "max-optimised-remint") {
@@ -749,38 +1060,6 @@ export default function MintApp() {
       preserve_straight_lines: expertRefinementPreserveLines,
       techniques: expertRefinementTechniques
     };
-  }
-
-  function startDeepCleanPolling(jobId: string) {
-    if (deepCleanPollRef.current) window.clearInterval(deepCleanPollRef.current);
-
-    const tick = async () => {
-      try {
-        const job = await getDeepCleanJob(jobId);
-        setDeepCleanJob(job);
-        if (job.status === "completed") {
-          if (deepCleanPollRef.current) window.clearInterval(deepCleanPollRef.current);
-          deepCleanPollRef.current = null;
-          setDeepCleanStatus(
-            `Completed in ${job.runtimeMs ? Math.round(job.runtimeMs / 1000) : "?"}s.`
-          );
-        } else if (job.status === "failed") {
-          if (deepCleanPollRef.current) window.clearInterval(deepCleanPollRef.current);
-          deepCleanPollRef.current = null;
-          setDeepCleanStatus(job.failureReason || "Re-Mint Max failed and the credit was released.");
-          if (userId) void refreshSupabaseCredits(userId);
-        } else {
-          setDeepCleanStatus(`GPU job status: ${job.status}.`);
-        }
-      } catch (nextError) {
-        setDeepCleanStatus(
-          nextError instanceof Error ? nextError.message : "Could not refresh Re-Mint Max job."
-        );
-      }
-    };
-
-    void tick();
-    deepCleanPollRef.current = window.setInterval(tick, 3500);
   }
 
   async function refreshAdminEndpoint() {
@@ -833,7 +1112,15 @@ export default function MintApp() {
   }
 
   function resetAll() {
-    onFileSelected(null);
+    if (batchRunning || zipBusy) return;
+    imageQueue.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    clearActiveResult();
+    setImageQueue([]);
+    setActiveQueueId("");
+    setFile(null);
+    setPreviewUrl("");
+    setInputDims(null);
+    setBatchNotice("");
     setDeepCleanStatus("");
     setDeepCleanJob(null);
     setCredits(userId ? credits : readLocalCredits());
@@ -1027,8 +1314,8 @@ export default function MintApp() {
                 <span className="rm-grad">reborn clean.</span>
               </h1>
               <p className="rm-hero-sub">
-                Re-Mint It strips hidden metadata, lifts visible AI marks, and seals your work with a
-                creator mark of its own — instantly, locally, and entirely on your device.
+                Drop up to 20 images, arrange the exact processing order, and run a professional
+                Re-Mint Max batch with individual or one-click ZIP downloads.
               </p>
 
               <Dropzone
@@ -1037,18 +1324,23 @@ export default function MintApp() {
                 dragging={dragging}
                 setDragging={setDragging}
                 onPick={openPicker}
-                onDropFile={onFileSelected}
+                onDropFiles={addFiles}
               />
+              {batchNotice ? (
+                <p className="rm-hero-upload-notice" role="alert">
+                  {batchNotice}
+                </p>
+              ) : null}
 
               <div className="rm-trust">
                 <span>
-                  <Lock size={14} aria-hidden="true" /> No uploads
+                  <Images size={14} aria-hidden="true" /> Up to 20 images
                 </span>
                 <span>
-                  <Zap size={14} aria-hidden="true" /> Instant, on-device
+                  <GripVertical size={14} aria-hidden="true" /> Drag to set the order
                 </span>
                 <span>
-                  <Fingerprint size={14} aria-hidden="true" /> Creator Seal
+                  <Archive size={14} aria-hidden="true" /> Download all as ZIP
                 </span>
               </div>
             </section>
@@ -1059,8 +1351,8 @@ export default function MintApp() {
                 <Step
                   n={1}
                   icon={<Upload size={18} aria-hidden="true" />}
-                  title="Drop your image"
-                  body="Add a JPG, PNG, or WebP. Everything runs locally — nothing is uploaded."
+                  title="Build your queue"
+                  body="Add up to 20 JPG, PNG, or WebP images, then drag the previews into order."
                 />
                 <Step
                   n={2}
@@ -1072,7 +1364,7 @@ export default function MintApp() {
                   n={3}
                   icon={<Download size={18} aria-hidden="true" />}
                   title="Export your way"
-                  body="Download in your original format and size — or pick a custom type and ratio."
+                  body="Download any result individually, or collect every completed image in one ZIP."
                 />
               </div>
             </section>
@@ -1106,7 +1398,7 @@ export default function MintApp() {
                     </span>
                   </div>
                   <button className="rm-btn rm-btn-max rm-btn-lg" type="button" onClick={openPicker}>
-                    <Upload size={18} aria-hidden="true" /> Start with an image
+                    <Upload size={18} aria-hidden="true" /> Build a queue
                   </button>
                 </div>
                 <div className="rm-spotlight-art" aria-hidden="true">
@@ -1191,10 +1483,10 @@ export default function MintApp() {
 
             <section className="rm-section">
               <div className="rm-cta">
-                <h2>Re-mint your first image — free</h2>
-                <p>No account, no uploads. It runs right here in your browser.</p>
+                <h2>Re-mint one image — or twenty</h2>
+                <p>Build the queue now, then choose local or Re-Mint Max processing.</p>
                 <button className="rm-btn rm-btn-primary rm-btn-lg" type="button" onClick={openPicker}>
-                  <Upload size={18} aria-hidden="true" /> Drop an image
+                  <Upload size={18} aria-hidden="true" /> Add images
                 </button>
               </div>
             </section>
@@ -1207,32 +1499,66 @@ export default function MintApp() {
                 <span className="rm-file-meta">
                   {(file.size / 1_000_000).toFixed(2)} MB
                   {inputDims ? ` · ${inputDims.w}×${inputDims.h}` : ""}
+                  {` · ${imageQueue.length} ${imageQueue.length === 1 ? "image" : "images"} in queue`}
                 </span>
               </div>
               <div className="rm-studio-top-actions">
-                <button className="rm-btn rm-btn-soft rm-btn-sm" type="button" onClick={openPicker}>
-                  <Upload size={15} aria-hidden="true" /> Replace
+                <button
+                  className="rm-btn rm-btn-soft rm-btn-sm"
+                  type="button"
+                  onClick={openPicker}
+                  disabled={batchRunning || zipBusy || imageQueue.length >= MAX_QUEUE_IMAGES}
+                >
+                  <Upload size={15} aria-hidden="true" /> Add images
                 </button>
-                <button className="rm-btn rm-btn-soft rm-btn-sm" type="button" onClick={resetAll}>
+                <button
+                  className="rm-btn rm-btn-soft rm-btn-sm"
+                  type="button"
+                  onClick={resetAll}
+                  disabled={batchRunning || zipBusy}
+                >
                   <RotateCcw size={15} aria-hidden="true" /> Start over
                 </button>
               </div>
             </div>
 
+            <BatchQueue
+              items={imageQueue}
+              activeId={activeQueueId}
+              draggedId={draggedQueueId}
+              running={batchRunning || zipBusy}
+              notice={batchNotice}
+              completedCount={completedBatchItems.length}
+              zipBusy={zipBusy}
+              downloadingItemId={downloadingItemId}
+              onAdd={openPicker}
+              onSelect={selectQueueItem}
+              onRemove={removeQueueItem}
+              onDragStart={setDraggedQueueId}
+              onDragEnd={() => setDraggedQueueId("")}
+              onMove={moveQueueItem}
+              onDownload={downloadQueueItem}
+              onDownloadAll={downloadAllCompleted}
+            />
+
             <div className="rm-studio-grid">
               <div className="rm-stage">
-                <div className={`rm-stage-frame${state === "processing" ? " is-busy" : ""}`}>
+                <div
+                  className={`rm-stage-frame${
+                    state === "processing" || activeBatchBusy ? " is-busy" : ""
+                  }`}
+                >
                   <img
-                    src={resultUrl && stageView === "clean" ? resultUrl : previewUrl}
-                    alt={resultUrl && stageView === "clean" ? "Re-Minted result" : "Original image"}
+                    src={stageResultUrl && stageView === "clean" ? stageResultUrl : previewUrl}
+                    alt={stageResultUrl && stageView === "clean" ? "Re-Minted result" : "Original image"}
                   />
-                  {state === "processing" ? (
+                  {state === "processing" || activeBatchBusy ? (
                     <div className="rm-stage-veil">
                       <Loader2 className="rm-spin" size={28} aria-hidden="true" />
-                      <span>Re-minting…</span>
+                      <span>{activeBatchBusy ? "Processing on the GPU…" : "Re-minting…"}</span>
                     </div>
                   ) : null}
-                  {resultUrl ? (
+                  {stageResultUrl ? (
                     <div className="rm-stage-compare" role="group" aria-label="Compare original and result">
                       <button
                         className={stageView === "original" ? "is-active" : ""}
@@ -1252,7 +1578,7 @@ export default function MintApp() {
                   ) : null}
                 </div>
 
-                {!resultUrl && state !== "processing" ? (
+                {!stageResultUrl && state !== "processing" && !activeBatchBusy ? (
                   <p className="rm-stage-hint">
                     <Scan size={14} aria-hidden="true" /> Your re-minted image will appear here
                   </p>
@@ -1499,12 +1825,12 @@ export default function MintApp() {
                     </div>
                     <span className="rm-cost rm-cost-max" title="Heavier profiles, refinement and stamping cost more credits.">
                       <Wallet size={13} aria-hidden="true" />
-                      {maxCost} credits
+                      {maxCost} credits / image
                     </span>
                   </div>
                   <p className="rm-card-desc">
-                    Cloud GPU processing for stubborn, deeply embedded watermarks — far beyond what a
-                    browser can do.
+                    One setup applies to the full queue. Images run in the order shown, one at a time,
+                    with clear progress and isolated failures.
                   </p>
 
                   <div className="rm-field-grid">
@@ -1513,6 +1839,7 @@ export default function MintApp() {
                       <select
                         className="rm-select"
                         value={deepCleanProfile}
+                        disabled={batchRunning}
                         onChange={(event) => chooseDeepCleanProfile(event.target.value as MintDeepCleanProfile)}
                       >
                         <option value="standard">Standard</option>
@@ -1534,6 +1861,7 @@ export default function MintApp() {
                       <select
                         className="rm-select"
                         value={deepCleanOutputMode}
+                        disabled={batchRunning}
                         onChange={(event) => setDeepCleanOutputMode(event.target.value as DeepCleanOutputMode)}
                       >
                         <option value="stripped">Stripped only</option>
@@ -1548,6 +1876,7 @@ export default function MintApp() {
                       <input
                         type="checkbox"
                         checked={deepCleanMicroTextureJitter}
+                        disabled={batchRunning}
                         onChange={(event) => setDeepCleanMicroTextureJitter(event.target.checked)}
                       />
                       <span className="rm-switch-track" aria-hidden="true">
@@ -1575,6 +1904,7 @@ export default function MintApp() {
                             role="radio"
                             aria-checked={cxEngineMode === "template"}
                             className={cxEngineMode === "template" ? "is-active" : ""}
+                            disabled={batchRunning}
                             onClick={() => setCxEngineMode("template")}
                           >
                             Optimised template
@@ -1584,6 +1914,7 @@ export default function MintApp() {
                             role="radio"
                             aria-checked={cxEngineMode === "adaptive"}
                             className={cxEngineMode === "adaptive" ? "is-active" : ""}
+                            disabled={batchRunning}
                             onClick={() => setCxEngineMode("adaptive")}
                           >
                             Adaptive (detector-gated)
@@ -1607,6 +1938,7 @@ export default function MintApp() {
                           max={CX_QUALITY_FLOOR_STOPS.length - 1}
                           step={1}
                           value={cxQualityFloorIndex}
+                          disabled={batchRunning}
                           onChange={(event) =>
                             setCxQualityFloor(CX_QUALITY_FLOOR_STOPS[Number(event.target.value)].value)
                           }
@@ -1622,6 +1954,7 @@ export default function MintApp() {
                         <input
                           type="checkbox"
                           checked={cxIphoneExif}
+                          disabled={batchRunning}
                           onChange={(event) => setCxIphoneExif(event.target.checked)}
                         />
                         <span className="rm-switch-track" aria-hidden="true">
@@ -1634,6 +1967,7 @@ export default function MintApp() {
                         <input
                           type="checkbox"
                           checked={cxReframe}
+                          disabled={batchRunning}
                           onChange={(event) => setCxReframe(event.target.checked)}
                         />
                         <span className="rm-switch-track" aria-hidden="true">
@@ -1654,6 +1988,7 @@ export default function MintApp() {
                                   role="radio"
                                   aria-checked={cxReframePreset === p}
                                   className={cxReframePreset === p ? "is-active" : ""}
+                                  disabled={batchRunning}
                                   onClick={() => {
                                     setCxReframePreset(p);
                                     setCxReframeZoom(REFRAME_PRESETS[p].zoom);
@@ -1677,6 +2012,7 @@ export default function MintApp() {
                               max={5}
                               step={0.1}
                               value={cxReframeTilt}
+                              disabled={batchRunning}
                               onChange={(event) => setCxReframeTilt(Number(event.target.value))}
                             />
                           </div>
@@ -1692,6 +2028,7 @@ export default function MintApp() {
                               max={1.1}
                               step={0.005}
                               value={cxReframeZoom}
+                              disabled={batchRunning}
                               onChange={(event) => setCxReframeZoom(Number(event.target.value))}
                             />
                             <p className="rm-hint">
@@ -1708,6 +2045,7 @@ export default function MintApp() {
                           <select
                             className="rm-select"
                             value={cxDevice}
+                            disabled={batchRunning}
                             onChange={(event) => setCxDevice(event.target.value as CxRemintDevice)}
                           >
                             <option value="auto">Auto (pick a recent iPhone)</option>
@@ -1724,7 +2062,7 @@ export default function MintApp() {
 
                       <div className="rm-disc-note">
                         {deepCleanProfile === "max-cx-remint-v5"
-                          ? "CX Remint v5 (recommended) processes at the LOWEST floor (896px) for maximum fingerprint removal, then upscales the delivered image back to ~1440px with sharpening + fresh grain — so you get both max removal AND a 1080+ output. Upscaling can't re-add the removed fingerprint, so detection stays clean. Everything from v4 (SynthID regen, histogram tone match, realism) is included. Detector scores are stochastic run-to-run — for CONSISTENT clears, wire the live detector and use Adaptive mode."
+                          ? "CX Remint v5 (recommended) applies maximum removal at your chosen quality floor, then upscales the delivered image back above 1080px with sharpening and fresh grain. The Strong ~960px floor is the recommended balance. Everything from v4 — SynthID regeneration, histogram tone matching, and realism — is included."
                           : deepCleanProfile === "max-cx-remint-v4"
                           ? "CX Remint v4 regenerates to remove SynthID, full-histogram tone-matches to the original (fixes over-contrast), with realism boost. v5 adds max-removal-at-low-res + upscale-back — prefer v5 for the 1080+ requirement."
                           : deepCleanProfile === "max-cx-remint-v3"
@@ -1742,8 +2080,31 @@ export default function MintApp() {
                     onClick={startDeepCleanBeta}
                     disabled={!canQueueMax}
                   >
-                    <Cloud size={18} aria-hidden="true" /> Queue GPU job · {maxCost} credits
+                    {batchRunning ? (
+                      <>
+                        <Loader2 className="rm-spin" size={18} aria-hidden="true" />
+                        Processing queue…
+                      </>
+                    ) : (
+                      <>
+                        <Cloud size={18} aria-hidden="true" />
+                        {pendingBatchItems.some((item) => item.status === "failed")
+                          ? "Retry unfinished"
+                          : `Process ${pendingBatchItems.length} ${pendingBatchItems.length === 1 ? "image" : "images"}`}
+                        {batchRequiredCost ? ` · ${batchRequiredCost} credits` : ""}
+                      </>
+                    )}
                   </button>
+
+                  {pendingBatchItems.length > 0 &&
+                  credits.privacyCredits < batchRequiredCost ? (
+                    <div className="rm-warn">
+                      <span>
+                        This queue needs {batchRequiredCost} credits; you have{" "}
+                        {credits.privacyCredits}.
+                      </span>
+                    </div>
+                  ) : null}
 
                   {deepCleanProfile !== "max-remint" &&
                   deepCleanProfile !== "max-optimised-remint" &&
@@ -1765,6 +2126,7 @@ export default function MintApp() {
                                 className={expertRefinementMode === mode ? "is-active" : ""}
                                 key={mode}
                                 type="button"
+                                disabled={batchRunning}
                                 onClick={() => chooseExpertRefinementMode(mode)}
                               >
                                 {mode === "off"
@@ -1787,7 +2149,7 @@ export default function MintApp() {
                             min="0"
                             max="100"
                             value={expertRefinementIntensity}
-                            disabled={expertRefinementMode === "off"}
+                            disabled={batchRunning || expertRefinementMode === "off"}
                             onChange={(event) => setExpertRefinementIntensity(Number(event.target.value))}
                           />
                         </label>
@@ -1809,7 +2171,7 @@ export default function MintApp() {
                                     <input
                                       type="checkbox"
                                       checked={lockedByLines ? false : techConfig.enabled}
-                                      disabled={disabled || lockedByLines}
+                                      disabled={batchRunning || disabled || lockedByLines}
                                       onChange={(event) =>
                                         updateExpertTechnique(row.key, { enabled: event.target.checked })
                                       }
@@ -1832,7 +2194,9 @@ export default function MintApp() {
                                       max="1"
                                       step="0.01"
                                       value={techConfig.value}
-                                      disabled={disabled || !techConfig.enabled || lockedByLines}
+                                      disabled={
+                                        batchRunning || disabled || !techConfig.enabled || lockedByLines
+                                      }
                                       onChange={(event) =>
                                         updateExpertTechnique(row.key, { value: Number(event.target.value) })
                                       }
@@ -1846,7 +2210,7 @@ export default function MintApp() {
                               <input
                                 type="checkbox"
                                 checked={expertRefinementPreserveLines}
-                                disabled={expertRefinementMode === "off"}
+                                disabled={batchRunning || expertRefinementMode === "off"}
                                 onChange={(event) => setExpertRefinementPreserveLines(event.target.checked)}
                               />
                               <span className="rm-switch-track" aria-hidden="true">
@@ -1894,13 +2258,21 @@ export default function MintApp() {
                             <RmMetric label="GPU" value={deepCleanJob.gpuType || "—"} />
                             <RmMetric label="Output" value={deepCleanOutputMode} />
                           </div>
-                          <a
+                          <button
                             className="rm-btn rm-btn-max rm-btn-block"
-                            href={deepCleanJob.outputUrl}
-                            download={deepCleanJob.outputName ?? "IMG_0000.JPG"}
+                            type="button"
+                            disabled={!activeQueueItem || downloadingItemId === activeQueueItem.id}
+                            onClick={() => {
+                              if (activeQueueItem) void downloadQueueItem(activeQueueItem);
+                            }}
                           >
-                            <Download size={18} aria-hidden="true" /> Download result
-                          </a>
+                            {activeQueueItem && downloadingItemId === activeQueueItem.id ? (
+                              <Loader2 className="rm-spin" size={18} aria-hidden="true" />
+                            ) : (
+                              <Download size={18} aria-hidden="true" />
+                            )}
+                            Download this image
+                          </button>
                         </>
                       ) : deepCleanJob.status === "failed" ? (
                         <p className="rm-error">
@@ -2027,8 +2399,12 @@ export default function MintApp() {
         ref={fileInputRef}
         className="rm-sr-only"
         type="file"
+        multiple
         accept="image/jpeg,image/png,image/webp"
-        onChange={(event) => onFileSelected(event.target.files?.item(0) ?? null)}
+        onChange={(event) => {
+          addFiles(Array.from(event.target.files ?? []));
+          event.currentTarget.value = "";
+        }}
       />
 
       <footer className="rm-footer">
@@ -2052,20 +2428,247 @@ export default function MintApp() {
   );
 }
 
+function BatchQueue({
+  items,
+  activeId,
+  draggedId,
+  running,
+  notice,
+  completedCount,
+  zipBusy,
+  downloadingItemId,
+  onAdd,
+  onSelect,
+  onRemove,
+  onDragStart,
+  onDragEnd,
+  onMove,
+  onDownload,
+  onDownloadAll
+}: {
+  items: ImageQueueItem[];
+  activeId: string;
+  draggedId: string;
+  running: boolean;
+  notice: string;
+  completedCount: number;
+  zipBusy: boolean;
+  downloadingItemId: string;
+  onAdd: () => void;
+  onSelect: (item: ImageQueueItem) => void;
+  onRemove: (id: string) => void;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+  onMove: (sourceId: string, targetId: string) => void;
+  onDownload: (item: ImageQueueItem) => void;
+  onDownloadAll: () => void;
+}) {
+  return (
+    <section className="rm-batch" aria-labelledby="rm-batch-title">
+      <div className="rm-batch-head">
+        <div className="rm-batch-heading">
+          <span className="rm-card-icon">
+            <Images size={18} aria-hidden="true" />
+          </span>
+          <div>
+            <div className="rm-batch-title-row">
+              <h2 id="rm-batch-title">Processing queue</h2>
+              <span className="rm-queue-count">
+                {items.length} / {MAX_QUEUE_IMAGES}
+              </span>
+            </div>
+            <p>
+              {running
+                ? "Queue locked while processing. Each image runs in the order shown."
+                : "Drag tiles to set the processing order. Select one to inspect it."}
+            </p>
+          </div>
+        </div>
+        <div className="rm-batch-actions">
+          <button
+            className="rm-btn rm-btn-soft rm-btn-sm"
+            type="button"
+            onClick={onAdd}
+            disabled={running || items.length >= MAX_QUEUE_IMAGES}
+          >
+            <Upload size={15} aria-hidden="true" /> Add
+          </button>
+          <button
+            className="rm-btn rm-btn-primary rm-btn-sm"
+            type="button"
+            onClick={onDownloadAll}
+            disabled={!completedCount || zipBusy}
+          >
+            {zipBusy ? (
+              <Loader2 className="rm-spin" size={15} aria-hidden="true" />
+            ) : (
+              <Archive size={15} aria-hidden="true" />
+            )}
+            Download all{completedCount ? ` (${completedCount})` : ""}
+          </button>
+        </div>
+      </div>
+
+      <div className="rm-queue-list" role="list" aria-label="Images in processing order">
+        {items.map((item, index) => {
+          const isBusy = ["preparing", "uploading", "queued", "processing"].includes(item.status);
+          return (
+            <article
+              className={[
+                "rm-queue-item",
+                activeId === item.id ? "is-active" : "",
+                draggedId === item.id ? "is-dragging" : "",
+                item.status === "failed" ? "has-failed" : "",
+                item.status === "completed" ? "is-complete" : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              key={item.id}
+              role="listitem"
+              draggable={!running}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", item.id);
+                onDragStart(item.id);
+              }}
+              onDragOver={(event) => {
+                if (!running) {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                onMove(draggedId || event.dataTransfer.getData("text/plain"), item.id);
+                onDragEnd();
+              }}
+              onDragEnd={onDragEnd}
+            >
+              <div className="rm-queue-item-top">
+                <span className="rm-queue-order">{String(index + 1).padStart(2, "0")}</span>
+                <span className="rm-queue-grip" title="Drag to reorder">
+                  <GripVertical size={15} aria-hidden="true" />
+                </span>
+                <button
+                  className="rm-queue-icon-btn"
+                  type="button"
+                  onClick={() => onRemove(item.id)}
+                  disabled={running}
+                  title={`Remove ${item.file.name}`}
+                  aria-label={`Remove ${item.file.name}`}
+                >
+                  <Trash2 size={14} aria-hidden="true" />
+                </button>
+              </div>
+
+              <button
+                className="rm-queue-select"
+                type="button"
+                disabled={running}
+                aria-current={activeId === item.id ? "true" : undefined}
+                onClick={() => onSelect(item)}
+                onKeyDown={(event) => {
+                  if (running || !event.altKey) return;
+                  if (event.key === "ArrowLeft" && index > 0) {
+                    event.preventDefault();
+                    onMove(item.id, items[index - 1].id);
+                  }
+                  if (event.key === "ArrowRight" && index < items.length - 1) {
+                    event.preventDefault();
+                    onMove(item.id, items[index + 1].id);
+                  }
+                }}
+              >
+                <span className="rm-queue-thumb">
+                  <img src={item.previewUrl} alt="" draggable={false} />
+                  {isBusy ? (
+                    <span className="rm-queue-thumb-veil">
+                      <Loader2 className="rm-spin" size={19} aria-hidden="true" />
+                    </span>
+                  ) : item.status === "completed" ? (
+                    <span className="rm-queue-thumb-done">
+                      <Check size={14} aria-hidden="true" />
+                    </span>
+                  ) : null}
+                </span>
+                <span className="rm-queue-file">
+                  <strong title={item.file.name}>{item.file.name}</strong>
+                  <small>
+                    {item.width && item.height ? `${item.width}×${item.height} · ` : ""}
+                    {(item.file.size / 1_000_000).toFixed(2)} MB
+                  </small>
+                </span>
+              </button>
+
+              <div className="rm-queue-item-foot">
+                <span className={`rm-queue-status is-${item.status}`}>
+                  {queueStatusLabel(item.status)}
+                </span>
+                {item.status === "completed" ? (
+                  <button
+                    className="rm-queue-download"
+                    type="button"
+                    onClick={() => onDownload(item)}
+                    disabled={Boolean(downloadingItemId) || zipBusy}
+                    title={`Download ${item.file.name}`}
+                    aria-label={`Download processed ${item.file.name}`}
+                  >
+                    {downloadingItemId === item.id ? (
+                      <Loader2 className="rm-spin" size={14} aria-hidden="true" />
+                    ) : (
+                      <Download size={14} aria-hidden="true" />
+                    )}
+                  </button>
+                ) : null}
+              </div>
+              {item.error ? <p className="rm-queue-error">{item.error}</p> : null}
+            </article>
+          );
+        })}
+      </div>
+
+      {notice ? (
+        <p className="rm-batch-notice" role="status">
+          {notice}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function queueStatusLabel(status: QueueItemStatus) {
+  switch (status) {
+    case "preparing":
+      return "Preparing";
+    case "uploading":
+      return "Uploading";
+    case "queued":
+      return "Queued";
+    case "processing":
+      return "Processing";
+    case "completed":
+      return "Ready";
+    case "failed":
+      return "Failed";
+    default:
+      return "Ready to run";
+  }
+}
+
 function Dropzone({
   large = false,
   previewUrl,
   dragging,
   setDragging,
   onPick,
-  onDropFile
+  onDropFiles
 }: {
   large?: boolean;
   previewUrl: string;
   dragging: boolean;
   setDragging: (next: boolean) => void;
   onPick: () => void;
-  onDropFile: (file: File | null) => void;
+  onDropFiles: (files: File[]) => void;
 }) {
   return (
     <div
@@ -2089,7 +2692,7 @@ function Dropzone({
       onDrop={(event) => {
         event.preventDefault();
         setDragging(false);
-        onDropFile(event.dataTransfer.files.item(0));
+        onDropFiles(Array.from(event.dataTransfer.files));
       }}
     >
       {previewUrl ? (
@@ -2099,9 +2702,9 @@ function Dropzone({
           <span className="rm-drop-icon">
             <Upload size={26} aria-hidden="true" />
           </span>
-          <div className="rm-drop-title">Drop your image to begin</div>
+          <div className="rm-drop-title">Drop up to 20 images to begin</div>
           <div className="rm-drop-sub">
-            or <span className="rm-drop-browse">browse files</span> · JPEG, PNG, WebP up to 25MB
+            or <span className="rm-drop-browse">browse files</span> · JPEG, PNG, WebP · 25MB each
           </div>
         </div>
       )}
