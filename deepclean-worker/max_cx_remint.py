@@ -94,6 +94,9 @@ DEFAULT_SETTINGS = {
     "acquisition": "balanced",        # key into ACQUISITION_PRESETS
     "iphone_exif": True,              # coherent iPhone EXIF (user toggle)
     "device": "auto",                 # iphone_exif device key or "auto"
+    "resolution_mode": "off",         # "off" | "standard" (72 DPI) | "custom"
+    "x_resolution": 72.0,             # custom horizontal DPI
+    "y_resolution": 72.0,             # custom vertical DPI
     # --- v2: pre-regeneration (the SynthID killer) ---------------------------
     # SynthID is robust by design: every non-generative pass we tried left it at
     # ~99% (Max ReMint, CX v1@896, Max Optimised L4). Only a full-frame VAE
@@ -176,6 +179,12 @@ def normalize_cx_remint_settings(settings):
 
     cfg["iphone_exif"] = bool(sub.get("iphone_exif", cfg["iphone_exif"]))
     cfg["device"] = str(sub.get("device", cfg["device"]))
+    resolution_mode = str(sub.get("resolution_mode", cfg["resolution_mode"]))
+    cfg["resolution_mode"] = (
+        resolution_mode if resolution_mode in ("off", "standard", "custom") else "off"
+    )
+    cfg["x_resolution"] = float(_clamp(sub.get("x_resolution", cfg["x_resolution"]), 1, 12000))
+    cfg["y_resolution"] = float(_clamp(sub.get("y_resolution", cfg["y_resolution"]), 1, 12000))
 
     cfg["pre_regen"] = bool(sub.get("pre_regen", cfg["pre_regen"]))
     cfg["regen_level"] = int(_clamp(sub.get("regen_level", cfg["regen_level"]), 3, 10))
@@ -369,7 +378,14 @@ def apply_cx_remint(input_path, output_path, creator_id, settings=None, seed_ext
     exif_report = {"enabled": False}
     if cfg["iphone_exif"]:
         _, exif_report = iphone_exif.build_iphone_exif(
-            final_image.width, final_image.height, creator_id, seed_extra, device=cfg["device"]
+            final_image.width,
+            final_image.height,
+            creator_id,
+            seed_extra,
+            device=cfg["device"],
+            resolution_mode=cfg["resolution_mode"],
+            x_resolution=cfg["x_resolution"],
+            y_resolution=cfg["y_resolution"],
         )
     _encode(final_image, output_path, creator_id, seed_extra, cfg, embed_exif=cfg["iphone_exif"])
 
@@ -656,7 +672,14 @@ def _keep_better(current, candidate):
 def _encode(image, path, creator_id, seed_extra, cfg, embed_exif):
     if embed_exif:
         exif_bytes, _ = iphone_exif.build_iphone_exif(
-            image.width, image.height, creator_id, seed_extra, device=cfg["device"]
+            image.width,
+            image.height,
+            creator_id,
+            seed_extra,
+            device=cfg["device"],
+            resolution_mode=cfg["resolution_mode"],
+            x_resolution=cfg["x_resolution"],
+            y_resolution=cfg["y_resolution"],
         )
         iphone_exif.write_exif_jpeg(image, path, exif_bytes, cfg["jpeg_quality"], cfg["jpeg_subsampling"])
     else:
@@ -706,7 +729,8 @@ def _resize_long_edge(image, target_long, resample):
 def _public_settings(cfg):
     return {k: cfg[k] for k in (
         "engine_mode", "quality_floor", "target_long_edge", "acquisition",
-        "iphone_exif", "device", "jpeg_quality", "jpeg_subsampling",
+        "iphone_exif", "device", "resolution_mode", "x_resolution", "y_resolution",
+        "jpeg_quality", "jpeg_subsampling",
         "ai_threshold", "max_rungs",
         "pre_regen", "regen_level", "regen_process_cap", "regen_timeout",
         "spectral_reshape", "spectral_strength", "spectral_alpha", "spectral_noise_floor",

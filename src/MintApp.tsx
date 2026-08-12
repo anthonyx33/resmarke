@@ -59,7 +59,8 @@ import {
   type CxRemintOptions,
   type CxRemintQualityFloor,
   type CxRemintEngineMode,
-  type CxRemintDevice
+  type CxRemintDevice,
+  type CxRemintResolutionMode
 } from "./lib/deepcleanClient";
 import {
   getAdminRunpodEndpoint,
@@ -311,6 +312,10 @@ export default function MintApp() {
   const [cxEngineMode, setCxEngineMode] = useState<CxRemintEngineMode>("template");
   const [cxIphoneExif, setCxIphoneExif] = useState(true);
   const [cxDevice, setCxDevice] = useState<CxRemintDevice>("iphone-15");
+  const [cxResolutionMode, setCxResolutionMode] =
+    useState<CxRemintResolutionMode>("off");
+  const [cxResolutionX, setCxResolutionX] = useState(72);
+  const [cxResolutionY, setCxResolutionY] = useState(72);
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -817,7 +822,10 @@ export default function MintApp() {
                 qualityFloor: cxQualityFloor,
                 acquisition: "balanced",
                 iphoneExif: cxIphoneExif,
-                device: cxDevice
+                device: cxDevice,
+                resolutionMode: cxResolutionMode,
+                resolutionX: cxResolutionX,
+                resolutionY: cxResolutionY
               }
             : undefined
         });
@@ -2040,24 +2048,94 @@ export default function MintApp() {
                       ) : null}
 
                       {cxIphoneExif ? (
-                        <label className="rm-field">
-                          <span className="rm-field-label">Device</span>
-                          <select
-                            className="rm-select"
-                            value={cxDevice}
-                            disabled={batchRunning}
-                            onChange={(event) => setCxDevice(event.target.value as CxRemintDevice)}
-                          >
-                            <option value="auto">Auto (pick a recent iPhone)</option>
-                            <option value="iphone-16-pro-max">iPhone 16 Pro Max</option>
-                            <option value="iphone-16-pro">iPhone 16 Pro</option>
-                            <option value="iphone-16">iPhone 16</option>
-                            <option value="iphone-15-pro-max">iPhone 15 Pro Max</option>
-                            <option value="iphone-15-pro">iPhone 15 Pro</option>
-                            <option value="iphone-15">iPhone 15</option>
-                            <option value="iphone-14-pro">iPhone 14 Pro</option>
-                          </select>
-                        </label>
+                        <div className="rm-cx-subpanel">
+                          <label className="rm-field">
+                            <span className="rm-field-label">Device</span>
+                            <select
+                              className="rm-select"
+                              value={cxDevice}
+                              disabled={batchRunning}
+                              onChange={(event) => setCxDevice(event.target.value as CxRemintDevice)}
+                            >
+                              <option value="auto">Auto (pick a recent iPhone)</option>
+                              <option value="iphone-16-pro-max">iPhone 16 Pro Max</option>
+                              <option value="iphone-16-pro">iPhone 16 Pro</option>
+                              <option value="iphone-16">iPhone 16</option>
+                              <option value="iphone-15-pro-max">iPhone 15 Pro Max</option>
+                              <option value="iphone-15-pro">iPhone 15 Pro</option>
+                              <option value="iphone-15">iPhone 15</option>
+                              <option value="iphone-14-pro">iPhone 14 Pro</option>
+                            </select>
+                          </label>
+
+                          <div className="rm-field">
+                            <span className="rm-field-label">Resolution metadata (DPI)</span>
+                            <div
+                              className="rm-seg rm-seg-sm"
+                              role="radiogroup"
+                              aria-label="Resolution metadata"
+                            >
+                              {([
+                                ["off", "Off"],
+                                ["standard", "On · 72 DPI"],
+                                ["custom", "Custom"]
+                              ] as const).map(([mode, label]) => (
+                                <button
+                                  key={mode}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={cxResolutionMode === mode}
+                                  className={cxResolutionMode === mode ? "is-active" : ""}
+                                  disabled={batchRunning}
+                                  onClick={() => setCxResolutionMode(mode)}
+                                >
+                                  {label}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="rm-hint">
+                              This controls print/layout metadata only. It does not resize the image
+                              or change its pixel detail.
+                            </p>
+                          </div>
+
+                          {cxResolutionMode === "custom" ? (
+                            <div className="rm-field-grid">
+                              <label className="rm-field">
+                                <span className="rm-field-label">Horizontal DPI</span>
+                                <input
+                                  className="rm-input"
+                                  type="number"
+                                  min={1}
+                                  max={12000}
+                                  step={1}
+                                  value={cxResolutionX}
+                                  disabled={batchRunning}
+                                  onChange={(event) => {
+                                    const value = event.currentTarget.valueAsNumber;
+                                    if (Number.isFinite(value)) setCxResolutionX(value);
+                                  }}
+                                />
+                              </label>
+                              <label className="rm-field">
+                                <span className="rm-field-label">Vertical DPI</span>
+                                <input
+                                  className="rm-input"
+                                  type="number"
+                                  min={1}
+                                  max={12000}
+                                  step={1}
+                                  value={cxResolutionY}
+                                  disabled={batchRunning}
+                                  onChange={(event) => {
+                                    const value = event.currentTarget.valueAsNumber;
+                                    if (Number.isFinite(value)) setCxResolutionY(value);
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          ) : null}
+                        </div>
                       ) : null}
 
                       <div className="rm-disc-note">

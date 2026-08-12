@@ -123,7 +123,17 @@ def seed_from(creator_id, seed_extra, size):
     return int(hashlib.sha256(material.encode("utf-8")).hexdigest()[:16], 16) & 0xFFFFFFFF
 
 
-def build_iphone_exif(width, height, creator_id, seed_extra="", device="auto", when=None):
+def build_iphone_exif(
+    width,
+    height,
+    creator_id,
+    seed_extra="",
+    device="auto",
+    when=None,
+    resolution_mode="off",
+    x_resolution=72,
+    y_resolution=72,
+):
     """Return (exif_bytes, report) for a coherent iPhone still.
 
     exif_bytes is a piexif dump ready to pass to PIL as save(exif=...).
@@ -158,11 +168,23 @@ def build_iphone_exif(width, height, creator_id, seed_extra="", device="auto", w
         piexif.ImageIFD.HostComputer: dev["model"].encode(),
         piexif.ImageIFD.DateTime: dt_str.encode(),
         piexif.ImageIFD.Orientation: 1,
-        piexif.ImageIFD.XResolution: (72, 1),
-        piexif.ImageIFD.YResolution: (72, 1),
-        piexif.ImageIFD.ResolutionUnit: 2,
         piexif.ImageIFD.YCbCrPositioning: 1,
     }
+
+    resolution_mode = str(resolution_mode).lower()
+    if resolution_mode not in ("off", "standard", "custom"):
+        resolution_mode = "off"
+    if resolution_mode == "standard":
+        x_resolution = y_resolution = 72.0
+    else:
+        x_resolution = _safe_resolution(x_resolution)
+        y_resolution = _safe_resolution(y_resolution)
+    if resolution_mode != "off":
+        zeroth.update({
+            piexif.ImageIFD.XResolution: _ratio(x_resolution, 1000),
+            piexif.ImageIFD.YResolution: _ratio(y_resolution, 1000),
+            piexif.ImageIFD.ResolutionUnit: 2,
+        })
 
     exif = {
         piexif.ExifIFD.ExposureTime: (1, shutter_den),
@@ -215,6 +237,12 @@ def build_iphone_exif(width, height, creator_id, seed_extra="", device="auto", w
         "focal_length_35mm": dev["focal35"],
         "datetime_original": dt_str,
         "offset_time": offset,
+        "resolution": {
+            "mode": resolution_mode,
+            "x_dpi": x_resolution if resolution_mode != "off" else None,
+            "y_dpi": y_resolution if resolution_mode != "off" else None,
+            "unit": "inch" if resolution_mode != "off" else None,
+        },
         "apex": {
             "aperture": round(aperture_apex, 3),
             "shutter": round(shutter_apex, 3),
@@ -225,6 +253,17 @@ def build_iphone_exif(width, height, creator_id, seed_extra="", device="auto", w
         "gps": "omitted_by_design",
     }
     return exif_bytes, report
+
+
+def _safe_resolution(value):
+    """Return a finite EXIF DPI value within the product's supported range."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return 72.0
+    if not math.isfinite(value):
+        return 72.0
+    return min(12000.0, max(1.0, value))
 
 
 def _plausible_recent_datetime(rng):

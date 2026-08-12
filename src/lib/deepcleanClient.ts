@@ -12,6 +12,7 @@ export type DeepCleanOutputMode = "stripped" | "sealed" | "sealed-stamped";
 export type CxRemintQualityFloor = "studio" | "high" | "balanced" | "strong" | "floor";
 export type CxRemintEngineMode = "template" | "adaptive";
 export type CxRemintAcquisition = "conservative" | "balanced" | "aggressive";
+export type CxRemintResolutionMode = "off" | "standard" | "custom";
 export type CxRemintDevice =
   | "auto"
   | "iphone-16-pro-max"
@@ -28,6 +29,9 @@ export type CxRemintOptions = {
   acquisition: CxRemintAcquisition;
   iphoneExif: boolean;
   device: CxRemintDevice;
+  resolutionMode: CxRemintResolutionMode;
+  resolutionX: number;
+  resolutionY: number;
 };
 export type ExpertRefinementMode = "off" | "light" | "balanced" | "optical";
 export type ExpertRefinementTechnique =
@@ -107,7 +111,10 @@ export async function createDeepCleanJob(params: {
             quality_floor: params.cxRemint.qualityFloor,
             acquisition: params.cxRemint.acquisition,
             iphone_exif: params.cxRemint.iphoneExif,
-            device: params.cxRemint.device
+            device: params.cxRemint.device,
+            resolution_mode: params.cxRemint.resolutionMode,
+            x_resolution: params.cxRemint.resolutionX,
+            y_resolution: params.cxRemint.resolutionY
           }
         : undefined
     }

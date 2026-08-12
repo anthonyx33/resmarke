@@ -25,7 +25,7 @@ type CreateJobBody = {
   micro_texture_jitter?: boolean;
   expert_refinement?: unknown;
   // CX Remint is the only Max profile with user-facing options (quality-floor
-  // slider, iPhone EXIF toggle, template/adaptive). They are validated and
+  // slider, iPhone EXIF/resolution controls, template/adaptive). They are validated and
   // clamped server-side in cxRemintExpertRefinement().
   cx_remint?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
@@ -457,6 +457,13 @@ function cxRemintExpertRefinement(
   const device =
     typeof raw.device === "string" && devices.includes(raw.device) ? raw.device : "auto";
   const iphoneExif = typeof raw.iphone_exif === "boolean" ? raw.iphone_exif : true;
+  const resolutionModes = ["off", "standard", "custom"];
+  const resolutionMode =
+    typeof raw.resolution_mode === "string" && resolutionModes.includes(raw.resolution_mode)
+      ? raw.resolution_mode
+      : "off";
+  const xResolution = clampNumber(raw.x_resolution, 1, 12000, 72);
+  const yResolution = clampNumber(raw.y_resolution, 1, 12000, 72);
 
   return {
     mode: "max-cx-remint",
@@ -469,6 +476,9 @@ function cxRemintExpertRefinement(
       acquisition,
       iphone_exif: iphoneExif,
       device,
+      resolution_mode: resolutionMode,
+      x_resolution: xResolution,
+      y_resolution: yResolution,
       jpeg_quality: 92,
       jpeg_subsampling: "4:2:0",
       ai_threshold: 0.5,
