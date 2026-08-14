@@ -21,13 +21,17 @@ type CreateJobBody = {
     | "max-cx-remint-v2"
     | "max-cx-remint-v3"
     | "max-cx-remint-v4"
-    | "max-cx-remint-v5";
+    | "max-cx-remint-v5"
+    | "ds-remint-v6";
   micro_texture_jitter?: boolean;
   expert_refinement?: unknown;
   // CX Remint is the only Max profile with user-facing options (quality-floor
   // slider, iPhone EXIF/resolution controls, template/adaptive). They are validated and
   // clamped server-side in cxRemintExpertRefinement().
   cx_remint?: unknown;
+  // DS ReMint V6 user-facing options (quality floor, engine mode, acquisition,
+  // EXIF, delivery target). Validated server-side in dsRemintV6ExpertRefinement().
+  ds_remint_v6?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
 };
 
@@ -62,7 +66,8 @@ Deno.serve(async (request) => {
         "max-cx-remint-v2",
         "max-cx-remint-v3",
         "max-cx-remint-v4",
-        "max-cx-remint-v5"
+        "max-cx-remint-v5",
+        "ds-remint-v6"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -113,6 +118,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "max-cx-remint-v5"
         ? "max"
+        : requestedProfile === "ds-remint-v6"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -125,7 +132,8 @@ Deno.serve(async (request) => {
       requestedProfile === "max-cx-remint-v2" ||
       requestedProfile === "max-cx-remint-v3" ||
       requestedProfile === "max-cx-remint-v4" ||
-      requestedProfile === "max-cx-remint-v5"
+      requestedProfile === "max-cx-remint-v5" ||
+      requestedProfile === "ds-remint-v6"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -151,6 +159,8 @@ Deno.serve(async (request) => {
         ? cxRemintExpertRefinement(body.cx_remint, "deep-hist")
         : requestedProfile === "max-cx-remint-v5"
         ? cxRemintExpertRefinement(body.cx_remint, "deep-hist-up")
+        : requestedProfile === "ds-remint-v6"
+        ? dsRemintV6ExpertRefinement(body.ds_remint_v6)
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -208,6 +218,8 @@ Deno.serve(async (request) => {
               ? "max-cx-remint-v4"
               : requestedProfile === "max-cx-remint-v5"
               ? "max-cx-remint-v5"
+              : requestedProfile === "ds-remint-v6"
+              ? "ds-remint-v6"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -501,6 +513,95 @@ function cxRemintExpertRefinement(
       // v5: deliver a >=1080 image even though removal ran at the low floor.
       output_upscale_to: upscale ? 1440 : null,
       upscale_enhance_strength: 0.5
+    }
+  };
+}
+
+function dsRemintV6ExpertRefinement(input: unknown) {
+  // DS ReMint V6: quality-constrained reconstruction remint. User options are
+  // whitelisted here so the client can never smuggle an out-of-range value or
+  // a sub-896 output floor to the worker. The pipeline is fixed server-side:
+  // pre-regeneration (SynthID killer) + final-resolution spectral reshape
+  // (flux fingerprint) + histogram tone lock + classical reconstruction +
+  // masked texture at final resolution + exactly one JPEG encode.
+  const raw = isRecord(input) ? input : {};
+  const engineModes = ["template", "adaptive"];
+  const qualityFloors = ["studio", "high", "balanced", "strong", "floor"];
+  const acquisitions = ["conservative", "balanced", "aggressive"];
+  const devices = [
+    "auto",
+    "iphone-16-pro-max",
+    "iphone-16-pro",
+    "iphone-16",
+    "iphone-15-pro-max",
+    "iphone-15-pro",
+    "iphone-15",
+    "iphone-14-pro"
+  ];
+
+  const engineMode =
+    typeof raw.engine_mode === "string" && engineModes.includes(raw.engine_mode)
+      ? raw.engine_mode
+      : "adaptive";
+  const qualityFloor =
+    typeof raw.quality_floor === "string" && qualityFloors.includes(raw.quality_floor)
+      ? raw.quality_floor
+      : "balanced";
+  const acquisition =
+    typeof raw.acquisition === "string" && acquisitions.includes(raw.acquisition)
+      ? raw.acquisition
+      : "balanced";
+  const device =
+    typeof raw.device === "string" && devices.includes(raw.device) ? raw.device : "auto";
+  const iphoneExif = typeof raw.iphone_exif === "boolean" ? raw.iphone_exif : true;
+  const resolutionModes = ["off", "standard", "custom"];
+  const resolutionMode =
+    typeof raw.resolution_mode === "string" && resolutionModes.includes(raw.resolution_mode)
+      ? raw.resolution_mode
+      : "off";
+  const xResolution = clampNumber(raw.x_resolution, 1, 12000, 72);
+  const yResolution = clampNumber(raw.y_resolution, 1, 12000, 72);
+  // Delivery long edge: null = min(source, 1440). Explicit values may upscale
+  // past the source; that is the user's explicit export policy.
+  const outputTarget =
+    raw.output_target === null || raw.output_target === undefined
+      ? null
+      : clampNumber(raw.output_target, 256, 8192, 1440);
+
+  return {
+    mode: "ds-remint-v6",
+    intensity: 100,
+    preserve_straight_lines: true,
+    techniques: {},
+    ds_remint_v6: {
+      engine_mode: engineMode,
+      quality_floor: qualityFloor,
+      acquisition,
+      iphone_exif: iphoneExif,
+      device,
+      resolution_mode: resolutionMode,
+      x_resolution: xResolution,
+      y_resolution: yResolution,
+      // Fixed server-side pipeline (the SynthID + flux-fingerprint breakers):
+      pre_regen: true,
+      regen_level: 8,
+      spectral_reshape: true,
+      spectral_strength: 0.3,
+      color_restore: true,
+      color_restore_strength: 0.8,
+      color_restore_method: "histogram",
+      resample_kernel: "ewi-lanczos",
+      bounce: false,
+      realism_boost: 0.3,
+      dehalo_strength: 0.6,
+      sharpen_percent: 24,
+      texture_amount: 0.9,
+      // Delivery policy + final encode:
+      output_target: outputTarget,
+      jpeg_quality: 94,
+      jpeg_subsampling: "4:2:2",
+      ai_threshold: 0.5,
+      max_rungs: 5
     }
   };
 }

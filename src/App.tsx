@@ -44,9 +44,14 @@ import {
   dispatchDeepCleanJob,
   getDeepCleanJob,
   uploadDeepCleanInput,
+  type CxRemintAcquisition,
+  type CxRemintDevice,
+  type CxRemintEngineMode,
+  type CxRemintQualityFloor,
   type DeepCleanJob,
   type DeepCleanOutputMode,
   type DeepCleanProfile,
+  type DsRemintV6Options,
   type ExpertRefinementMode,
   type ExpertRefinementSettings,
   type ExpertRefinementTechnique
@@ -67,7 +72,8 @@ type DeepCleanProfileSelection =
   | "max-optimised-remint"
   | "max-optical-pro"
   | "max-neural-texture-lab"
-  | "max-content-repair-lab";
+  | "max-content-repair-lab"
+  | "ds-remint-v6";
 
 const expertRefinementPresets: Record<
   ExpertRefinementMode,
@@ -211,6 +217,12 @@ export default function App() {
   const [deepCleanProfile, setDeepCleanProfile] =
     useState<DeepCleanProfileSelection>("standard");
   const [deepCleanMicroTextureJitter, setDeepCleanMicroTextureJitter] = useState(false);
+  const [dsV6QualityFloor, setDsV6QualityFloor] =
+    useState<CxRemintQualityFloor>("balanced");
+  const [dsV6EngineMode, setDsV6EngineMode] = useState<CxRemintEngineMode>("adaptive");
+  const [dsV6Acquisition, setDsV6Acquisition] = useState<CxRemintAcquisition>("balanced");
+  const [dsV6IphoneExif, setDsV6IphoneExif] = useState(true);
+  const [dsV6OutputTarget, setDsV6OutputTarget] = useState<number | null>(null);
   const [expertRefinementMode, setExpertRefinementMode] =
     useState<ExpertRefinementMode>("off");
   const [expertRefinementIntensity, setExpertRefinementIntensity] = useState(45);
@@ -506,7 +518,18 @@ export default function App() {
         profile: deepCleanProfile,
         outputMode: deepCleanOutputMode,
         microTextureJitter: deepCleanProfile === "max" && deepCleanMicroTextureJitter,
-        expertRefinement: buildExpertRefinementSettings()
+        expertRefinement: buildExpertRefinementSettings(),
+        dsRemintV6:
+          deepCleanProfile === "ds-remint-v6"
+            ? {
+                engineMode: dsV6EngineMode,
+                qualityFloor: dsV6QualityFloor,
+                acquisition: dsV6Acquisition,
+                iphoneExif: dsV6IphoneExif,
+                device: "auto",
+                outputTarget: dsV6OutputTarget
+              }
+            : undefined
       });
       createdJob = job;
       setDeepCleanJob(job);
@@ -539,7 +562,8 @@ export default function App() {
       profile === "max-optimised-remint" ||
       profile === "max-optical-pro" ||
       profile === "max-neural-texture-lab" ||
-      profile === "max-content-repair-lab"
+      profile === "max-content-repair-lab" ||
+      profile === "ds-remint-v6"
     ) {
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
@@ -1146,6 +1170,7 @@ export default function App() {
                     <option value="max">Max (Expert)</option>
                     <option value="max-mint">Max Mint</option>
                     <option value="max-remint">Max ReMint</option>
+                    <option value="ds-remint-v6">DS ReMint V6</option>
                     <option value="max-optimised-remint">Max Optimised ReMint</option>
                     {isAdminUi ? <option value="max-optical-pro">Optical Pro Lab</option> : null}
                     {isAdminUi ? (
@@ -1184,7 +1209,8 @@ export default function App() {
               deepCleanProfile === "max-optimised-remint" ||
               deepCleanProfile === "max-optical-pro" ||
               deepCleanProfile === "max-neural-texture-lab" ||
-              deepCleanProfile === "max-content-repair-lab" ? (
+              deepCleanProfile === "max-content-repair-lab" ||
+              deepCleanProfile === "ds-remint-v6" ? (
                 <div className="expert-refinement">
                   <div className="expert-refinement-head">
                     <div>
@@ -1193,6 +1219,8 @@ export default function App() {
                           ? "Max ReMint"
                           : deepCleanProfile === "max-optimised-remint"
                           ? "Max Optimised ReMint"
+                          : deepCleanProfile === "ds-remint-v6"
+                          ? "DS ReMint V6"
                           : deepCleanProfile === "max-content-repair-lab"
                           ? "Content Repair Lab"
                           : deepCleanProfile === "max-neural-texture-lab"
@@ -1209,6 +1237,14 @@ export default function App() {
                         <p>
                           Moderate regeneration path with idempotency, unsharp restoration,
                           tight PSNR/SSIM gates, and light optimised finalization.
+                        </p>
+                      ) : deepCleanProfile === "ds-remint-v6" ? (
+                        <p>
+                          Quality-constrained reconstruction: regeneration breaks SynthID,
+                          a single consolidated resample strips the Flux/diffusion
+                          fingerprint, then classical reconstruction (dehalo + luma
+                          sharpen + masked texture) rebuilds quality. One JPEG encode,
+                          final-resolution spectral reshape, final-byte QC.
                         </p>
                       ) : deepCleanProfile === "max-content-repair-lab" ? (
                         <p>
@@ -1230,6 +1266,78 @@ export default function App() {
                     </div>
                     <SlidersHorizontal size={18} aria-hidden="true" />
                   </div>
+
+                  {deepCleanProfile === "ds-remint-v6" ? (
+                    <div className="deepclean-controls">
+                      <label className="field">
+                        <span>Quality floor</span>
+                        <select
+                          className="select"
+                          value={dsV6QualityFloor}
+                          onChange={(event) =>
+                            setDsV6QualityFloor(event.target.value as CxRemintQualityFloor)
+                          }
+                        >
+                          <option value="studio">Studio (max quality)</option>
+                          <option value="high">High</option>
+                          <option value="balanced">Balanced (recommended)</option>
+                          <option value="strong">Strong</option>
+                          <option value="floor">Floor</option>
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Engine</span>
+                        <select
+                          className="select"
+                          value={dsV6EngineMode}
+                          onChange={(event) =>
+                            setDsV6EngineMode(event.target.value as CxRemintEngineMode)
+                          }
+                        >
+                          <option value="adaptive">Adaptive (detector-gated)</option>
+                          <option value="template">Template (fast)</option>
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Camera texture</span>
+                        <select
+                          className="select"
+                          value={dsV6Acquisition}
+                          onChange={(event) =>
+                            setDsV6Acquisition(event.target.value as CxRemintAcquisition)
+                          }
+                        >
+                          <option value="conservative">Conservative</option>
+                          <option value="balanced">Balanced</option>
+                          <option value="aggressive">Aggressive</option>
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Delivery long edge</span>
+                        <input
+                          className="input"
+                          type="number"
+                          min={256}
+                          max={8192}
+                          placeholder="Auto: min(source, 1440)"
+                          value={dsV6OutputTarget ?? ""}
+                          onChange={(event) =>
+                            setDsV6OutputTarget(
+                              event.target.value === "" ? null : Number(event.target.value)
+                            )
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>iPhone EXIF</span>
+                        <input
+                          type="checkbox"
+                          checked={dsV6IphoneExif}
+                          onChange={(event) => setDsV6IphoneExif(event.target.checked)}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
               <div className="expert-refinement">
