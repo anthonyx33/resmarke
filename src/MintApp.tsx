@@ -325,6 +325,10 @@ export default function MintApp() {
   const [dsV6Acquisition, setDsV6Acquisition] = useState<CxRemintAcquisition>("balanced");
   const [dsV6IphoneExif, setDsV6IphoneExif] = useState(true);
   const [dsV6OutputTarget, setDsV6OutputTarget] = useState("");
+  // Expert tuning (A/B-tuned defaults from the worker validation runs).
+  const [dsV6Sharpen, setDsV6Sharpen] = useState(24);
+  const [dsV6Texture, setDsV6Texture] = useState(90);
+  const [dsV6Spectral, setDsV6Spectral] = useState(30);
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -413,6 +417,22 @@ export default function MintApp() {
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
   );
   const dsV6QualityFloorStop = CX_QUALITY_FLOOR_STOPS[dsV6QualityFloorIndex];
+
+  // Live pipeline indicators for the V6 panel: what the worker will actually
+  // do for the first queued image (approximation; the worker clamps exactly).
+  const dsV6InputLong =
+    imageQueue.length > 0
+      ? Math.max(imageQueue[0].width ?? 0, imageQueue[0].height ?? 0)
+      : 0;
+  const dsV6DeliveryTargetNum = dsV6OutputTarget === "" ? 1440 : Number(dsV6OutputTarget);
+  const dsV6ProcessPx =
+    dsV6InputLong > 0
+      ? Math.min(dsV6InputLong, dsV6QualityFloorStop.longEdge)
+      : dsV6QualityFloorStop.longEdge;
+  const dsV6DeliveryPx =
+    dsV6InputLong > 0
+      ? Math.min(dsV6InputLong, dsV6DeliveryTargetNum)
+      : dsV6DeliveryTargetNum;
 
   // Re-Mint can run locally in demo mode. Sign-in upgrades to Supabase credits.
   const pendingBatchItems = imageQueue.filter((item) => item.status !== "completed");
@@ -859,7 +879,10 @@ export default function MintApp() {
                   iphoneExif: dsV6IphoneExif,
                   device: "auto",
                   outputTarget:
-                    dsV6OutputTarget === "" ? null : Number(dsV6OutputTarget)
+                    dsV6OutputTarget === "" ? null : Number(dsV6OutputTarget),
+                  sharpenPercent: dsV6Sharpen,
+                  textureAmount: dsV6Texture / 100,
+                  spectralStrength: dsV6Spectral / 100
                 }
               : undefined
         });
@@ -1917,6 +1940,25 @@ export default function MintApp() {
                         </span>
                       </div>
 
+                      <div className="rm-v6-stats" aria-label="Pipeline indicators">
+                        <span className="rm-stat">
+                          <em>Process</em>
+                          <b>~{dsV6ProcessPx}px</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Deliver</em>
+                          <b>~{dsV6DeliveryPx}px</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Encode</em>
+                          <b>JPEG · q94</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Engine</em>
+                          <b>{dsV6EngineMode === "adaptive" ? "≤5 gated passes" : "1 pass"}</b>
+                        </span>
+                      </div>
+
                       <div className="rm-field">
                         <span className="rm-field-label">Engine</span>
                         <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V6 engine">
@@ -1943,8 +1985,8 @@ export default function MintApp() {
                         </div>
                         <p className="rm-hint">
                           {dsV6EngineMode === "adaptive"
-                            ? "Escalates strength against a live AI detector and stops at the first pass that clears — the least quality loss per image. +2 credits."
-                            : "Fast, predictable single pass at the quality floor you pick below."}
+                            ? "Detector-gated escalation: every rung is probed against a live AI detector and the first pass that clears ships — the minimum destruction that passes for THIS image. Up to 5 rungs. +2 credits."
+                            : "One deterministic pass at the quality floor below. Fast and predictable, no detector calls."}
                         </p>
                       </div>
 
@@ -1970,7 +2012,11 @@ export default function MintApp() {
                           <span>Strongest removal</span>
                           <span>Max quality</span>
                         </div>
-                        <p className="rm-hint">{dsV6QualityFloorStop.hint}</p>
+                        <p className="rm-hint">
+                          {dsV6QualityFloorStop.hint} Laundering runs at this size; V6 then
+                          reconstructs to the delivery resolution above — so a lower floor costs
+                          detail, never size.
+                        </p>
                       </div>
 
                       <div className="rm-field">
@@ -1997,8 +2043,9 @@ export default function MintApp() {
                           )}
                         </div>
                         <p className="rm-hint">
-                          Masked sensor grain at final resolution — flat areas stay clean, textured
-                          areas get the camera signature.
+                          Masked sensor grain at final resolution: flat areas (skies, gradients)
+                          stay clean, textured areas inherit a real-camera high-frequency
+                          signature. Aggressive helps stubbornly AI-flagged images.
                         </p>
                       </div>
 
@@ -2015,6 +2062,11 @@ export default function MintApp() {
                             disabled={batchRunning}
                             onChange={(event) => setDsV6OutputTarget(event.target.value)}
                           />
+                          <p className="rm-hint">
+                            {dsV6InputLong > 0
+                              ? `Your first image is ${dsV6InputLong}px — delivery will be ~${dsV6DeliveryPx}px.`
+                              : "Auto never enlarges past the source image."}
+                          </p>
                         </label>
                         <label className="rm-switch">
                           <input
@@ -2029,6 +2081,84 @@ export default function MintApp() {
                           <span>iPhone EXIF</span>
                         </label>
                       </div>
+
+                      <details className="rm-disc">
+                        <summary>
+                          <Gauge size={15} aria-hidden="true" /> Expert tuning — sharpening ·
+                          texture · fingerprint scrub
+                          <ChevronDown className="rm-chev" size={16} aria-hidden="true" />
+                        </summary>
+                        <div className="rm-disc-body">
+                          <label className="rm-range">
+                            <span className="rm-field-label">
+                              Sharpening <em>{dsV6Sharpen}%</em>
+                            </span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={60}
+                              step={2}
+                              value={dsV6Sharpen}
+                              disabled={batchRunning}
+                              onChange={(event) => setDsV6Sharpen(Number(event.target.value))}
+                            />
+                            <span className="rm-range-ends">
+                              <span>Softer</span>
+                              <span>Crisper</span>
+                            </span>
+                            <p className="rm-hint">
+                              Luma-only unsharp applied after dehalo. Too high re-adds edge halos
+                              that detectors read as GAN ringing. 24% is the A/B-tuned sweet spot.
+                            </p>
+                          </label>
+                          <label className="rm-range">
+                            <span className="rm-field-label">
+                              Texture strength <em>{dsV6Texture}%</em>
+                            </span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={150}
+                              step={5}
+                              value={dsV6Texture}
+                              disabled={batchRunning}
+                              onChange={(event) => setDsV6Texture(Number(event.target.value))}
+                            />
+                            <span className="rm-range-ends">
+                              <span>Clean</span>
+                              <span>Grainy</span>
+                            </span>
+                            <p className="rm-hint">
+                              Multiplies the masked sensor grain at final resolution. 90% is the
+                              tuned default; push higher only for images that still read as
+                              AI-generated.
+                            </p>
+                          </label>
+                          <label className="rm-range">
+                            <span className="rm-field-label">
+                              Fingerprint scrub <em>{dsV6Spectral}%</em>
+                            </span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={60}
+                              step={5}
+                              value={dsV6Spectral}
+                              disabled={batchRunning}
+                              onChange={(event) => setDsV6Spectral(Number(event.target.value))}
+                            />
+                            <span className="rm-range-ends">
+                              <span>Subtle</span>
+                              <span>Deep</span>
+                            </span>
+                            <p className="rm-hint">
+                              Spectral amplitude reshape toward a real-camera 1/f curve at final
+                              resolution — the Flux-fingerprint killer. 30% is the A/B-tuned
+                              default; too deep flattens fine texture.
+                            </p>
+                          </label>
+                        </div>
+                      </details>
                     </div>
                   ) : null}
 

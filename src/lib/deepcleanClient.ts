@@ -41,6 +41,9 @@ export type DsRemintV6Options = {
   iphoneExif: boolean;
   device: CxRemintDevice;
   outputTarget: number | null;
+  sharpenPercent?: number;
+  textureAmount?: number;
+  spectralStrength?: number;
 };
 export type ExpertRefinementMode = "off" | "light" | "balanced" | "optical";
 export type ExpertRefinementTechnique =
@@ -135,7 +138,10 @@ export async function createDeepCleanJob(params: {
             acquisition: params.dsRemintV6.acquisition,
             iphone_exif: params.dsRemintV6.iphoneExif,
             device: params.dsRemintV6.device,
-            output_target: params.dsRemintV6.outputTarget
+            output_target: params.dsRemintV6.outputTarget,
+            sharpen_percent: params.dsRemintV6.sharpenPercent,
+            texture_amount: params.dsRemintV6.textureAmount,
+            spectral_strength: params.dsRemintV6.spectralStrength
           }
         : undefined
     }

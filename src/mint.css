@@ -1759,6 +1759,32 @@ html[data-theme="dark"] .rm-grad {
   flex: none;
   margin-top: 1px;
 }
+.rm-v6-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.rm-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--rm-surface);
+  border: 1px solid var(--rm-border);
+}
+.rm-stat em {
+  font-style: normal;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--rm-faint);
+}
+.rm-stat b {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--rm-text);
+}
 
 /* ---- Range ---- */
 

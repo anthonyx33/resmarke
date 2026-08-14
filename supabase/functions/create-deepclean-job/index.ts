@@ -567,6 +567,10 @@ function dsRemintV6ExpertRefinement(input: unknown) {
     raw.output_target === null || raw.output_target === undefined
       ? null
       : clampNumber(raw.output_target, 256, 8192, 1440);
+  // Expert tuning (whitelisted + clamped; defaults are the A/B-tuned values).
+  const sharpenPercent = clampNumber(raw.sharpen_percent, 0, 100, 24);
+  const textureAmount = clampNumber(raw.texture_amount, 0, 1.5, 0.9);
+  const spectralStrength = clampNumber(raw.spectral_strength, 0, 0.6, 0.3);
 
   return {
     mode: "ds-remint-v6",
@@ -586,7 +590,7 @@ function dsRemintV6ExpertRefinement(input: unknown) {
       pre_regen: true,
       regen_level: 8,
       spectral_reshape: true,
-      spectral_strength: 0.3,
+      spectral_strength: spectralStrength,
       color_restore: true,
       color_restore_strength: 0.8,
       color_restore_method: "histogram",
@@ -594,8 +598,8 @@ function dsRemintV6ExpertRefinement(input: unknown) {
       bounce: false,
       realism_boost: 0.3,
       dehalo_strength: 0.6,
-      sharpen_percent: 24,
-      texture_amount: 0.9,
+      sharpen_percent: sharpenPercent,
+      texture_amount: textureAmount,
       // Delivery policy + final encode:
       output_target: outputTarget,
       jpeg_quality: 94,
