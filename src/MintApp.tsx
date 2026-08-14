@@ -60,7 +60,8 @@ import {
   type CxRemintQualityFloor,
   type CxRemintEngineMode,
   type CxRemintDevice,
-  type CxRemintResolutionMode
+  type CxRemintResolutionMode,
+  type CxRemintAcquisition
 } from "./lib/deepcleanClient";
 import {
   getAdminRunpodEndpoint,
@@ -109,7 +110,8 @@ type MintDeepCleanProfile =
   | "max-cx-remint-v2"
   | "max-cx-remint-v3"
   | "max-cx-remint-v4"
-  | "max-cx-remint-v5";
+  | "max-cx-remint-v5"
+  | "ds-remint-v6";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
@@ -316,6 +318,13 @@ export default function MintApp() {
     useState<CxRemintResolutionMode>("off");
   const [cxResolutionX, setCxResolutionX] = useState(72);
   const [cxResolutionY, setCxResolutionY] = useState(72);
+  // DS ReMint V6 controls (dedicated main toggle, see the Re-Mint Max card).
+  const [dsV6QualityFloor, setDsV6QualityFloor] =
+    useState<CxRemintQualityFloor>("balanced");
+  const [dsV6EngineMode, setDsV6EngineMode] = useState<CxRemintEngineMode>("adaptive");
+  const [dsV6Acquisition, setDsV6Acquisition] = useState<CxRemintAcquisition>("balanced");
+  const [dsV6IphoneExif, setDsV6IphoneExif] = useState(true);
+  const [dsV6OutputTarget, setDsV6OutputTarget] = useState("");
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -360,7 +369,9 @@ export default function MintApp() {
       "max-cx-remint-v2": 13,
       "max-cx-remint-v3": 13,
       "max-cx-remint-v4": 13,
-      "max-cx-remint-v5": 13
+      "max-cx-remint-v5": 13,
+      // DS ReMint V6: regen + laundering + classical reconstruction + QC.
+      "ds-remint-v6": 13
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -374,6 +385,8 @@ export default function MintApp() {
     if (deepCleanProfile === "max" && deepCleanMicroTextureJitter) cost += 1;
     // Adaptive CX Remint runs repeated real-detector probes — reflect that.
     if (isCxProfile(deepCleanProfile) && cxEngineMode === "adaptive") cost += 2;
+    // Adaptive DS ReMint V6 does the same detector-gated escalation.
+    if (deepCleanProfile === "ds-remint-v6" && dsV6EngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
   }, [
@@ -381,7 +394,8 @@ export default function MintApp() {
     expertRefinementMode,
     deepCleanMicroTextureJitter,
     deepCleanOutputMode,
-    cxEngineMode
+    cxEngineMode,
+    dsV6EngineMode
   ]);
 
   // CX Remint quality-floor slider: map the selected preset to its slider index
@@ -391,6 +405,14 @@ export default function MintApp() {
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === cxQualityFloor)
   );
   const cxQualityFloorStop = CX_QUALITY_FLOOR_STOPS[cxQualityFloorIndex];
+
+  // DS ReMint V6 derived state: active toggle + quality-floor slider mapping.
+  const dsV6Active = deepCleanProfile === "ds-remint-v6";
+  const dsV6QualityFloorIndex = Math.max(
+    0,
+    CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
+  );
+  const dsV6QualityFloorStop = CX_QUALITY_FLOOR_STOPS[dsV6QualityFloorIndex];
 
   // Re-Mint can run locally in demo mode. Sign-in upgrades to Supabase credits.
   const pendingBatchItems = imageQueue.filter((item) => item.status !== "completed");
@@ -827,7 +849,19 @@ export default function MintApp() {
                 resolutionX: cxResolutionX,
                 resolutionY: cxResolutionY
               }
-            : undefined
+            : undefined,
+          dsRemintV6:
+            deepCleanProfile === "ds-remint-v6"
+              ? {
+                  engineMode: dsV6EngineMode,
+                  qualityFloor: dsV6QualityFloor,
+                  acquisition: dsV6Acquisition,
+                  iphoneExif: dsV6IphoneExif,
+                  device: "auto",
+                  outputTarget:
+                    dsV6OutputTarget === "" ? null : Number(dsV6OutputTarget)
+                }
+              : undefined
         });
         createdJob = job;
         updateQueueItem(item.id, { status: "preparing", job });
@@ -1029,6 +1063,16 @@ export default function MintApp() {
       // lower resolutions (live tests: clean at ~960px, still flagged at
       // 1280px). Snap the quality-floor slider to the Strong (960px) sweet spot.
       if (isCxDeepProfile(profile)) setCxQualityFloor("strong");
+      return;
+    }
+    if (profile === "ds-remint-v6") {
+      // DS ReMint V6 is terminal: stripped output, camera-grade texture and a
+      // coherent iPhone EXIF come from the pipeline itself.
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
       return;
     }
     if (profile === "max-remint" || profile === "max-optimised-remint") {
@@ -1841,6 +1885,154 @@ export default function MintApp() {
                     with clear progress and isolated failures.
                   </p>
 
+                  <label className={`rm-v6-toggle${dsV6Active ? " is-active" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={dsV6Active}
+                      disabled={batchRunning}
+                      onChange={(event) =>
+                        chooseDeepCleanProfile(
+                          event.target.checked ? "ds-remint-v6" : "max-cx-remint-v5"
+                        )
+                      }
+                    />
+                    <span className="rm-switch-track" aria-hidden="true">
+                      <span className="rm-switch-thumb" />
+                    </span>
+                    <span className="rm-v6-toggle-text">
+                      <strong>DS ReMint V6</strong>
+                      <small>Flux-fingerprint removal + quality reconstruction</small>
+                    </span>
+                    <span className="rm-badge">{dsV6Active ? "Enabled" : "Off"}</span>
+                  </label>
+
+                  {dsV6Active ? (
+                    <div className="rm-v6-panel">
+                      <div className="rm-v6-banner">
+                        <Sparkles size={15} aria-hidden="true" />
+                        <span>
+                          Regeneration breaks SynthID, a consolidated resample strips the Flux
+                          fingerprint, then classical reconstruction (dehalo · luma sharpen ·
+                          masked texture) rebuilds quality. One JPEG encode, final-byte QC.
+                        </span>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Engine</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V6 engine">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV6EngineMode === "adaptive"}
+                            className={dsV6EngineMode === "adaptive" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV6EngineMode("adaptive")}
+                          >
+                            Adaptive (detector-gated)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV6EngineMode === "template"}
+                            className={dsV6EngineMode === "template" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV6EngineMode("template")}
+                          >
+                            Optimised template
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV6EngineMode === "adaptive"
+                            ? "Escalates strength against a live AI detector and stops at the first pass that clears — the least quality loss per image. +2 credits."
+                            : "Fast, predictable single pass at the quality floor you pick below."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">
+                          Quality floor · {dsV6QualityFloorStop.label} (~{dsV6QualityFloorStop.longEdge}px)
+                        </span>
+                        <input
+                          className="rm-cx-slider"
+                          type="range"
+                          min={0}
+                          max={CX_QUALITY_FLOOR_STOPS.length - 1}
+                          step={1}
+                          value={dsV6QualityFloorIndex}
+                          disabled={batchRunning}
+                          onChange={(event) =>
+                            setDsV6QualityFloor(
+                              CX_QUALITY_FLOOR_STOPS[Number(event.target.value)].value
+                            )
+                          }
+                        />
+                        <div className="rm-range-ends">
+                          <span>Strongest removal</span>
+                          <span>Max quality</span>
+                        </div>
+                        <p className="rm-hint">{dsV6QualityFloorStop.hint}</p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Camera texture</span>
+                        <div className="rm-seg rm-seg-sm" role="radiogroup" aria-label="Camera texture">
+                          {(["conservative", "balanced", "aggressive"] as CxRemintAcquisition[]).map(
+                            (level) => (
+                              <button
+                                key={level}
+                                type="button"
+                                role="radio"
+                                aria-checked={dsV6Acquisition === level}
+                                className={dsV6Acquisition === level ? "is-active" : ""}
+                                disabled={batchRunning}
+                                onClick={() => setDsV6Acquisition(level)}
+                              >
+                                {level === "conservative"
+                                  ? "Conservative"
+                                  : level === "balanced"
+                                  ? "Balanced"
+                                  : "Aggressive"}
+                              </button>
+                            )
+                          )}
+                        </div>
+                        <p className="rm-hint">
+                          Masked sensor grain at final resolution — flat areas stay clean, textured
+                          areas get the camera signature.
+                        </p>
+                      </div>
+
+                      <div className="rm-field-grid">
+                        <label className="rm-field">
+                          <span className="rm-field-label">Delivery long edge</span>
+                          <input
+                            className="rm-input"
+                            type="number"
+                            min={256}
+                            max={8192}
+                            placeholder="Auto · min(source, 1440)"
+                            value={dsV6OutputTarget}
+                            disabled={batchRunning}
+                            onChange={(event) => setDsV6OutputTarget(event.target.value)}
+                          />
+                        </label>
+                        <label className="rm-switch">
+                          <input
+                            type="checkbox"
+                            checked={dsV6IphoneExif}
+                            disabled={batchRunning}
+                            onChange={(event) => setDsV6IphoneExif(event.target.checked)}
+                          />
+                          <span className="rm-switch-track" aria-hidden="true">
+                            <span className="rm-switch-thumb" />
+                          </span>
+                          <span>iPhone EXIF</span>
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!dsV6Active ? (
                   <div className="rm-field-grid">
                     <label className="rm-field">
                       <span className="rm-field-label">Profile</span>
@@ -1862,6 +2054,7 @@ export default function MintApp() {
                         <option value="max-cx-remint-v3">CX Remint v3 · Deep + colour restore</option>
                         <option value="max-cx-remint-v4">CX Remint v4 · Deep + tone match + realism</option>
                         <option value="max-cx-remint-v5">CX Remint v5 · Max removal + upscale to 1080+ (recommended)</option>
+                        <option value="ds-remint-v6">DS ReMint V6 (new)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -1878,6 +2071,7 @@ export default function MintApp() {
                       </select>
                     </label>
                   </div>
+                  ) : null}
 
                   {deepCleanProfile === "max" ? (
                     <label className="rm-switch">
