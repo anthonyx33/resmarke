@@ -5,16 +5,22 @@
 Production fails before DS ReMint V6 because torch 2.5.1 cannot import the ComfyUI-pinned comfy-kitchen 0.2.31 custom-op schema.
 The candidate preserves run #39's worker/source snapshot while changing the base stack to torch 2.7.1 / CUDA 12.6 and constraining the torch triplet.
 ComfyUI, nine external node packs, and SAM2 now use immutable source commits; dependency-install failures are fatal.
-CI now publishes only the immutable git-SHA tag, and fatal build gates cover imports, versions, workflow shape, registered classes, `res_2s`, and `pip check`.
-Local static checks passed. The first CI attempt (GitHub Actions run #40, run id 31858918336) failed early at the SAM2 rewrite step — before any smoke gate or image push. That line is fixed in the current Dockerfile and the build is pending a rerun. No candidate image exists in the registry yet.
+CI publishes only the immutable git-SHA tag. Gates are split by environment: CPU-safe checks stay fatal at build time, and the three that require a live CUDA driver run at container start on RunPod — see §4.
+CI proved the root-cause fix directly: `@torch.library.custom_op` accepted the exact `list[int]` / `float | None` annotations that torch 2.5.1 rejected.
+**Run #43 (commit ee3e2ac) is green** and published the first candidate image — deploy by digest `sha256:d361614f7cea4fa5a4e89d9c611c92de4e57a9027c5dd838e8a5f85926f89c22`. The three GPU-side gates remain unverified until the first RunPod boot; that boot is the real gate, and the endpoint should be treated as unproven until its self-check passes.
 
 ## 2. Files changed
 
 | Path | Reason |
 |---|---|
-| `deepclean-worker/Dockerfile` | Pin the compatible base image and run-#39 sources, constrain every pip install, make installs fatal, and add build-time gates. |
+| `deepclean-worker/Dockerfile` | Pin the compatible base image and run-#39 sources, constrain every pip install, make installs fatal, and run the CPU-safe build gates. |
 | `deepclean-worker/constraints.txt` | Constrain only torch 2.7.1, torchvision 0.22.1, and torchaudio 2.7.1. |
-| `deepclean-worker/smoke_test.py` | Boot ComfyUI on CPU, validate every workflow class through `/object_info`, verify the `res_2s` sampler choice, and stop the process cleanly. |
+| `deepclean-worker/build_gate.py` | CPU-safe build-time gates, including a direct test of the torch `infer_schema` regression that caused the outage. Must never import `comfy_kitchen`. |
+| `deepclean-worker/runtime_self_check.py` | The GPU-side gates that cannot run in CI: `comfy_kitchen` backend map, plus live `/object_info` class and `res_2s` validation against the already-running ComfyUI. |
+| `deepclean-worker/start.sh` | Run the runtime self-check after ComfyUI is ready and before the handler accepts jobs. |
+| `deepclean-worker/smoke_test.py` | Standalone CPU boot + workflow-surface check; `runtime_self_check.py` reuses its pure helpers. |
+| `deepclean-worker/ds_remint_v6.py` | Tri-state detector gate (never blind-escalate on infra error) and the 0-88 AI-flag rating. |
+| `src/MintApp.tsx`, `src/mint.css` | "AI-flag risk: N/88" chip on the DeepClean result card, hidden when the score is null. |
 | `.github/workflows/deepclean-worker.yml` | Prevent candidate builds from publishing or moving `:latest`; publish only `${{ github.sha }}`. |
 | `deepclean-worker/build-report.md` | Provide this owner-review and execution handoff. |
 
@@ -70,18 +76,64 @@ Docker, Podman, actionlint, and hadolint are unavailable on this machine. No con
 
 Build history:
 
-- Run #40 (run id 31858918336, commit 88a663d): FAILED at Dockerfile step 8 of 34 — the SAM2 sed/grep rewrite — before any node-pack pip install, COPY layer, smoke gate, or image export. No image was published; no tag exists in the registry for this commit. The fix is in the current Dockerfile.
-- Next run (pending owner push): must reach and pass all seven gates below before a candidate digest is considered.
+- Run #40 (run id 31858918336, commit 88a663d): FAILED at Dockerfile step 8 of 34 — the SAM2 sed/grep rewrite — before any node-pack pip install, COPY layer, smoke gate, or image export. No image published; no tag in the registry for this commit.
+- Run #41 (run id 31863022724, commit 7eccd3d): FAILED at step 30 of 34, the first gate. Every dependency install succeeded — all nine node packs at their pinned SHAs, all under `constraints.txt` — and the original `infer_schema` crash did **not** reappear. The failure was `RuntimeError: 0 active drivers ([])`, raised from `comfy_kitchen/__init__.py` → Triton's import-time driver init. No image published.
+- Run #42 (run id 31864625870, commit fec5eda): FAILED at the rewritten build gate, on an over-strict schema string only. Both substantive checks passed — see the gate-split note below. No image published.
+- **Run #43 (run id 31864894419, commit ee3e2ac): SUCCESS.** All five CPU-safe gates passed and the image was pushed.
 
-| Gate | Command or behavior | Required evidence | Current status |
+### Candidate image
+
+| Field | Value |
+|---|---|
+| Tag | `ghcr.io/anthonyx33/resmarke-deepclean:ee3e2ac97efa9cc7c65ca35435f9dc8d3a45f25c` |
+| **Deploy by digest** | `ghcr.io/anthonyx33/resmarke-deepclean@sha256:d361614f7cea4fa5a4e89d9c611c92de4e57a9027c5dd838e8a5f85926f89c22` |
+| Config digest | `sha256:e3c1dbf860fe8b85317b9869ae1fb895e453741a180aef5f6be52d720edcf5b2` |
+| Platform | `linux/amd64` |
+| Run URL | https://github.com/anthonyx33/resmarke/actions/runs/31864894419 |
+
+Verbatim gate output from run #43:
+
+```text
+--- build gate (CPU-safe) on python 3.11.13 ---
+OK: torch 2.7.1+cu126, CUDA runtime 12.6
+OK: @torch.library.custom_op accepted list[int] / list[bool] / float | None
+OK: na3d schema matches the owner-verified signature
+OK: comfy-kitchen pinned at 0.2.31
+OK: ds_remint_v6 imports cleanly with its public entry points
+OK: all CPU-safe build gates passed
+OK: /app/workflows/remarkee-max-v2.api.json is ComfyUI API format.
+No broken requirements found.
+```
+
+The second line is the outage regression test: that registration is exactly what torch 2.5.1 rejected.
+
+### Why the gates were split
+
+Triton instantiates a GPU driver **at import time**, and `comfy_kitchen` imports its Triton backend eagerly. A GitHub Actions runner has no GPU, so any build-time gate that imports `comfy_kitchen` fails there no matter how the image is pinned. ComfyUI is in the same bucket: `comfy/ldm/modules/attention.py` imports `comfy_kitchen` at module level, and `comfy-kitchen==0.2.31` is a hard dependency in ComfyUI's own `requirements.txt` — so the `--quick-test-for-ci` and `smoke_test.py` gates would have hit the identical wall on the next two steps, `--cpu` notwithstanding.
+
+Gates are therefore split by what each environment can actually prove. Nothing was dropped; the GPU-dependent checks moved to the first place a GPU exists.
+
+**Build-time gates (CPU-safe, fatal in CI):**
+
+| Gate | Command or behavior | Required evidence | Status |
 |---|---|---|---|
-| 1. Imports | Import `torch`, `comfy_kitchen`, `comfy.utils`, and `ds_remint_v6` from `/app` with `/app/ComfyUI` on `PYTHONPATH`. | Command exits 0 and reaches the success marker. | Pending CI. |
-| 2. Exact stack | Assert torch starts with `2.7.1` and `torch.version.cuda == "12.6"`. | Log prints exact torch and CUDA runtime versions. | Pending CI. |
-| 3. comfy-kitchen | Read `importlib.metadata.version("comfy-kitchen")`, print `list_backends()`, and require `eager.available == true`. | Version `0.2.31`; eager true. CUDA may be unavailable without failing this gate. | Pending CI. |
-| 4. Static workflow | Run `python /app/workflows/validate_api_workflow.py`. | `OK`, 43 nodes, required class counts present. | Passed locally; repeats in CI. |
-| 5. ComfyUI CI boot | Run `python main.py --cpu --quick-test-for-ci` from `/app/ComfyUI`. | Exit 0; no fatal ComfyUI import/startup error. | Pending CI. |
-| 6. Live API | `smoke_test.py` starts CPU ComfyUI on port 8199, polls `/object_info`, validates all 31 unique workflow classes, checks `res_2s` under `KSampler.input.required.sampler_name[0]`, then terminates ComfyUI. | Three `OK:` lines and exit 0; failures include the final 200 ComfyUI log lines. | Helper syntax/logic passed locally; live boot pending CI. |
-| 7. Package consistency | Run `python -m pip check` after every install and all other gates. | `No broken requirements found.` | Pending CI. |
+| B1. Exact stack | `build_gate.py` asserts torch starts with `2.7.1` and `torch.version.cuda == "12.6"`. | Log prints exact torch and CUDA runtime. | **PASSED** run #43: `OK: torch 2.7.1+cu126, CUDA runtime 12.6` |
+| B2. Root cause | Register the `na3d` custom op with the `list[int]` / `list[bool]` / `float \| None` annotations torch 2.5.1 rejected, then hold the inferred schema to the owner-verified signature (compared by type; whitespace and default values normalized away). | Registration succeeds; schema types match. | **PASSED** run #43 (both checks). |
+| B3. comfy-kitchen pin | Read `importlib.metadata.version("comfy-kitchen")` — metadata only, never imported. | Version `0.2.31`. | **PASSED** run #43. |
+| B4. Static workflow | `python /app/workflows/validate_api_workflow.py`. | `OK`, 43 nodes, required class counts present. | **PASSED** run #43. |
+| B5. Package consistency | `python -m pip check`. | `No broken requirements found.` | **PASSED** run #43. |
+
+B2 is a stronger test of the outage than the old gate 1: it exercises the exact registration that crashed under torch 2.5.1, rather than inferring the fix from a successful `comfy_kitchen` import.
+
+**Runtime gates (GPU-side, fatal at container start):**
+
+`start.sh` runs `runtime_self_check.py` after ComfyUI is up and before the serverless handler is exec'd. It reuses the already-running ComfyUI rather than booting a second instance, so the added cold-start cost is one localhost request plus the `comfy_kitchen` import. A failure exits non-zero under `set -e`, so a broken image fails its warmup loudly instead of failing every job silently. `DEEPCLEAN_SKIP_SELFCHECK=1` bypasses it — an escape hatch, not a routine setting.
+
+| Gate | Command or behavior | Required evidence | Status |
+|---|---|---|---|
+| R1. comfy-kitchen backend | Import `comfy_kitchen`, print `list_backends()`, require `eager.available == true`. | Version `0.2.31`; eager true. | Pending first RunPod boot. |
+| R2. ComfyUI boot | `start.sh` already fails hard if ComfyUI does not answer `/system_stats` within 120s. | `ComfyUI ready after Ns`. | Pending first RunPod boot. |
+| R3. Live API | Poll `/object_info` on the running instance, validate all 31 unique workflow classes, check `res_2s` under `KSampler.input.required.sampler_name[0]`. | Two `OK:` lines and exit 0. | Pending first RunPod boot. |
 
 Local evidence collected before this report:
 

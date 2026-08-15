@@ -10,3 +10,7 @@ __pycache__/
 supabase/.temp/
 supabase/.branches/
 deepclean-worker/workflows/logs-resmarke-deepclean-prod*.txt
+
+# Internal consultant prompts/briefs — kept locally, never committed
+CDX_MASTER_PROMPT*.md
+LAUNCH_BRIEF_*.md
