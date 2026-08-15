@@ -46,6 +46,7 @@ DEFAULT_SETTINGS = {
     "engine_mode": "adaptive",        # "adaptive" | "template"
     "pre_regen": True,                 # wash on/off (off = local harness runs)
     "wash_model": "qwen",             # "qwen" | "zimage" | "qwen+zimage"
+    "route_by_baseline": False,       # V8.9: start ladder per input baseline
     "zimage_denoise": 0.12,
     "strength": "balanced",           # "light" | "balanced" | "deep"
     "deep_degrade_scale": 0.68,
@@ -74,6 +75,24 @@ def is_ds_remint_v8_8(settings):
     return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.8"
 
 
+def is_ds_remint_v8_9(settings):
+    return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.9"
+
+
+def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None):
+    """DS ReMint V8.9: the V8.8 coherent pipeline with data-driven defaults
+    (Qwen wash, balanced default, deep degrade 0.75) and baseline-aware
+    ladder routing."""
+    return apply_ds_remint_v8_8(
+        input_path=input_path,
+        output_path=output_path,
+        creator_id=creator_id,
+        settings=settings,
+        seed_extra=seed_extra,
+        detector=detector,
+    )
+
+
 def _clamp(value, low, high):
     try:
         parsed = float(value)
@@ -86,9 +105,13 @@ def _clamp(value, low, high):
 
 def normalize_ds_remint_v8_8_settings(settings):
     raw = settings if isinstance(settings, dict) else {}
-    sub = raw.get("ds_remint_v8_8") if isinstance(raw.get("ds_remint_v8_8"), dict) else {}
+    sub = {}
+    for key in ("ds_remint_v8_8", "ds_remint_v8_9"):
+        if isinstance(raw.get(key), dict):
+            sub = raw[key]
     cfg = dict(DEFAULT_SETTINGS)
-    cfg["enabled"] = raw.get("mode") == "ds-remint-v8.8"
+    cfg["mode"] = str(raw.get("mode") or "ds-remint-v8.8")
+    cfg["enabled"] = cfg["mode"] in ("ds-remint-v8.8", "ds-remint-v8.9")
 
     engine_mode = str(sub.get("engine_mode", cfg["engine_mode"]))
     cfg["engine_mode"] = engine_mode if engine_mode in ("template", "adaptive") else "adaptive"
@@ -100,7 +123,12 @@ def normalize_ds_remint_v8_8_settings(settings):
 
     strength = str(sub.get("strength", cfg["strength"]))
     cfg["strength"] = strength if strength in COHERENT_PRESETS else "balanced"
-    cfg["deep_degrade_scale"] = float(_clamp(sub.get("deep_degrade_scale", cfg["deep_degrade_scale"]), 0.5, 0.85))
+    # V8.9 data: 0.68 deep degrade was quality-bad; 0.75 keeps the TruthScan
+    # win with far less damage. V8.8 keeps its original default.
+    deep_default = 0.75 if cfg["mode"] == "ds-remint-v8.9" else 0.68
+    cfg["deep_degrade_scale"] = float(_clamp(sub.get("deep_degrade_scale", deep_default), 0.5, 0.85))
+
+    cfg["route_by_baseline"] = bool(sub.get("route_by_baseline", cfg["mode"] == "ds-remint-v8.9"))
 
     if sub.get("output_target") is not None:
         cfg["output_target"] = int(_clamp(sub["output_target"], 256, 8192))
@@ -143,7 +171,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     cfg = normalize_ds_remint_v8_8_settings(settings)
     report = {
         "enabled": bool(cfg["enabled"]),
-        "pipeline": "ds_remint_v8_8",
+        "pipeline": cfg.get("mode") or "ds_remint_v8_8",
         "engine": "ds_remint_v8_8",
         "applied": False,
         "settings": {k: cfg[k] for k in (
@@ -218,8 +246,23 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     }
     reference = base  # all fidelity metrics measure against this, not the source
 
-    # --- coherent camera ladder ------------------------------------------------
+    # --- coherent camera ladder ----------------------------------------------
     ladder = ["light", "balanced", "deep"] if adaptive else [cfg["strength"]]
+    if adaptive and cfg.get("route_by_baseline"):
+        baseline = report.get("input_baseline")
+        if isinstance(baseline, dict):
+            try:
+                ai = float(baseline.get("ai_probability") or 0)
+                if ai > 1.0:
+                    ai = ai / 100.0
+                if ai > 0.5:
+                    # Input already reads flagged: skip the lightest rung.
+                    ladder = ["balanced", "deep"]
+                    report["layers"]["baseline_routing"] = {
+                        "baseline_ai": ai, "ladder": ladder, "skipped": "light",
+                    }
+            except (TypeError, ValueError):
+                pass
     chosen = None
     for rung_index, strength in enumerate(ladder):
         candidate, layers = _v88_candidate(

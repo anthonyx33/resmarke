@@ -117,7 +117,8 @@ type MintDeepCleanProfile =
   | "ds-remint-v8.1"
   | "ds-remint-v8.2"
   | "ds-remint-v8.3"
-  | "ds-remint-v8.8";
+  | "ds-remint-v8.8"
+  | "ds-remint-v8.9";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
@@ -440,7 +441,9 @@ export default function MintApp() {
       // DS ReMint V8.3: wash-family lab (mix = two GPU wash passes).
       "ds-remint-v8.3": 15,
       // DS ReMint V8.8 Coherent: wash + coherent camera model, single resample.
-      "ds-remint-v8.8": 15
+      "ds-remint-v8.8": 15,
+      // DS ReMint V8.9: data-tuned coherent defaults + baseline routing.
+      "ds-remint-v8.9": 15
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -465,7 +468,7 @@ export default function MintApp() {
     // Adaptive DS ReMint V8.3 probes each floor against the live detector.
     if (deepCleanProfile === "ds-remint-v8.3" && dsV83EngineMode === "adaptive") cost += 2;
     // Adaptive DS ReMint V8.8 escalates the strength ladder against the detector.
-    if (deepCleanProfile === "ds-remint-v8.8" && dsV88EngineMode === "adaptive") cost += 2;
+    if (deepCleanProfile === "ds-remint-v8.9" && dsV88EngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
   }, [
@@ -500,8 +503,8 @@ export default function MintApp() {
   const dsV82Active = deepCleanProfile === "ds-remint-v8.2";
   // DS ReMint V8.3 derived state: active toggle.
   const dsV83Active = deepCleanProfile === "ds-remint-v8.3";
-  // DS ReMint V8.8 derived state: active toggle.
-  const dsV88Active = deepCleanProfile === "ds-remint-v8.8";
+  // DS ReMint V8.8/V8.9 derived state: active toggle.
+  const dsV88Active = deepCleanProfile === "ds-remint-v8.9";
   const dsV6QualityFloorIndex = Math.max(
     0,
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
@@ -999,14 +1002,16 @@ export default function MintApp() {
             deepCleanProfile === "ds-remint-v8.1" ||
             deepCleanProfile === "ds-remint-v8.2" ||
             deepCleanProfile === "ds-remint-v8.3" ||
-            deepCleanProfile === "ds-remint-v8.8"
+            deepCleanProfile === "ds-remint-v8.8" ||
+            deepCleanProfile === "ds-remint-v8.9"
               ? dsV8OutputNameStyle
               : undefined,
           outputNameCustom:
             deepCleanProfile === "ds-remint-v8.1" ||
             deepCleanProfile === "ds-remint-v8.2" ||
             deepCleanProfile === "ds-remint-v8.3" ||
-            deepCleanProfile === "ds-remint-v8.8"
+            deepCleanProfile === "ds-remint-v8.8" ||
+            deepCleanProfile === "ds-remint-v8.9"
               ? dsV8OutputNameCustom
               : undefined,
           dsRemintV82:
@@ -1032,6 +1037,16 @@ export default function MintApp() {
               : undefined,
           dsRemintV88:
             deepCleanProfile === "ds-remint-v8.8"
+              ? {
+                  engineMode: dsV88EngineMode,
+                  washModel: dsV88WashModel,
+                  strength: dsV88Strength,
+                  iphoneExif: dsV88IphoneExif,
+                  metadataMode: dsV88MetadataMode
+                }
+              : undefined,
+          dsRemintV89:
+            deepCleanProfile === "ds-remint-v8.9"
               ? {
                   engineMode: dsV88EngineMode,
                   washModel: dsV88WashModel,
@@ -1296,8 +1311,8 @@ export default function MintApp() {
       setExpertRefinementTechniques(cloneExpertPreset("off"));
       return;
     }
-    if (profile === "ds-remint-v8.8") {
-      // DS ReMint V8.8 Coherent is terminal: wash -> single resample ->
+    if (profile === "ds-remint-v8.8" || profile === "ds-remint-v8.9") {
+      // DS ReMint V8.8/V8.9 Coherent are terminal: wash -> single resample ->
       // coherent camera model (inverse ISP -> optics -> CFA -> MHC ->
       // weak ISP denoise -> forward ISP) -> one encode.
       setDeepCleanOutputMode("stripped");
@@ -3160,7 +3175,7 @@ export default function MintApp() {
                       disabled={batchRunning}
                       onChange={(event) =>
                         chooseDeepCleanProfile(
-                          event.target.checked ? "ds-remint-v8.8" : "max-cx-remint-v5"
+                          event.target.checked ? "ds-remint-v8.9" : "max-cx-remint-v5"
                         )
                       }
                     />
@@ -3168,8 +3183,8 @@ export default function MintApp() {
                       <span className="rm-switch-thumb" />
                     </span>
                     <span className="rm-v6-toggle-text">
-                      <strong>DS ReMint V8.8 · Coherent</strong>
-                      <small>Inverse ISP → virtual camera → forward ISP</small>
+                      <strong>DS ReMint V8.9 · Coherent Pro</strong>
+                      <small>Data-tuned coherent model · baseline routing</small>
                     </span>
                     <span className="rm-badge">{dsV88Active ? "Enabled" : "Off"}</span>
                   </label>
@@ -3179,10 +3194,10 @@ export default function MintApp() {
                       <div className="rm-v6-banner">
                         <Sparkles size={15} aria-hidden="true" />
                         <span>
-                          Instead of stacking camera effects, V8.8 walks the washed frame INTO a
-                          virtual camera through inverse rendering, applies one coherent optical +
-                          sensor acquisition, and walks it back out — the transforms cancel for
-                          content while noise, colour and CFA structure become genuinely camera-like.
+                          V8.9 is the live-test winner: Qwen wash + coherent model read
+                          ~0% flux on source graders, Light/Balanced ship "not likely AI", and
+                          baseline routing starts heavier only when the input already grades
+                          flagged. Deep now degrades 75% (was 68%) for far better quality.
                         </span>
                       </div>
 
@@ -3373,7 +3388,8 @@ export default function MintApp() {
                         <option value="ds-remint-v8.1">DS ReMint V8.1 (new)</option>
                         <option value="ds-remint-v8.2">DS ReMint V8.2 Max (new)</option>
                         <option value="ds-remint-v8.3">DS ReMint V8.3 Wash Lab (new)</option>
-                        <option value="ds-remint-v8.8">DS ReMint V8.8 Coherent (new)</option>
+                        <option value="ds-remint-v8.8">DS ReMint V8.8 Coherent</option>
+                        <option value="ds-remint-v8.9">DS ReMint V8.9 Coherent Pro (new)</option>
                       </select>
                     </label>
                     <label className="rm-field">

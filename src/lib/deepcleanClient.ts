@@ -149,7 +149,8 @@ export async function createDeepCleanJob(params: {
     | "ds-remint-v8.1"
     | "ds-remint-v8.2"
     | "ds-remint-v8.3"
-    | "ds-remint-v8.8";
+    | "ds-remint-v8.8"
+    | "ds-remint-v8.9";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;
@@ -160,6 +161,7 @@ export async function createDeepCleanJob(params: {
   dsRemintV82?: DsRemintV8_2Options;
   dsRemintV83?: DsRemintV8_3Options;
   dsRemintV88?: DsRemintV8_8Options;
+  dsRemintV89?: DsRemintV8_8Options;
   outputNameStyle?: "photo-style" | "original" | "custom";
   outputNameCustom?: string;
 }): Promise<DeepCleanJob> {
@@ -248,6 +250,15 @@ export async function createDeepCleanJob(params: {
             strength: params.dsRemintV88.strength,
             iphone_exif: params.dsRemintV88.iphoneExif,
             metadata_mode: params.dsRemintV88.metadataMode
+          }
+        : undefined,
+      ds_remint_v8_9: params.dsRemintV89
+        ? {
+            engine_mode: params.dsRemintV89.engineMode,
+            wash_model: params.dsRemintV89.washModel,
+            strength: params.dsRemintV89.strength,
+            iphone_exif: params.dsRemintV89.iphoneExif,
+            metadata_mode: params.dsRemintV89.metadataMode
           }
         : undefined,
       output_name_style: params.outputNameStyle,

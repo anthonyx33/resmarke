@@ -38,6 +38,7 @@ type CreateJobBody = {
   ds_remint_v8_2?: unknown;
   ds_remint_v8_3?: unknown;
   ds_remint_v8_8?: unknown;
+  ds_remint_v8_9?: unknown;
   output_name_style?: unknown;
   output_name_custom?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
@@ -81,7 +82,8 @@ Deno.serve(async (request) => {
         "ds-remint-v8.1",
         "ds-remint-v8.2",
         "ds-remint-v8.3",
-        "ds-remint-v8.8"
+        "ds-remint-v8.8",
+        "ds-remint-v8.9"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -150,6 +152,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "ds-remint-v8.8"
         ? "max"
+        : requestedProfile === "ds-remint-v8.9"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -169,7 +173,8 @@ Deno.serve(async (request) => {
       requestedProfile === "ds-remint-v8.1" ||
       requestedProfile === "ds-remint-v8.2" ||
       requestedProfile === "ds-remint-v8.3" ||
-      requestedProfile === "ds-remint-v8.8"
+      requestedProfile === "ds-remint-v8.8" ||
+      requestedProfile === "ds-remint-v8.9"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -209,6 +214,8 @@ Deno.serve(async (request) => {
         ? dsRemintV8_3ExpertRefinement(body.ds_remint_v8_3)
         : requestedProfile === "ds-remint-v8.8"
         ? dsRemintV8_8ExpertRefinement(body.ds_remint_v8_8)
+        : requestedProfile === "ds-remint-v8.9"
+        ? dsRemintV8_9ExpertRefinement(body.ds_remint_v8_9)
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -280,6 +287,8 @@ Deno.serve(async (request) => {
               ? "ds-remint-v8.3"
               : requestedProfile === "ds-remint-v8.8"
               ? "ds-remint-v8.8"
+              : requestedProfile === "ds-remint-v8.9"
+              ? "ds-remint-v8.9"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -1130,6 +1139,26 @@ function dsRemintV8_8ExpertRefinement(input: unknown) {
           : "4:2:0",
       iphone_exif: iphoneExif,
       metadata_mode: metadataMode
+    }
+  };
+}
+
+function dsRemintV8_9ExpertRefinement(input: unknown) {
+  // DS ReMint V8.9: the V8.8 coherent pipeline with data-driven defaults and
+  // baseline-aware routing. Same whitelist as V8.8.
+  const base = dsRemintV8_8ExpertRefinement(input);
+  const raw = isRecord(input) ? input : {};
+  const sub = isRecord(base.ds_remint_v8_8) ? base.ds_remint_v8_8 : {};
+  return {
+    ...base,
+    mode: "ds-remint-v8.9",
+    ds_remint_v8_9: {
+      ...sub,
+      route_by_baseline:
+        typeof raw.route_by_baseline === "boolean" ? raw.route_by_baseline : true,
+      deep_degrade_scale: clampNumber(
+        isRecord(raw) && raw.deep_degrade_scale, 0.5, 0.85, 0.75
+      )
     }
   };
 }
