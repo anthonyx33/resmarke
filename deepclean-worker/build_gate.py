@@ -203,6 +203,13 @@ def check_engine_imports():
             raise SystemExit(f"FAIL: ds_remint_v7 is missing {attr}")
     print("OK: ds_remint_v7 imports cleanly with its public entry points")
 
+    import ds_remint_v8_8
+
+    for attr in ("apply_ds_remint_v8_8", "is_ds_remint_v8_8", "normalize_ds_remint_v8_8_settings"):
+        if not hasattr(ds_remint_v8_8, attr):
+            raise SystemExit(f"FAIL: ds_remint_v8_8 is missing {attr}")
+    print("OK: ds_remint_v8_8 imports cleanly with its public entry points")
+
 
 def check_camera_relife_functional():
     """Run the camera re-life stack on a tiny synthetic frame (CPU-safe).

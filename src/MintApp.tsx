@@ -116,7 +116,8 @@ type MintDeepCleanProfile =
   | "ds-remint-v8"
   | "ds-remint-v8.1"
   | "ds-remint-v8.2"
-  | "ds-remint-v8.3";
+  | "ds-remint-v8.3"
+  | "ds-remint-v8.8";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
@@ -372,6 +373,15 @@ export default function MintApp() {
   const [dsV83IphoneExif, setDsV83IphoneExif] = useState(true);
   const [dsV83MetadataMode, setDsV83MetadataMode] =
     useState<"device" | "minimal">("device");
+  // DS ReMint V8.8 controls (coherent camera model).
+  const [dsV88EngineMode, setDsV88EngineMode] = useState<CxRemintEngineMode>("adaptive");
+  const [dsV88WashModel, setDsV88WashModel] =
+    useState<"qwen" | "zimage" | "qwen+zimage">("qwen");
+  const [dsV88Strength, setDsV88Strength] =
+    useState<"light" | "balanced" | "deep">("balanced");
+  const [dsV88IphoneExif, setDsV88IphoneExif] = useState(true);
+  const [dsV88MetadataMode, setDsV88MetadataMode] =
+    useState<"device" | "minimal">("device");
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -428,7 +438,9 @@ export default function MintApp() {
       // DS ReMint V8.2 Max: degrade + neural restore costs an extra GPU pass.
       "ds-remint-v8.2": 14,
       // DS ReMint V8.3: wash-family lab (mix = two GPU wash passes).
-      "ds-remint-v8.3": 15
+      "ds-remint-v8.3": 15,
+      // DS ReMint V8.8 Coherent: wash + coherent camera model, single resample.
+      "ds-remint-v8.8": 15
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -452,6 +464,8 @@ export default function MintApp() {
     if (deepCleanProfile === "ds-remint-v8.2" && dsV82EngineMode === "adaptive") cost += 2;
     // Adaptive DS ReMint V8.3 probes each floor against the live detector.
     if (deepCleanProfile === "ds-remint-v8.3" && dsV83EngineMode === "adaptive") cost += 2;
+    // Adaptive DS ReMint V8.8 escalates the strength ladder against the detector.
+    if (deepCleanProfile === "ds-remint-v8.8" && dsV88EngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
   }, [
@@ -464,7 +478,8 @@ export default function MintApp() {
     dsV7EngineMode,
     dsV8EngineMode,
     dsV82EngineMode,
-    dsV83EngineMode
+    dsV83EngineMode,
+    dsV88EngineMode
   ]);
 
   // CX Remint quality-floor slider: map the selected preset to its slider index
@@ -485,6 +500,8 @@ export default function MintApp() {
   const dsV82Active = deepCleanProfile === "ds-remint-v8.2";
   // DS ReMint V8.3 derived state: active toggle.
   const dsV83Active = deepCleanProfile === "ds-remint-v8.3";
+  // DS ReMint V8.8 derived state: active toggle.
+  const dsV88Active = deepCleanProfile === "ds-remint-v8.8";
   const dsV6QualityFloorIndex = Math.max(
     0,
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
@@ -981,13 +998,15 @@ export default function MintApp() {
           outputNameStyle:
             deepCleanProfile === "ds-remint-v8.1" ||
             deepCleanProfile === "ds-remint-v8.2" ||
-            deepCleanProfile === "ds-remint-v8.3"
+            deepCleanProfile === "ds-remint-v8.3" ||
+            deepCleanProfile === "ds-remint-v8.8"
               ? dsV8OutputNameStyle
               : undefined,
           outputNameCustom:
             deepCleanProfile === "ds-remint-v8.1" ||
             deepCleanProfile === "ds-remint-v8.2" ||
-            deepCleanProfile === "ds-remint-v8.3"
+            deepCleanProfile === "ds-remint-v8.3" ||
+            deepCleanProfile === "ds-remint-v8.8"
               ? dsV8OutputNameCustom
               : undefined,
           dsRemintV82:
@@ -1009,6 +1028,16 @@ export default function MintApp() {
                   restoreEngine: dsV83RestoreEngine,
                   iphoneExif: dsV83IphoneExif,
                   metadataMode: dsV83MetadataMode
+                }
+              : undefined,
+          dsRemintV88:
+            deepCleanProfile === "ds-remint-v8.8"
+              ? {
+                  engineMode: dsV88EngineMode,
+                  washModel: dsV88WashModel,
+                  strength: dsV88Strength,
+                  iphoneExif: dsV88IphoneExif,
+                  metadataMode: dsV88MetadataMode
                 }
               : undefined
         });
@@ -1260,6 +1289,17 @@ export default function MintApp() {
     if (profile === "ds-remint-v8.3") {
       // DS ReMint V8.3 is terminal like V8.2 with the wash-family lab
       // (qwen | zimage | qwen+zimage) and both restore engines.
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
+      return;
+    }
+    if (profile === "ds-remint-v8.8") {
+      // DS ReMint V8.8 Coherent is terminal: wash -> single resample ->
+      // coherent camera model (inverse ISP -> optics -> CFA -> MHC ->
+      // weak ISP denoise -> forward ISP) -> one encode.
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -3113,7 +3153,199 @@ export default function MintApp() {
                     </div>
                   ) : null}
 
-                  {!dsV6Active && !dsV7Active && !dsV8Active && !dsV82Active && !dsV83Active ? (
+                  <label className={`rm-v6-toggle${dsV88Active ? " is-active" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={dsV88Active}
+                      disabled={batchRunning}
+                      onChange={(event) =>
+                        chooseDeepCleanProfile(
+                          event.target.checked ? "ds-remint-v8.8" : "max-cx-remint-v5"
+                        )
+                      }
+                    />
+                    <span className="rm-switch-track" aria-hidden="true">
+                      <span className="rm-switch-thumb" />
+                    </span>
+                    <span className="rm-v6-toggle-text">
+                      <strong>DS ReMint V8.8 · Coherent</strong>
+                      <small>Inverse ISP → virtual camera → forward ISP</small>
+                    </span>
+                    <span className="rm-badge">{dsV88Active ? "Enabled" : "Off"}</span>
+                  </label>
+
+                  {dsV88Active ? (
+                    <div className="rm-v6-panel">
+                      <div className="rm-v6-banner">
+                        <Sparkles size={15} aria-hidden="true" />
+                        <span>
+                          Instead of stacking camera effects, V8.8 walks the washed frame INTO a
+                          virtual camera through inverse rendering, applies one coherent optical +
+                          sensor acquisition, and walks it back out — the transforms cancel for
+                          content while noise, colour and CFA structure become genuinely camera-like.
+                        </span>
+                      </div>
+
+                      <div className="rm-v6-stats" aria-label="Pipeline indicators">
+                        <span className="rm-stat">
+                          <em>Wash</em>
+                          <b>{dsV88WashModel === "qwen+zimage" ? "Qwen ⊕ Z-Image" : dsV88WashModel}</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Camera</em>
+                          <b>{dsV88Strength} model</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Resample</em>
+                          <b>1× · ≤1250px</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Engine</em>
+                          <b>{dsV88EngineMode === "adaptive" ? "≤3 gated strengths" : "1 pass"}</b>
+                        </span>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Wash model</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.8 wash model">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV88WashModel === "qwen"}
+                            className={dsV88WashModel === "qwen" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV88WashModel("qwen")}
+                          >
+                            Qwen (proven)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV88WashModel === "zimage"}
+                            className={dsV88WashModel === "zimage" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV88WashModel("zimage")}
+                          >
+                            Z-Image (~4-6%)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV88WashModel === "qwen+zimage"}
+                            className={dsV88WashModel === "qwen+zimage" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV88WashModel("qwen+zimage")}
+                          >
+                            Qwen ⊕ Z-Image
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Strength</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.8 strength">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV88Strength === "light"}
+                            className={dsV88Strength === "light" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV88Strength("light")}
+                          >
+                            Light
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV88Strength === "balanced"}
+                            className={dsV88Strength === "balanced" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV88Strength("balanced")}
+                          >
+                            Balanced
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV88Strength === "deep"}
+                            className={dsV88Strength === "deep" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV88Strength("deep")}
+                          >
+                            Deep
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV88Strength === "light"
+                            ? "Light: faintest optics, minimal noise, ~cleanup 10% — for images that already grade well."
+                            : dsV88Strength === "deep"
+                            ? "Deep: degrade 68% → balanced model at low res → Lanczos restore → light pass at delivery. For stubborn frames."
+                            : "Balanced: the recommended coherent model — paired inverse/forward CCM, MHC demosaic, weak ISP denoise."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Engine</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.8 engine">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV88EngineMode === "adaptive"}
+                            className={dsV88EngineMode === "adaptive" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV88EngineMode("adaptive")}
+                          >
+                            Adaptive (detector-gated)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV88EngineMode === "template"}
+                            className={dsV88EngineMode === "template" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV88EngineMode("template")}
+                          >
+                            Optimised template
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV88EngineMode === "adaptive"
+                            ? "Strengths run lightest-first; each is probed on the DELIVERED bytes and the least destructive pass that clears ships. +2 credits."
+                            : "One deterministic pass at the chosen strength. No detector calls."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Metadata</span>
+                        <select
+                          className="rm-select"
+                          value={dsV88MetadataMode}
+                          disabled={batchRunning}
+                          onChange={(event) =>
+                            setDsV88MetadataMode(event.target.value as "device" | "minimal")
+                          }
+                        >
+                          <option value="device">Device EXIF (coherent)</option>
+                          <option value="minimal">Minimal (no EXIF)</option>
+                        </select>
+                      </div>
+
+                      <label className="rm-switch">
+                        <input
+                          type="checkbox"
+                          checked={dsV88IphoneExif}
+                          disabled={batchRunning}
+                          onChange={(event) => setDsV88IphoneExif(event.target.checked)}
+                        />
+                        <span className="rm-switch-track" aria-hidden="true">
+                          <span className="rm-switch-thumb" />
+                        </span>
+                        <span>Coherent device EXIF</span>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {!dsV6Active && !dsV7Active && !dsV8Active && !dsV82Active && !dsV83Active && !dsV88Active ? (
                   <div className="rm-field-grid">
                     <label className="rm-field">
                       <span className="rm-field-label">Profile</span>
@@ -3141,6 +3373,7 @@ export default function MintApp() {
                         <option value="ds-remint-v8.1">DS ReMint V8.1 (new)</option>
                         <option value="ds-remint-v8.2">DS ReMint V8.2 Max (new)</option>
                         <option value="ds-remint-v8.3">DS ReMint V8.3 Wash Lab (new)</option>
+                        <option value="ds-remint-v8.8">DS ReMint V8.8 Coherent (new)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -3471,7 +3704,8 @@ export default function MintApp() {
                   !dsV7Active &&
                   !dsV8Active &&
                   !dsV82Active &&
-                  !dsV83Active ? (
+                  !dsV83Active &&
+                  !dsV88Active ? (
                     <details className="rm-disc">
                       <summary>
                         <SlidersHorizontal size={15} aria-hidden="true" /> Expert refinement

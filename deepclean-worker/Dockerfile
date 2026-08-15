@@ -121,10 +121,12 @@ RUN python -m pip install --no-cache-dir -c /app/constraints.txt -r /app/require
 COPY bootstrap_models.py /app/bootstrap_models.py
 COPY comfyui_client.py /app/comfyui_client.py
 COPY camera_relife.py /app/camera_relife.py
+COPY coherent_camera.py /app/coherent_camera.py
 COPY content_repair.py /app/content_repair.py
 COPY deepclean_detector.py /app/deepclean_detector.py
 COPY ds_remint_v6.py /app/ds_remint_v6.py
 COPY ds_remint_v7.py /app/ds_remint_v7.py
+COPY ds_remint_v8_8.py /app/ds_remint_v8_8.py
 COPY iphone_exif.py /app/iphone_exif.py
 COPY max_cx_remint.py /app/max_cx_remint.py
 COPY max_optimised_remint.py /app/max_optimised_remint.py
@@ -132,6 +134,7 @@ COPY max_remint.py /app/max_remint.py
 COPY neural_texture.py /app/neural_texture.py
 COPY photo_naturalization.py /app/photo_naturalization.py
 COPY worker.py /app/worker.py
+COPY zimage_wash.py /app/zimage_wash.py
 COPY workflows /app/workflows
 COPY tools /app/tools
 COPY custom_nodes/RemarkeeMax /app/ComfyUI/custom_nodes/RemarkeeMax

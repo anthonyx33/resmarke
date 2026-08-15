@@ -37,6 +37,7 @@ type CreateJobBody = {
   ds_remint_v8_1?: unknown;
   ds_remint_v8_2?: unknown;
   ds_remint_v8_3?: unknown;
+  ds_remint_v8_8?: unknown;
   output_name_style?: unknown;
   output_name_custom?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
@@ -79,7 +80,8 @@ Deno.serve(async (request) => {
         "ds-remint-v8",
         "ds-remint-v8.1",
         "ds-remint-v8.2",
-        "ds-remint-v8.3"
+        "ds-remint-v8.3",
+        "ds-remint-v8.8"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -146,6 +148,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "ds-remint-v8.3"
         ? "max"
+        : requestedProfile === "ds-remint-v8.8"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -164,7 +168,8 @@ Deno.serve(async (request) => {
       requestedProfile === "ds-remint-v8" ||
       requestedProfile === "ds-remint-v8.1" ||
       requestedProfile === "ds-remint-v8.2" ||
-      requestedProfile === "ds-remint-v8.3"
+      requestedProfile === "ds-remint-v8.3" ||
+      requestedProfile === "ds-remint-v8.8"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -202,6 +207,8 @@ Deno.serve(async (request) => {
         ? dsRemintV8_2ExpertRefinement(body.ds_remint_v8_2)
         : requestedProfile === "ds-remint-v8.3"
         ? dsRemintV8_3ExpertRefinement(body.ds_remint_v8_3)
+        : requestedProfile === "ds-remint-v8.8"
+        ? dsRemintV8_8ExpertRefinement(body.ds_remint_v8_8)
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -271,6 +278,8 @@ Deno.serve(async (request) => {
               ? "ds-remint-v8.2"
               : requestedProfile === "ds-remint-v8.3"
               ? "ds-remint-v8.3"
+              : requestedProfile === "ds-remint-v8.8"
+              ? "ds-remint-v8.8"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -1060,6 +1069,65 @@ function dsRemintV8_3ExpertRefinement(input: unknown) {
         typeof raw.jpeg_subsampling === "string" && subsamplings.includes(raw.jpeg_subsampling)
           ? raw.jpeg_subsampling
           : "4:2:2",
+      iphone_exif: iphoneExif,
+      metadata_mode: metadataMode
+    }
+  };
+}
+
+function dsRemintV8_8ExpertRefinement(input: unknown) {
+  // DS ReMint V8.8 Coherent: wash -> single resample -> coherent camera model
+  // (inverse ISP -> optics -> CFA -> MHC -> weak ISP denoise -> forward ISP)
+  // -> one encode. strength = light|balanced|deep.
+  const raw = isRecord(input) ? input : {};
+  const engineModes = ["template", "adaptive"];
+  const strengths = ["light", "balanced", "deep"];
+  const washModels = ["qwen", "zimage", "qwen+zimage"];
+  const subsamplings = ["4:2:0", "4:2:2", "4:4:4"];
+  const metadataModes = ["device", "minimal"];
+
+  const engineMode =
+    typeof raw.engine_mode === "string" && engineModes.includes(raw.engine_mode)
+      ? raw.engine_mode
+      : "adaptive";
+  const strength =
+    typeof raw.strength === "string" && strengths.includes(raw.strength)
+      ? raw.strength
+      : "balanced";
+  const washModel =
+    typeof raw.wash_model === "string" && washModels.includes(raw.wash_model)
+      ? raw.wash_model
+      : "qwen";
+  const iphoneExif = typeof raw.iphone_exif === "boolean" ? raw.iphone_exif : true;
+  const metadataMode =
+    typeof raw.metadata_mode === "string" && metadataModes.includes(raw.metadata_mode)
+      ? raw.metadata_mode
+      : "device";
+
+  return {
+    mode: "ds-remint-v8.8",
+    intensity: 100,
+    preserve_straight_lines: true,
+    techniques: {},
+    ds_remint_v8_8: {
+      engine_mode: engineMode,
+      wash_model: washModel,
+      zimage_denoise: clampNumber(raw.zimage_denoise, 0.05, 0.3, 0.12),
+      strength,
+      deep_degrade_scale: clampNumber(raw.deep_degrade_scale, 0.5, 0.85, 0.68),
+      output_target:
+        raw.output_target === null || raw.output_target === undefined
+          ? null
+          : clampNumber(raw.output_target, 256, 8192, null),
+      min_ssim: clampNumber(raw.min_ssim, 0, 1, 0.85),
+      ai_threshold: clampNumber(raw.ai_threshold, 0, 1, 0.45),
+      source_threshold: clampNumber(raw.source_threshold, 0, 1, 0.3),
+      deepfake_threshold: clampNumber(raw.deepfake_threshold, 0, 1, 0.1),
+      jpeg_quality: clampNumber(raw.jpeg_quality, 60, 100, 92),
+      jpeg_subsampling:
+        typeof raw.jpeg_subsampling === "string" && subsamplings.includes(raw.jpeg_subsampling)
+          ? raw.jpeg_subsampling
+          : "4:2:0",
       iphone_exif: iphoneExif,
       metadata_mode: metadataMode
     }
