@@ -79,25 +79,30 @@ Build history:
 - Run #40 (run id 31858918336, commit 88a663d): FAILED at Dockerfile step 8 of 34 — the SAM2 sed/grep rewrite — before any node-pack pip install, COPY layer, smoke gate, or image export. No image published; no tag in the registry for this commit.
 - Run #41 (run id 31863022724, commit 7eccd3d): FAILED at step 30 of 34, the first gate. Every dependency install succeeded — all nine node packs at their pinned SHAs, all under `constraints.txt` — and the original `infer_schema` crash did **not** reappear. The failure was `RuntimeError: 0 active drivers ([])`, raised from `comfy_kitchen/__init__.py` → Triton's import-time driver init. No image published.
 - Run #42 (run id 31864625870, commit fec5eda): FAILED at the rewritten build gate, on an over-strict schema string only. Both substantive checks passed — see the gate-split note below. No image published.
-- **Run #43 (run id 31864894419, commit ee3e2ac): SUCCESS.** All five CPU-safe gates passed and the image was pushed.
+- Run #43 (run id 31864894419, commit ee3e2ac): SUCCESS in CI. **Deployed to RunPod and failed at boot** — `RuntimeError: Failed to find C compiler. Please specify via CC environment variable.` from Triton's NVIDIA backend, which JIT-compiles `driver.c` into a Python C extension on first import. The `pytorch:*-runtime` base has no compiler. This only surfaces on a GPU host: under torch 2.5.1 the import died at `infer_schema` before Triton was ever reached, and CI's CPU runner bails at driver discovery before it tries to compile — so neither environment could have caught it earlier. See `deepclean_worker/build_gate.py`'s `check_c_toolchain` and the Dockerfile's `apt-get install gcc g++ libc6-dev`.
+- **Run #44 (run id 31867954681, commit 26ae47b): SUCCESS.** All gates passed, including the new C-toolchain checks. Image pushed. **This is the current candidate; ee3e2ac is superseded and must not be deployed.**
 
 ### Candidate image
 
 | Field | Value |
 |---|---|
-| Tag | `ghcr.io/anthonyx33/resmarke-deepclean:ee3e2ac97efa9cc7c65ca35435f9dc8d3a45f25c` |
-| **Deploy by digest** | `ghcr.io/anthonyx33/resmarke-deepclean@sha256:d361614f7cea4fa5a4e89d9c611c92de4e57a9027c5dd838e8a5f85926f89c22` |
-| Config digest | `sha256:e3c1dbf860fe8b85317b9869ae1fb895e453741a180aef5f6be52d720edcf5b2` |
+| Tag | `ghcr.io/anthonyx33/resmarke-deepclean:26ae47b435af46b685e5f5eca09e17423d40e119` |
+| **Deploy by digest** | `ghcr.io/anthonyx33/resmarke-deepclean@sha256:3269b55a23103c1c4055a12cf6e5f564c2fdadd63323d4eb5334534bf369a1a2` |
 | Platform | `linux/amd64` |
-| Run URL | https://github.com/anthonyx33/resmarke/actions/runs/31864894419 |
+| Run URL | https://github.com/anthonyx33/resmarke/actions/runs/31867954681 |
+| Supersedes | `ee3e2ac...` / digest `sha256:d361614f...` — passed CI but fails RunPod boot (missing C compiler). Do not deploy. |
 
-Verbatim gate output from run #43:
+Verbatim gate output from run #44:
 
 ```text
 --- build gate (CPU-safe) on python 3.11.13 ---
 OK: torch 2.7.1+cu126, CUDA runtime 12.6
 OK: @torch.library.custom_op accepted list[int] / list[bool] / float | None
 OK: na3d schema matches the owner-verified signature
+OK: C compiler gcc -> /usr/bin/gcc
+OK: Python.h present at /opt/conda/include/python3.11/Python.h
+OK: compiled a Python C extension (Python.h + linker reachable)
+OK: triton bundles cuda.h at .../triton/backends/nvidia/include/cuda.h
 OK: comfy-kitchen pinned at 0.2.31
 OK: ds_remint_v6 imports cleanly with its public entry points
 OK: all CPU-safe build gates passed
@@ -105,7 +110,7 @@ OK: /app/workflows/remarkee-max-v2.api.json is ComfyUI API format.
 No broken requirements found.
 ```
 
-The second line is the outage regression test: that registration is exactly what torch 2.5.1 rejected.
+The second line is the outage regression test: that registration is exactly what torch 2.5.1 rejected. Lines 4-7 are the new C-toolchain gate that would have caught the RunPod boot failure if it were reachable from CPU — it isn't fully (no CUDA driver to link against), which is why the R1 runtime gate below still matters as the real proof.
 
 ### Why the gates were split
 
