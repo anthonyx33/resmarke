@@ -32,5 +32,4 @@ jobs:
           context: deepclean-worker
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/resmarke-deepclean:latest
             ghcr.io/${{ github.repository_owner }}/resmarke-deepclean:${{ github.sha }}
