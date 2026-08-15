@@ -45,6 +45,13 @@ export type DsRemintV6Options = {
   textureAmount?: number;
   spectralStrength?: number;
 };
+
+export type DsRemintV7Options = {
+  engineMode: CxRemintEngineMode;
+  iphoneExif: boolean;
+  aiThreshold?: number;
+  sourceThreshold?: number;
+};
 export type ExpertRefinementMode = "off" | "light" | "balanced" | "optical";
 export type ExpertRefinementTechnique =
   | "pixel_alignment_break"
@@ -98,12 +105,14 @@ export async function createDeepCleanJob(params: {
     | "max-cx-remint-v3"
     | "max-cx-remint-v4"
     | "max-cx-remint-v5"
-    | "ds-remint-v6";
+    | "ds-remint-v6"
+    | "ds-remint-v7";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;
   cxRemint?: CxRemintOptions;
   dsRemintV6?: DsRemintV6Options;
+  dsRemintV7?: DsRemintV7Options;
 }): Promise<DeepCleanJob> {
   if (!supabase) {
     throw new Error("Supabase is not configured for Remarkee Max jobs.");
@@ -142,6 +151,14 @@ export async function createDeepCleanJob(params: {
             sharpen_percent: params.dsRemintV6.sharpenPercent,
             texture_amount: params.dsRemintV6.textureAmount,
             spectral_strength: params.dsRemintV6.spectralStrength
+          }
+        : undefined,
+      ds_remint_v7: params.dsRemintV7
+        ? {
+            engine_mode: params.dsRemintV7.engineMode,
+            iphone_exif: params.dsRemintV7.iphoneExif,
+            ai_threshold: params.dsRemintV7.aiThreshold,
+            source_threshold: params.dsRemintV7.sourceThreshold
           }
         : undefined
     }

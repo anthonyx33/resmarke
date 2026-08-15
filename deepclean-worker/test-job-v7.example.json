@@ -1,0 +1,36 @@
+{
+  "input": {
+    "job_id": "00000000-0000-4000-8000-000000000001",
+    "creator_id": "creator@example.com",
+    "profile": "standard",
+    "output_mode": "sealed",
+    "input_url": "https://example.com/signed-input-url",
+    "input_path": "user-id/job-id/input.jpg",
+    "output_path": "user-id/job-id/output.jpg",
+    "webhook_url": "https://your-project.supabase.co/functions/v1/deepclean-webhook",
+    "webhook_secret": "same-value-as-DEEPCLEAN_WEBHOOK_SECRET",
+    "expert_refinement": {
+      "mode": "ds-remint-v7",
+      "ds_remint_v7": {
+        "engine_mode": "adaptive",
+        "pre_regen": true,
+        "regen_level": 8,
+        "regen_process_cap": 1536,
+        "regen_timeout": 300,
+        "color_restore": true,
+        "color_restore_strength": 0.8,
+        "relife_ladder": ["light", "balanced", "strong"],
+        "template_preset": "balanced",
+        "max_rungs": 3,
+        "ai_threshold": 0.45,
+        "source_threshold": 0.30,
+        "deepfake_threshold": 0.10,
+        "min_ssim": 0.80,
+        "output_target": null,
+        "jpeg_quality": 94,
+        "jpeg_subsampling": "4:2:2",
+        "iphone_exif": true
+      }
+    }
+  }
+}

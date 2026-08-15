@@ -32,6 +32,7 @@ type CreateJobBody = {
   // DS ReMint V6 user-facing options (quality floor, engine mode, acquisition,
   // EXIF, delivery target). Validated server-side in dsRemintV6ExpertRefinement().
   ds_remint_v6?: unknown;
+  ds_remint_v7?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
 };
 
@@ -67,7 +68,8 @@ Deno.serve(async (request) => {
         "max-cx-remint-v3",
         "max-cx-remint-v4",
         "max-cx-remint-v5",
-        "ds-remint-v6"
+        "ds-remint-v6",
+        "ds-remint-v7"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -120,6 +122,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "ds-remint-v6"
         ? "max"
+        : requestedProfile === "ds-remint-v7"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -133,7 +137,8 @@ Deno.serve(async (request) => {
       requestedProfile === "max-cx-remint-v3" ||
       requestedProfile === "max-cx-remint-v4" ||
       requestedProfile === "max-cx-remint-v5" ||
-      requestedProfile === "ds-remint-v6"
+      requestedProfile === "ds-remint-v6" ||
+      requestedProfile === "ds-remint-v7"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -161,6 +166,8 @@ Deno.serve(async (request) => {
         ? cxRemintExpertRefinement(body.cx_remint, "deep-hist-up")
         : requestedProfile === "ds-remint-v6"
         ? dsRemintV6ExpertRefinement(body.ds_remint_v6)
+        : requestedProfile === "ds-remint-v7"
+        ? dsRemintV7ExpertRefinement(body.ds_remint_v7)
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -220,6 +227,8 @@ Deno.serve(async (request) => {
               ? "max-cx-remint-v5"
               : requestedProfile === "ds-remint-v6"
               ? "ds-remint-v6"
+              : requestedProfile === "ds-remint-v7"
+              ? "ds-remint-v7"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -606,6 +615,63 @@ function dsRemintV6ExpertRefinement(input: unknown) {
       jpeg_subsampling: "4:2:2",
       ai_threshold: 0.5,
       max_rungs: 5
+    }
+  };
+}
+
+function dsRemintV7ExpertRefinement(input: unknown) {
+  // DS ReMint V7: wash once (the proven SynthID carrier breaker, unchanged)
+  // then the non-generative camera re-life stack, source-aware detector gate
+  // on the DELIVERED bytes. User options are whitelisted + clamped; the
+  // pipeline itself is fixed server-side.
+  const raw = isRecord(input) ? input : {};
+  const engineModes = ["template", "adaptive"];
+  const presets = ["light", "balanced", "strong"];
+  const subsamplings = ["4:2:0", "4:2:2", "4:4:4"];
+
+  const engineMode =
+    typeof raw.engine_mode === "string" && engineModes.includes(raw.engine_mode)
+      ? raw.engine_mode
+      : "adaptive";
+  const iphoneExif = typeof raw.iphone_exif === "boolean" ? raw.iphone_exif : true;
+  const templatePreset =
+    typeof raw.template_preset === "string" && presets.includes(raw.template_preset)
+      ? raw.template_preset
+      : "balanced";
+  const jpegSubsampling =
+    typeof raw.jpeg_subsampling === "string" && subsamplings.includes(raw.jpeg_subsampling)
+      ? raw.jpeg_subsampling
+      : "4:2:2";
+  const outputTarget =
+    raw.output_target === null || raw.output_target === undefined
+      ? null
+      : clampNumber(raw.output_target, 256, 8192, null);
+
+  return {
+    mode: "ds-remint-v7",
+    intensity: 100,
+    preserve_straight_lines: true,
+    techniques: {},
+    ds_remint_v7: {
+      engine_mode: engineMode,
+      pre_regen: true,
+      regen_level: 8,
+      regen_process_cap: 1536,
+      regen_timeout: 300,
+      color_restore: true,
+      color_restore_strength: 0.8,
+      relife_ladder: ["light", "balanced", "strong"],
+      template_preset: templatePreset,
+      max_rungs: 3,
+      ai_threshold: clampNumber(raw.ai_threshold, 0, 1, 0.45),
+      source_threshold: clampNumber(raw.source_threshold, 0, 1, 0.3),
+      deepfake_threshold: clampNumber(raw.deepfake_threshold, 0, 1, 0.1),
+      min_ssim: clampNumber(raw.min_ssim, 0, 1, 0.8),
+      output_target: outputTarget,
+      jpeg_quality: clampNumber(raw.jpeg_quality, 60, 100, 94),
+      jpeg_subsampling: jpegSubsampling,
+      iphone_exif: iphoneExif,
+      device: "auto"
     }
   };
 }

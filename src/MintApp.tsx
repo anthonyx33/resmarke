@@ -111,7 +111,8 @@ type MintDeepCleanProfile =
   | "max-cx-remint-v3"
   | "max-cx-remint-v4"
   | "max-cx-remint-v5"
-  | "ds-remint-v6";
+  | "ds-remint-v6"
+  | "ds-remint-v7";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
@@ -329,6 +330,9 @@ export default function MintApp() {
   const [dsV6Sharpen, setDsV6Sharpen] = useState(24);
   const [dsV6Texture, setDsV6Texture] = useState(90);
   const [dsV6Spectral, setDsV6Spectral] = useState(30);
+  // DS ReMint V7 controls (wash -> camera re-life -> source-aware gate).
+  const [dsV7EngineMode, setDsV7EngineMode] = useState<CxRemintEngineMode>("adaptive");
+  const [dsV7IphoneExif, setDsV7IphoneExif] = useState(true);
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -375,7 +379,9 @@ export default function MintApp() {
       "max-cx-remint-v4": 13,
       "max-cx-remint-v5": 13,
       // DS ReMint V6: regen + laundering + classical reconstruction + QC.
-      "ds-remint-v6": 13
+      "ds-remint-v6": 13,
+      // DS ReMint V7: wash + camera re-life + source-aware gate + single encode.
+      "ds-remint-v7": 13
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -391,6 +397,8 @@ export default function MintApp() {
     if (isCxProfile(deepCleanProfile) && cxEngineMode === "adaptive") cost += 2;
     // Adaptive DS ReMint V6 does the same detector-gated escalation.
     if (deepCleanProfile === "ds-remint-v6" && dsV6EngineMode === "adaptive") cost += 2;
+    // Adaptive DS ReMint V7 runs repeated real-detector probes per re-life rung.
+    if (deepCleanProfile === "ds-remint-v7" && dsV7EngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
   }, [
@@ -399,7 +407,8 @@ export default function MintApp() {
     deepCleanMicroTextureJitter,
     deepCleanOutputMode,
     cxEngineMode,
-    dsV6EngineMode
+    dsV6EngineMode,
+    dsV7EngineMode
   ]);
 
   // CX Remint quality-floor slider: map the selected preset to its slider index
@@ -412,6 +421,8 @@ export default function MintApp() {
 
   // DS ReMint V6 derived state: active toggle + quality-floor slider mapping.
   const dsV6Active = deepCleanProfile === "ds-remint-v6";
+  // DS ReMint V7 derived state: active toggle.
+  const dsV7Active = deepCleanProfile === "ds-remint-v7";
   const dsV6QualityFloorIndex = Math.max(
     0,
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
@@ -884,6 +895,13 @@ export default function MintApp() {
                   textureAmount: dsV6Texture / 100,
                   spectralStrength: dsV6Spectral / 100
                 }
+              : undefined,
+          dsRemintV7:
+            deepCleanProfile === "ds-remint-v7"
+              ? {
+                  engineMode: dsV7EngineMode,
+                  iphoneExif: dsV7IphoneExif
+                }
               : undefined
         });
         createdJob = job;
@@ -1091,6 +1109,18 @@ export default function MintApp() {
     if (profile === "ds-remint-v6") {
       // DS ReMint V6 is terminal: stripped output, camera-grade texture and a
       // coherent iPhone EXIF come from the pipeline itself.
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
+      return;
+    }
+    if (profile === "ds-remint-v7") {
+      // DS ReMint V7 is terminal: the wash breaks SynthID, the non-generative
+      // camera re-life stack replaces the generative fingerprint, the
+      // source-aware gate picks the candidate on the delivered bytes. One
+      // JPEG encode with coherent EXIF from the pipeline itself.
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -2162,7 +2192,105 @@ export default function MintApp() {
                     </div>
                   ) : null}
 
-                  {!dsV6Active ? (
+                  <label className={`rm-v6-toggle${dsV7Active ? " is-active" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={dsV7Active}
+                      disabled={batchRunning}
+                      onChange={(event) =>
+                        chooseDeepCleanProfile(
+                          event.target.checked ? "ds-remint-v7" : "max-cx-remint-v5"
+                        )
+                      }
+                    />
+                    <span className="rm-switch-track" aria-hidden="true">
+                      <span className="rm-switch-thumb" />
+                    </span>
+                    <span className="rm-v6-toggle-text">
+                      <strong>DS ReMint V7</strong>
+                      <small>Wash once · camera re-life · source-aware gate</small>
+                    </span>
+                    <span className="rm-badge">{dsV7Active ? "Enabled" : "Off"}</span>
+                  </label>
+
+                  {dsV7Active ? (
+                    <div className="rm-v6-panel">
+                      <div className="rm-v6-banner">
+                        <Sparkles size={15} aria-hidden="true" />
+                        <span>
+                          The proven SynthID-breaking regeneration runs unchanged, then a
+                          non-generative camera re-life pass (Bayer CFA · sensor noise · lens ·
+                          colour pipeline) replaces the generative fingerprint with camera
+                          statistics. One JPEG encode, source-aware detector gate.
+                        </span>
+                      </div>
+
+                      <div className="rm-v6-stats" aria-label="Pipeline indicators">
+                        <span className="rm-stat">
+                          <em>Wash</em>
+                          <b>Qwen · denoise .08–.15</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Re-life</em>
+                          <b>Bayer CFA + noise</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Encode</em>
+                          <b>JPEG · q94</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Engine</em>
+                          <b>{dsV7EngineMode === "adaptive" ? "≤3 gated passes" : "1 pass"}</b>
+                        </span>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Engine</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V7 engine">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV7EngineMode === "adaptive"}
+                            className={dsV7EngineMode === "adaptive" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV7EngineMode("adaptive")}
+                          >
+                            Adaptive (detector-gated)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV7EngineMode === "template"}
+                            className={dsV7EngineMode === "template" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV7EngineMode("template")}
+                          >
+                            Optimised template
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV7EngineMode === "adaptive"
+                            ? "Each re-life rung (light → balanced → strong) is probed against the live detector on the DELIVERED bytes; the first pass that clears ships. Gates ai ≤ 45%, flux-family ≤ 30%, deepfake ≤ 10%. +2 credits."
+                            : "One deterministic balanced pass. Fast and predictable, no detector calls."}
+                        </p>
+                      </div>
+
+                      <label className="rm-switch">
+                        <input
+                          type="checkbox"
+                          checked={dsV7IphoneExif}
+                          disabled={batchRunning}
+                          onChange={(event) => setDsV7IphoneExif(event.target.checked)}
+                        />
+                        <span className="rm-switch-track" aria-hidden="true">
+                          <span className="rm-switch-thumb" />
+                        </span>
+                        <span>Coherent device EXIF</span>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {!dsV6Active && !dsV7Active ? (
                   <div className="rm-field-grid">
                     <label className="rm-field">
                       <span className="rm-field-label">Profile</span>
@@ -2185,6 +2313,7 @@ export default function MintApp() {
                         <option value="max-cx-remint-v4">CX Remint v4 · Deep + tone match + realism</option>
                         <option value="max-cx-remint-v5">CX Remint v5 · Max removal + upscale to 1080+ (recommended)</option>
                         <option value="ds-remint-v6">DS ReMint V6 (new)</option>
+                        <option value="ds-remint-v7">DS ReMint V7 (new)</option>
                       </select>
                     </label>
                     <label className="rm-field">
