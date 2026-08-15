@@ -21,6 +21,7 @@ What this gate still proves, without a GPU:
 """
 
 import importlib.metadata as metadata
+import re
 import sys
 
 EXPECTED_TORCH = "2.7.1"
@@ -34,6 +35,11 @@ EXPECTED_NA3D_SCHEMA = (
     "(Tensor q, Tensor k, Tensor v, SymInt[] kernel_size, "
     "bool[] is_causal, float? scale) -> Tensor"
 )
+
+
+def _normalize_schema(schema):
+    """Collapse whitespace and strip default values from a torch schema string."""
+    return re.sub(r"=[^,)]+", "", " ".join(schema.split()))
 
 
 def check_versions():
@@ -90,10 +96,12 @@ def check_custom_op_schema():
     schema = infer_schema(na3d_proto, mutates_args=())
     print(f"inferred na3d schema: {schema}")
 
-    # Compare on collapsed whitespace so a cosmetic spacing change cannot fail
-    # the build, while a genuinely different inferred type (e.g. `float`
-    # instead of `float?`, or `int[]` instead of `SymInt[]`) still does.
-    if " ".join(schema.split()) != " ".join(EXPECTED_NA3D_SCHEMA.split()):
+    # Compare inferred TYPES, which is what torch 2.5.1 got wrong. Normalizing
+    # away whitespace and default values (`float? scale=None` -> `float? scale`,
+    # which is how the owners transcribed it) keeps a cosmetic difference from
+    # failing the build, while a genuinely different type — `float` instead of
+    # `float?`, or `int[]` instead of `SymInt[]` — still does.
+    if _normalize_schema(schema) != _normalize_schema(EXPECTED_NA3D_SCHEMA):
         raise SystemExit(
             "FAIL: inferred na3d schema does not match the owner-verified signature.\n"
             f"  expected: {EXPECTED_NA3D_SCHEMA}\n"

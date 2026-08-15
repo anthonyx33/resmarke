@@ -281,6 +281,7 @@ def apply_ds_remint_v6(input_path, output_path, creator_id, settings=None, seed_
         }
 
         detector_ok = None
+        det = None
         if adaptive:
             probe_path = str(Path(output_path).with_name(".ds-v6-probe.jpg"))
             _encode_probe(candidate, probe_path)
@@ -288,6 +289,7 @@ def apply_ds_remint_v6(input_path, output_path, creator_id, settings=None, seed_
             detector_ok = _detector_pass(det, cfg)
             attempt["detector"] = det
             attempt["detector_ok"] = detector_ok
+            attempt["rating_88"] = _rating_88(det)
             try:
                 Path(probe_path).unlink()
             except OSError:
@@ -295,7 +297,8 @@ def apply_ds_remint_v6(input_path, output_path, creator_id, settings=None, seed_
 
         report["attempts"].append(attempt)
         chosen = _keep_better(chosen, {"image": candidate, "metrics": metrics, "rung": rung,
-                                       "detector_ok": detector_ok, "floor_ok": floor_ok})
+                                       "detector_ok": detector_ok, "floor_ok": floor_ok,
+                                       "detector": det})
         if not adaptive:
             break
         if detector_ok is None:
@@ -418,6 +421,11 @@ def apply_ds_remint_v6(input_path, output_path, creator_id, settings=None, seed_
         "output_long_edge": max(final_image.size),
         "beats_competitor_free_768": max(final_image.size) > 768,
     }
+    # 0-88 AI-flag risk score for the chosen rung. Reporting only: it never
+    # fails a job and never adjusts credits (owner decision). None in template
+    # mode, with no detector configured, or on any unusable verdict.
+    rating = _rating_88(chosen.get("detector")) if adaptive else None
+
     if adaptive:
         if chosen["detector_ok"] is None:
             note = "detector_unavailable_shipped_best_effort"
@@ -432,6 +440,11 @@ def apply_ds_remint_v6(input_path, output_path, creator_id, settings=None, seed_
             "rungs_tried": len(report["attempts"]),
             "note": note,
         }
+
+    report["rating_88"] = rating
+    report["detector_gate"]["rating_88"] = rating
+    if rating is None:
+        report["detector_gate"]["rating_note"] = "rating_unavailable"
 
     report["applied"] = True
     report["runtime_ms"] = int((time.time() - started) * 1000)
@@ -649,6 +662,29 @@ def _safe_detect(detector, path):
         return {"ok": False, "reason": "detector_returned_non_dict", "infra_error": True}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "reason": f"detector_error: {str(exc)[:200]}", "infra_error": True}
+
+
+def _rating_88(det):
+    """0-88 AI-flag risk score: 0 = lowest risk of being flagged, 88 = highest.
+
+    Reporting only. This never fails a job and never adjusts credits — a
+    still-flagged image still completes and still captures its credit.
+    Returns None when there is no usable verdict to score.
+    """
+    if not isinstance(det, dict):
+        return None
+    if det.get("watermark_present") is True:
+        return 88                       # still carries a detectable watermark
+    ai = det.get("ai_probability")
+    if ai is None:
+        return None
+    try:
+        ai = float(ai)
+    except (TypeError, ValueError):
+        return None
+    if ai > 1.0:
+        ai = ai / 100.0
+    return int(round(max(0.0, min(1.0, ai)) * 88))
 
 
 def _detector_pass(result, cfg):

@@ -2660,6 +2660,16 @@ export default function MintApp() {
                             <RmMetric label="GPU" value={deepCleanJob.gpuType || "—"} />
                             <RmMetric label="Output" value={deepCleanOutputMode} />
                           </div>
+                          {(() => {
+                            const rating = readRating88(deepCleanJob.report);
+                            if (rating === null) return null;
+                            const band = rating <= 29 ? "low" : rating <= 58 ? "mid" : "high";
+                            return (
+                              <div className={`rm-flagrisk rm-flagrisk-${band}`}>
+                                AI-flag risk: {rating}/88
+                              </div>
+                            );
+                          })()}
                           <button
                             className="rm-btn rm-btn-max rm-btn-block"
                             type="button"
@@ -3121,6 +3131,30 @@ function RmMetric({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+/**
+ * Pull the 0-88 AI-flag risk score out of a DeepClean job report.
+ *
+ * The worker nests its engine report under `report.engine`, so that is the
+ * canonical path; the top-level fallback covers any caller that hands us the
+ * engine report directly. Returns null whenever there is no usable score
+ * (template mode, no detector configured, or a detector infra error), in which
+ * case the chip is hidden rather than showing a misleading zero.
+ */
+function readRating88(report: Record<string, unknown> | undefined): number | null {
+  if (!report) return null;
+  const engine = report.engine;
+  const candidates = [
+    engine && typeof engine === "object" ? (engine as Record<string, unknown>).rating_88 : undefined,
+    report.rating_88,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(0, Math.min(88, Math.round(value)));
+    }
+  }
+  return null;
 }
 
 function SectionHead({
