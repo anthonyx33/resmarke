@@ -3294,8 +3294,8 @@ export default function MintApp() {
                           {dsV88Strength === "light"
                             ? "Light: faintest optics, minimal noise, ~cleanup 10% — for images that already grade well."
                             : dsV88Strength === "deep"
-                            ? "Deep: degrade 68% → balanced model at low res → Lanczos restore → light pass at delivery. For stubborn frames."
-                            : "Balanced: the recommended coherent model — paired inverse/forward CCM, MHC demosaic, weak ISP denoise."}
+                            ? "Deep (legacy rescue): degrade 75% → low-res pass → restore. Only when Balanced cannot clear — it costs visible quality."
+                            : "Balanced: the recommended coherent model — paired inverse/forward CCM, MHC demosaic, SNR-coupled denoise, multiscale cleanup."}
                         </p>
                       </div>
 

@@ -247,7 +247,13 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     reference = base  # all fidelity metrics measure against this, not the source
 
     # --- coherent camera ladder ----------------------------------------------
-    ladder = ["light", "balanced", "deep"] if adaptive else [cfg["strength"]]
+    if adaptive:
+        # V8.9: Deep is retired from the adaptive ladder (global degrade nukes
+        # quality); it remains a manual option only. V8.8 keeps its ladder.
+        ladder = (["light", "balanced"] if cfg.get("mode") == "ds-remint-v8.9"
+                  else ["light", "balanced", "deep"])
+    else:
+        ladder = [cfg["strength"]]
     if adaptive and cfg.get("route_by_baseline"):
         baseline = report.get("input_baseline")
         if isinstance(baseline, dict):

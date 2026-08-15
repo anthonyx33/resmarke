@@ -62,16 +62,34 @@ PRESETS = {
         "psf_g": 0.25, "psf_rb": 0.30, "ca_amount": 0.10, "vignette": 0.005,
         "shot_noise": 0.0005, "read_noise": 0.0009, "cleanup": 0.10,
         "denoise": 0.04, "tone": 0.02, "wb_drift": 0.005, "sharpen_percent": 8,
+        "multiscale_cleanup": False,
+        "snr_coupled_denoise": False,
+        "virtual_exposure": 1.0,
+        "raw_headroom": 0.0,
+        "scene_adaptive": False,
     },
     "balanced": {
         "psf_g": 0.32, "psf_rb": 0.40, "ca_amount": 0.20, "vignette": 0.010,
         "shot_noise": 0.0007, "read_noise": 0.0012, "cleanup": 0.20,
         "denoise": 0.06, "tone": 0.03, "wb_drift": 0.0075, "sharpen_percent": 10,
+        # V8.9 upgrades (default-on for balanced): scene-adaptive parameters,
+        # multiscale adaptive cleanup, SNR-coupled ISP denoise, virtual
+        # exposure + RAW channel headroom + gamut-safe rendering.
+        "multiscale_cleanup": True,
+        "snr_coupled_denoise": True,
+        "virtual_exposure": 1.0,
+        "raw_headroom": 0.02,
+        "scene_adaptive": True,
     },
     "deep": {
         "psf_g": 0.40, "psf_rb": 0.50, "ca_amount": 0.30, "vignette": 0.015,
         "shot_noise": 0.0010, "read_noise": 0.0016, "cleanup": 0.30,
         "denoise": 0.09, "tone": 0.04, "wb_drift": 0.01, "sharpen_percent": 12,
+        "multiscale_cleanup": False,
+        "snr_coupled_denoise": True,
+        "virtual_exposure": 1.0,
+        "raw_headroom": 0.02,
+        "scene_adaptive": False,
     },
 }
 
@@ -137,9 +155,20 @@ def apply_coherent_camera(image, settings=None, creator_id="coherent-camera", se
     linear = srgb_to_linear(np.asarray(work).astype(np.float32) / 255.0)
     report["layers"]["inverse_gamma"] = {"applied": True}
 
-    # --- 2. weak synthesis-residual cleanup (flat regions, edge-aware) --------
-    linear = _residual_cleanup(linear, cfg["cleanup"])
-    report["layers"]["residual_cleanup"] = {"amount": cfg["cleanup"], "edge_aware": True}
+    # --- 2. scene analysis + synthesis-residual cleanup ----------------------
+    features = {}
+    if cfg.get("scene_adaptive"):
+        features = _scene_features(linear)
+        _modulate_scene(cfg, features)
+        report["layers"]["scene_analysis"] = features
+    if cfg.get("multiscale_cleanup"):
+        linear = _multiscale_cleanup(linear, cfg["cleanup"])
+        report["layers"]["residual_cleanup"] = {
+            "amount": cfg["cleanup"], "method": "multiscale_adaptive", "edge_aware": True,
+        }
+    else:
+        linear = _residual_cleanup(linear, cfg["cleanup"])
+        report["layers"]["residual_cleanup"] = {"amount": cfg["cleanup"], "edge_aware": True}
 
     # --- 3-5. inverse tone / CCM / WB -----------------------------------------
     tone_fwd, tone_inv = _make_tone_luts(cfg["tone"])
@@ -165,6 +194,18 @@ def apply_coherent_camera(image, settings=None, creator_id="coherent-camera", se
     # --- 7. WB forward ---------------------------------------------------------
     cam = cam * gains[None, None, :]
 
+    # --- virtual exposure + RAW channel headroom (before CFA) ------------------
+    if cfg.get("virtual_exposure", 1.0) != 1.0:
+        cam = cam * float(cfg["virtual_exposure"])
+    if cfg.get("raw_headroom", 0.0) > 0:
+        # Soft shoulder near saturation: bright lamps clip as sensors do, not
+        # as three rendered channels pushed smoothly toward white.
+        cam = np.clip(cam - float(cfg["raw_headroom"]) * np.power(cam, 3), 0.0, 1.0)
+    report["layers"]["exposure"] = {
+        "gain": float(cfg.get("virtual_exposure", 1.0)),
+        "raw_headroom": float(cfg.get("raw_headroom", 0.0)),
+    }
+
     # --- 8. CFA + pre-demosaic noise + MHC demosaic ---------------------------
     cam = _bayer_roundtrip(
         cam, rng, cfg["shot_noise"], cfg["read_noise"], 1.0,
@@ -175,12 +216,20 @@ def apply_coherent_camera(image, settings=None, creator_id="coherent-camera", se
         "demosaic": "malvar_he_cutler", "noise_before_demosaic": True,
     }
 
-    # --- 9. weak ISP denoise ---------------------------------------------------
-    cam = _isp_denoise(cam, cfg["denoise"])
-    report["layers"]["isp_denoise"] = {"amount": cfg["denoise"], "edge_aware": True}
+    # --- 9. ISP denoise (SNR-coupled when enabled) -----------------------------
+    if cfg.get("snr_coupled_denoise"):
+        cam = _snr_denoise(cam, cfg["denoise"], cfg["shot_noise"], cfg["read_noise"])
+        report["layers"]["isp_denoise"] = {
+            "amount": cfg["denoise"], "method": "snr_coupled_to_noise_model",
+        }
+    else:
+        cam = _isp_denoise(cam, cfg["denoise"])
+        report["layers"]["isp_denoise"] = {"amount": cfg["denoise"], "edge_aware": True}
 
-    # --- 10-12. forward CCM / tone / sRGB -------------------------------------
+    # --- 10-12. forward CCM / gamut / tone / sRGB ------------------------------
     linear_out = _apply_ccm(cam, CCM)
+    if cfg.get("raw_headroom", 0.0) > 0:
+        linear_out = _gamut_safe(linear_out)
     linear_out = _apply_lut(linear_out, tone_fwd)
     out = np.clip(linear_to_srgb(np.clip(linear_out, 0.0, 1.0)) * 255.0 + 0.5, 0, 255).astype(np.uint8)
     work = Image.fromarray(out)
@@ -270,3 +319,86 @@ def _isp_denoise(cam, amount):
     flat = np.clip(1.0 - (edge - 0.006) / 0.025, 0.0, 1.0)[..., None]
     mask = amount * flat
     return cam * (1.0 - mask) + blurred * mask
+
+
+def _scene_features(linear):
+    """Five cheap scalar feature groups driving scene-conditioned parameters."""
+    luma = linear[..., 0] * 0.2126 + linear[..., 1] * 0.7152 + linear[..., 2] * 0.0722
+    gy, gx = np.gradient(luma)
+    mag = np.hypot(gx, gy)
+    saturation = (linear.max(axis=2) - linear.min(axis=2)).mean()
+    return {
+        "luma_p05": float(np.percentile(luma, 5)),
+        "luma_p50": float(np.percentile(luma, 50)),
+        "luma_p95": float(np.percentile(luma, 95)),
+        "flat_fraction": float(np.mean(mag < 0.004)),
+        "edge_density": float(np.mean(mag > 0.03)),
+        "saturation_mean": float(saturation),
+        "clip_fraction": float(np.mean(linear.max(axis=2) > 0.97)),
+    }
+
+
+def _modulate_scene(cfg, features):
+    """Scene-conditioned parameter modulation (continuous, conservative)."""
+    if features["luma_p50"] < 0.18:
+        # Dusk / low-light: raise virtual exposure, shadow read noise, denoise.
+        cfg["virtual_exposure"] = float(cfg.get("virtual_exposure", 1.0)) * 1.08
+        cfg["read_noise"] = float(cfg["read_noise"]) * 1.12
+        cfg["denoise"] = float(cfg["denoise"]) * 1.15
+    if features["flat_fraction"] > 0.35:
+        # Large smooth regions: more residual cleanup, less risk.
+        cfg["cleanup"] = float(cfg["cleanup"]) * 1.15
+    if features["edge_density"] > 0.08:
+        # Texture/architecture heavy: lighter optics to protect fine detail.
+        cfg["psf_g"] = float(cfg["psf_g"]) * 0.92
+        cfg["psf_rb"] = float(cfg["psf_rb"]) * 0.92
+
+
+def _multiscale_cleanup(linear, amount):
+    """One-resolution multiscale adaptive cleanup: I' = B + alpha(x) * R.
+
+    Fine residual attenuated strongly in flat areas, kept near edges; mid
+    residual attenuated at half strength. Sampling bandwidth is never reduced
+    (the Deep branch's quality failure does not apply here)."""
+    if amount <= 0:
+        return linear
+    rgb = Image.fromarray(np.clip(linear * 255.0, 0, 255).astype(np.uint8))
+    b1 = np.asarray(rgb.filter(ImageFilter.GaussianBlur(radius=0.9))).astype(np.float32) / 255.0
+    b2 = np.asarray(rgb.filter(ImageFilter.GaussianBlur(radius=2.8))).astype(np.float32) / 255.0
+    fine = linear - b1
+    mid = b1 - b2
+    gray = rgb.convert("L")
+    edge = np.abs(np.asarray(gray).astype(np.float32) / 255.0 - np.asarray(
+        gray.filter(ImageFilter.GaussianBlur(radius=0.9))).astype(np.float32) / 255.0)
+    flat = np.clip(1.0 - (edge - 0.008) / 0.03, 0.0, 1.0)[..., None]
+    alpha_fine = 1.0 - amount * flat
+    alpha_mid = 1.0 - 0.5 * amount * flat
+    return np.clip(b2 + mid * alpha_mid + fine * alpha_fine, 0.0, 1.0)
+
+
+def _snr_denoise(cam, amount, shot, read):
+    """ISP denoise coupled to the simulated RAW noise model: strength follows
+    the local noise variance the model itself produced (more denoise where
+    SNR is low), still edge-aware and conservative."""
+    if amount <= 0:
+        return cam
+    variance = np.clip(cam, 0.0, None) * shot + read ** 2
+    var_norm = variance / (float(variance.max()) + 1e-9)
+    rgb = Image.fromarray(np.clip(cam * 255.0, 0, 255).astype(np.uint8))
+    blurred = np.asarray(rgb.filter(ImageFilter.GaussianBlur(radius=0.6))).astype(np.float32) / 255.0
+    gray = cam[..., 0] * 0.2126 + cam[..., 1] * 0.7152 + cam[..., 2] * 0.0722
+    edge = np.abs(gray - np.asarray(
+        rgb.convert("L").filter(ImageFilter.GaussianBlur(radius=0.6))
+    ).astype(np.float32) / 255.0)
+    flat = np.clip(1.0 - (edge - 0.006) / 0.025, 0.0, 1.0)[..., None]
+    strength = amount * flat * (0.5 + var_norm)
+    strength = np.clip(strength, 0.0, 2.0 * amount)
+    return cam * (1.0 - strength) + blurred * strength
+
+
+def _gamut_safe(rgb):
+    """Hue-preserving gamut compression for values leaving the display gamut
+    after CCM (uniform per-pixel scale — no per-channel clipping)."""
+    max_channel = rgb.max(axis=2, keepdims=True)
+    scale = np.where(max_channel > 1.0, (1.0 + 0.6 * (max_channel - 1.0)) / np.maximum(max_channel, 1e-6), 1.0)
+    return rgb * scale
