@@ -358,6 +358,8 @@ export default function MintApp() {
   const [dsV82IphoneExif, setDsV82IphoneExif] = useState(true);
   const [dsV82MetadataMode, setDsV82MetadataMode] =
     useState<"device" | "minimal">("device");
+  const [dsV82RestoreEngine, setDsV82RestoreEngine] =
+    useState<"neural" | "classical">("neural");
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -972,7 +974,7 @@ export default function MintApp() {
                   qualityFloor: dsV82QualityFloor,
                   iphoneExif: dsV82IphoneExif,
                   metadataMode: dsV82MetadataMode,
-                  restoreEngine: "neural"
+                  restoreEngine: dsV82RestoreEngine
                 }
               : undefined
         });
@@ -2748,6 +2750,37 @@ export default function MintApp() {
                             : dsV82QualityFloor === "strong"
                             ? "Strong: deepest degradation (~50%), most total fingerprint destruction, then neural restore rebuilds the detail."
                             : "Balanced: the recommended trade — ~62% degrade, full ghost clean at low res, neural restore + ghost_lite re-life."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Restore engine</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.2 restore engine">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV82RestoreEngine === "neural"}
+                            className={dsV82RestoreEngine === "neural" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV82RestoreEngine("neural")}
+                          >
+                            Neural (Real-ESRGAN)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV82RestoreEngine === "classical"}
+                            className={dsV82RestoreEngine === "classical" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV82RestoreEngine("classical")}
+                          >
+                            Classical (no re-stamp)
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV82RestoreEngine === "neural"
+                            ? "Real-ESRGAN rebuilds detail, but stamps its own GAN fingerprint — the final re-life strips most of it. Use when quality beats detection."
+                            : "Lanczos + dehalo + luma sharpening: zero new fingerprint. Use when a grader reads the restorer (Hive's flux2 signal) — quality trades slightly."}
                         </p>
                       </div>
 

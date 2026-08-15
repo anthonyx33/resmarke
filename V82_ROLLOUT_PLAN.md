@@ -129,3 +129,36 @@ site with the neural restore to confirm.
   already do.
 - The product claim stays: "measured against the strictest graders we can
   reach" — never "invisible".
+
+## 6. The key unlock (V8.2 live data: Hive 76.4% / TruthScan 80% Medium)
+
+The V8.2 Strong run produced the first TruthScan confidence drop (High ->
+Medium, 95 -> 80) AND the highest source-attribution cost yet (Hive flux
+26.2% + flux2 9.2%). Read together with every score since V6, one pattern
+explains the plateau:
+
+**Every generative stage re-stamps; every classical stage only dresses.**
+The wash stamps flux. The Real-ESRGAN restore stamps flux2. The re-life
+layers launder the latest stamp. We are running in place.
+
+The unlock is to eliminate generator stamps at the SOURCE, in this order:
+
+1. **Change the wash family.** Attribution by family across all live data:
+   Qwen wash -> flux 12-72%. Z-Image wherever it appears -> zimage 3.9-6%.
+   SDXL family -> sd 4-5.3%. The single biggest lever ever measured in this
+   project is WHICH generator runs the wash. Experiment: full-frame Z-Image
+   img2img (denoise ~0.1-0.2) as the wash; verify SynthID removal with the
+   live-test method; score both graders. If it breaks the carrier, this alone
+   is the jump.
+2. **Make the restore non-generative where detection matters.** V8.2's
+   `restore_engine: classical` (Lanczos + dehalo + luma sharpen) stamps
+   nothing. The neural restorer bought TruthScan's Medium confidence at the
+   cost of Hive's flux2. The restore-engine toggle (now in the V8.2 card)
+   measures which side of that trade wins per image.
+3. **Two-candidate ensemble shipping.** Run V8.1-balanced (grader #1 winner)
+   and V8.2-strong (TruthScan mover), score both, ship the lower ensemble-max.
+   Doubles cost, but the bench tool already computes this per image — it is
+   the immediate production unlock while 1 and 2 land.
+
+The wash-family change is V8.3. It is the only move left that attacks the
+fingerprint at its origin instead of dressing it.
