@@ -75,10 +75,48 @@ the grader un-re-lifed.*
 
 | # | Move | Why it matters now |
 |---|---|---|
-| M1 | **TruthScan into the loop** (API key → `graders` list in the proxy) | The gate already supports ensemble verdicts; the only blocker is access. Every future decision tunes blind without it |
+| M1 | **Manual-grader bench loop** (`tools/v82_bench.py`) | Built. You already grade TruthScan + Hive manually — this turns each of those checks into ranking data: run the config matrix, paste verdicts into `scores.json`, re-run, and the tool tells you which config wins per image and across the corpus |
 | M2 | **Cross-model wash mix** (Qwen + Z-Image at the wash) | The last big lever on the flux residual: grader #1 reads Z-Image at ~4% |
-| M3 | **Component ablation corpus** (degrade scale × launder preset × restore alpha vs both graders) | Picks the Pareto point for V8.2 defaults instead of guessing |
-| M4 | **Encode sweep** (q90–94, 4:2:0 vs 4:2:2) vs TruthScan's filetype/artifact checks | Cheap; one corpus column |
+| M3 | **Component ablation corpus** (degrade scale × launder preset × restore alpha) | Picks the Pareto point for V8.2 defaults instead of guessing |
+| M4 | **Encode sweep** (q90–94, 4:2:0 vs 4:2:2) | Cheap; one corpus column |
+
+### 4.1 The manual loop (how to run M1)
+
+You are already grading every output by hand — this is the operating procedure
+that converts those checks into decisions:
+
+```
+# 1. Export washed frames (or any inputs) and run the matrix locally:
+python3 tools/v82_bench.py washed/ out/ --floors balanced,strong \
+    --metadata device,minimal --control v8.1-balanced
+
+# 2. Grade each output on TruthScan + Hive + the source detector, then
+#    fill out/ scores.json keyed by output filename:
+#    {"image__v8.2__balanced__device.jpg": {"truthscan": 95, "hive": 62, "sightengine": 17.2}}
+
+# 3. Re-run (outputs are skipped, only ranking recomputes):
+python3 tools/v82_bench.py washed/ out/ --scores out/scores.json \
+    --floors balanced,strong --metadata device,minimal --control v8.1-balanced
+```
+
+Decision rule: lowest **ensemble-max** wins per image; quality (SSIM) breaks
+ties; the config with the most wins becomes the V8.2 default. This is the
+first time every manual TruthScan/Hive number you produce becomes data.
+
+### 4.2 The exact matrix to run this week
+
+Per image (use the 3–5 images you already have TruthScan/Hive numbers for):
+
+- v8.2 balanced / device
+- v8.2 balanced / minimal
+- v8.2 strong / device
+- v8.2 strong / minimal
+- control: v8.1 balanced / device (your 17.2% grader #1 baseline)
+
+Five candidates per image, two numbers each — that table decides the V8.2
+default floor and the metadata mode for both graders. No GPU needed for the
+bench runs (classical restore); run the winning config once through the live
+site with the neural restore to confirm.
 
 ## 5. Honesty
 
@@ -86,7 +124,8 @@ the grader un-re-lifed.*
   band of real photographs. The residual flux 12% is the Qwen wash — M2 is the
   only lever that attacks it at the source.
 - TruthScan at 95% on a 100% synthetic frame is a strong classifier doing its
-  job. V8.2's degrade path is the best honest shot at it; M1 is the only way
-  to know if we're making progress.
+  job. The manual bench loop (M1) is the only way to know whether V8.2's
+  degrade path moves it — and it costs you nothing beyond the checks you
+  already do.
 - The product claim stays: "measured against the strictest graders we can
   reach" — never "invisible".
