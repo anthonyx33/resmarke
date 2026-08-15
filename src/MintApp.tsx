@@ -2351,7 +2351,7 @@ export default function MintApp() {
                       disabled={batchRunning}
                       onChange={(event) =>
                         chooseDeepCleanProfile(
-                          event.target.checked ? "ds-remint-v8" : "max-cx-remint-v5"
+                          event.target.checked ? "ds-remint-v8.1" : "max-cx-remint-v5"
                         )
                       }
                     />
