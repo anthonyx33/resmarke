@@ -113,7 +113,8 @@ type MintDeepCleanProfile =
   | "max-cx-remint-v5"
   | "ds-remint-v6"
   | "ds-remint-v7"
-  | "ds-remint-v8";
+  | "ds-remint-v8"
+  | "ds-remint-v8.1";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
@@ -347,6 +348,8 @@ export default function MintApp() {
   const [dsV8OutputNameStyle, setDsV8OutputNameStyle] =
     useState<"photo-style" | "original" | "custom">("photo-style");
   const [dsV8OutputNameCustom, setDsV8OutputNameCustom] = useState("");
+  const [dsV8MetadataMode, setDsV8MetadataMode] =
+    useState<"device" | "minimal">("device");
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -397,7 +400,9 @@ export default function MintApp() {
       // DS ReMint V7: wash + camera re-life + source-aware gate + single encode.
       "ds-remint-v7": 13,
       // DS ReMint V8: V7 + quality floor + ghost ladder + device/naming options.
-      "ds-remint-v8": 13
+      "ds-remint-v8": 13,
+      // DS ReMint V8.1: quality-first floors through ghost_lite + metadata mode.
+      "ds-remint-v8.1": 13
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -416,7 +421,7 @@ export default function MintApp() {
     // Adaptive DS ReMint V7 runs repeated real-detector probes per re-life rung.
     if (deepCleanProfile === "ds-remint-v7" && dsV7EngineMode === "adaptive") cost += 2;
     // Adaptive DS ReMint V8 does the same detector-gated escalation.
-    if (deepCleanProfile === "ds-remint-v8" && dsV8EngineMode === "adaptive") cost += 2;
+    if (deepCleanProfile === "ds-remint-v8.1" && dsV8EngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
   }, [
@@ -442,8 +447,8 @@ export default function MintApp() {
   const dsV6Active = deepCleanProfile === "ds-remint-v6";
   // DS ReMint V7 derived state: active toggle.
   const dsV7Active = deepCleanProfile === "ds-remint-v7";
-  // DS ReMint V8 derived state: active toggle.
-  const dsV8Active = deepCleanProfile === "ds-remint-v8";
+  // DS ReMint V8.1 derived state: active toggle.
+  const dsV8Active = deepCleanProfile === "ds-remint-v8.1";
   const dsV6QualityFloorIndex = Math.max(
     0,
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
@@ -925,11 +930,12 @@ export default function MintApp() {
                 }
               : undefined,
           dsRemintV8:
-            deepCleanProfile === "ds-remint-v8"
+            deepCleanProfile === "ds-remint-v8.1"
               ? {
                   engineMode: dsV8EngineMode,
                   qualityFloor: dsV8QualityFloor,
                   iphoneExif: dsV8IphoneExif,
+                  metadataMode: dsV8MetadataMode,
                   device: dsV8Device,
                   resolutionMode: dsV8ResolutionMode,
                   resolutionX: dsV8ResolutionX,
@@ -937,9 +943,9 @@ export default function MintApp() {
                 }
               : undefined,
           outputNameStyle:
-            deepCleanProfile === "ds-remint-v8" ? dsV8OutputNameStyle : undefined,
+            deepCleanProfile === "ds-remint-v8.1" ? dsV8OutputNameStyle : undefined,
           outputNameCustom:
-            deepCleanProfile === "ds-remint-v8" ? dsV8OutputNameCustom : undefined
+            deepCleanProfile === "ds-remint-v8.1" ? dsV8OutputNameCustom : undefined
         });
         createdJob = job;
         updateQueueItem(item.id, { status: "preparing", job });
@@ -1165,10 +1171,10 @@ export default function MintApp() {
       setExpertRefinementTechniques(cloneExpertPreset("off"));
       return;
     }
-    if (profile === "ds-remint-v8") {
-      // DS ReMint V8 is terminal like V7 and adds the quality-floor trade:
-      // studio preserves fidelity, strong buys detector headroom via the
-      // ghost ladder. Stripped output; pipeline handles its own EXIF.
+    if (profile === "ds-remint-v8.1") {
+      // DS ReMint V8.1 is terminal like V8 with quality-first floors routed
+      // through ghost_lite and metadata mode control. Stripped output;
+      // pipeline handles its own EXIF.
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -2353,8 +2359,8 @@ export default function MintApp() {
                       <span className="rm-switch-thumb" />
                     </span>
                     <span className="rm-v6-toggle-text">
-                      <strong>DS ReMint V8 · Ghost</strong>
-                      <small>Quality floor · ghost re-life · device & file naming</small>
+                      <strong>DS ReMint V8.1 · Ghost</strong>
+                      <small>Quality-first floors · ghost_lite · device, metadata & naming</small>
                     </span>
                     <span className="rm-badge">{dsV8Active ? "Enabled" : "Off"}</span>
                   </label>
@@ -2364,10 +2370,11 @@ export default function MintApp() {
                       <div className="rm-v6-banner">
                         <Sparkles size={15} aria-hidden="true" />
                         <span>
-                          V8 adds a quality floor to the V7 pipeline: Studio preserves
-                          maximum fidelity, Strong spends more pixel budget on the ghost
-                          camera simulation (Malvar CFA · fixed-pattern noise · hot pixels ·
-                          noise-floor matching) for the most detector headroom.
+                          V8.1 keeps V8's quality floor but routes it through
+                          ghost_lite (Malvar CFA + noise-floor matching, without the heavy
+                          FPN signature) — quality stays closer to V7 while CFA/noise-mapping
+                          graders still see camera structure. Metadata mode isolates grader
+                          reactions to EXIF.
                         </span>
                       </div>
 
@@ -2380,10 +2387,10 @@ export default function MintApp() {
                           <em>Re-life</em>
                           <b>
                             {dsV8QualityFloor === "strong"
-                              ? "ghost ladder"
+                              ? "ghost_lite → ghost"
                               : dsV8QualityFloor === "studio"
-                              ? "light ladder"
-                              : "balanced ladder"}
+                              ? "light only"
+                              : "light → ghost_lite"}
                           </b>
                         </span>
                         <span className="rm-stat">
@@ -2434,8 +2441,8 @@ export default function MintApp() {
                           {dsV8QualityFloor === "studio"
                             ? "Studio: maximum fidelity, lightest re-life — for images that already grade well. Fewer pixels are touched, so detector headroom is lowest."
                             : dsV8QualityFloor === "strong"
-                            ? "Strong: spends more pixel budget on the ghost simulation (Malvar CFA + sensor realism) for maximum detector headroom — accept slightly softer fine detail."
-                            : "Balanced: the recommended trade between fidelity and detector headroom."}
+                            ? "Strong: routes through ghost_lite and full ghost for maximum detector headroom — accept slightly softer fine detail."
+                            : "Balanced: the recommended trade — ends on ghost_lite so CFA/noise-mapping graders see camera structure without the heavy FPN signature."}
                         </p>
                       </div>
 
@@ -2569,6 +2576,26 @@ export default function MintApp() {
                         </div>
                       ) : null}
 
+                      <div className="rm-field">
+                        <span className="rm-field-label">Metadata</span>
+                        <select
+                          className="rm-select"
+                          value={dsV8MetadataMode}
+                          disabled={batchRunning}
+                          onChange={(event) =>
+                            setDsV8MetadataMode(event.target.value as "device" | "minimal")
+                          }
+                        >
+                          <option value="device">Device EXIF (coherent)</option>
+                          <option value="minimal">Minimal (no EXIF)</option>
+                        </select>
+                        <p className="rm-hint">
+                          {dsV8MetadataMode === "device"
+                            ? "Writes coherent device metadata. Some graders read metadata — switch to Minimal to isolate its effect on the verdict."
+                            : "No EXIF bytes written. Use this to test graders whose metadata check is the residual signal."}
+                        </p>
+                      </div>
+
                       <label className="rm-switch">
                         <input
                           type="checkbox"
@@ -2608,7 +2635,8 @@ export default function MintApp() {
                         <option value="max-cx-remint-v5">CX Remint v5 · Max removal + upscale to 1080+ (recommended)</option>
                         <option value="ds-remint-v6">DS ReMint V6 (new)</option>
                         <option value="ds-remint-v7">DS ReMint V7 (new)</option>
-                        <option value="ds-remint-v8">DS ReMint V8 (new)</option>
+                        <option value="ds-remint-v8">DS ReMint V8</option>
+                        <option value="ds-remint-v8.1">DS ReMint V8.1 (new)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -2934,7 +2962,10 @@ export default function MintApp() {
 
                   {deepCleanProfile !== "max-remint" &&
                   deepCleanProfile !== "max-optimised-remint" &&
-                  !isCxProfile(deepCleanProfile) ? (
+                  !isCxProfile(deepCleanProfile) &&
+                  !dsV6Active &&
+                  !dsV7Active &&
+                  !dsV8Active ? (
                     <details className="rm-disc">
                       <summary>
                         <SlidersHorizontal size={15} aria-hidden="true" /> Expert refinement

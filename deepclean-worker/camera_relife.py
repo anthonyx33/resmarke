@@ -83,6 +83,29 @@ PRESETS = {
         "sharpen_percent": 16,
         "bayer_mix": 1.0,
     },
+    # V8.1 "ghost lite": the Malvar demosaic + noise-floor matching that help
+    # CFA/noise-mapping graders, WITHOUT the heavy FPN/hot-pixel signature that
+    # V8 live data showed can push source-attribution graders the wrong way
+    # (grader #1: 27.7% -> 76.2% under full ghost). Calibrated middle ground.
+    "ghost_lite": {
+        "rotation_deg": 0.20,
+        "blur_luma": 0.20,
+        "blur_chroma_mult": 1.25,
+        "shot_noise": 0.0007,
+        "read_noise": 0.0013,
+        "wb_drift": 0.02,
+        "tone": 0.05,
+        "ca_amount": 0.16,
+        "vignette": 0.07,
+        "sharpen_percent": 14,
+        "bayer_mix": 1.0,
+        "malvar_demosaic": True,
+        "fpn_column_sigma": 0.00012,
+        "fpn_row_sigma": 0.00008,
+        "hot_pixel_frac": 0.0000006,
+        "noise_match": True,
+        "noise_target_sigma": 0.0012,
+    },
     # V8 "ghost": full camera re-acquisition realism. Malvar-He-Cutler
     # demosaic (directional zipper structure, not boxy bilinear 2x2), fixed-
     # pattern noise (column/row banding), hot pixels, and noise-floor matching

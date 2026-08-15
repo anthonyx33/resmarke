@@ -17,6 +17,7 @@ from deepclean_detector import make_detector
 from ds_remint_v6 import apply_ds_remint_v6, is_ds_remint_v6
 from ds_remint_v7 import apply_ds_remint_v7, is_ds_remint_v7
 from ds_remint_v7 import apply_ds_remint_v8, is_ds_remint_v8
+from ds_remint_v7 import apply_ds_remint_v8_1, is_ds_remint_v8_1
 from max_cx_remint import apply_cx_remint, is_cx_remint
 from max_optimised_remint import apply_max_optimised_remint, is_max_optimised_remint
 from max_remint import apply_max_remint, is_max_remint
@@ -248,6 +249,21 @@ def handler(job):
                 cleaned_sha = sha256_file(cleaned_path)
                 neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8"}
                 content_repair_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8"}
+            elif is_ds_remint_v8_1(expert_refinement):
+                # DS ReMint V8.1: quality-first floors routing through
+                # ghost_lite, metadata mode control, and the ensemble-aware
+                # gate. Same terminal contract as V7/V8.
+                engine_report = apply_ds_remint_v8_1(
+                    input_path=input_path,
+                    output_path=cleaned_path,
+                    creator_id=creator_id,
+                    settings=expert_refinement,
+                    seed_extra=f"{job_id}:{input_sha}",
+                    detector=make_detector(),
+                )
+                cleaned_sha = sha256_file(cleaned_path)
+                neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_1"}
+                content_repair_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_1"}
             else:
                 engine_report = run_deepclean(
                     input_path=input_path,
@@ -579,6 +595,7 @@ def final_naturalization_config(cfg, expert_refinement):
         or is_ds_remint_v6(expert_refinement)
         or is_ds_remint_v7(expert_refinement)
         or is_ds_remint_v8(expert_refinement)
+        or is_ds_remint_v8_1(expert_refinement)
     ):
         # Max ReMint, CX Remint and DS ReMint V6 all do their own
         # acquisition-noise / camera re-acquisition in-module; a finalize
@@ -642,7 +659,7 @@ def finalize_output(
     # nothing (no seal, no naturalization to apply). Only when the bytes fit
     # the final-size cap, so behaviour stays identical to the old path.
     expert_mode = expert_refinement.get("mode") if isinstance(expert_refinement, dict) else None
-    passthrough_modes = {"max-cx-remint", "ds-remint-v6", "ds-remint-v7", "ds-remint-v8"}
+    passthrough_modes = {"max-cx-remint", "ds-remint-v6", "ds-remint-v7", "ds-remint-v8", "ds-remint-v8.1"}
     if (
         not bool(naturalization.get("enabled", True))
         and output_mode not in ("sealed", "sealed-stamped")

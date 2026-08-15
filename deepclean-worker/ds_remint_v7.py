@@ -67,6 +67,7 @@ DEFAULT_SETTINGS = {
     "jpeg_quality": 94,
     "jpeg_subsampling": "4:2:2",
     "iphone_exif": True,
+    "metadata_mode": "device",       # "device" (coherent EXIF) | "minimal" (no EXIF)
     "device": "auto",
     "resolution_mode": "off",
     "x_resolution": 72.0,
@@ -104,6 +105,34 @@ V8_QUALITY_FLOOR_PRESETS = {
     },
 }
 
+# V8.1 quality-first floors: the live V8 data showed full ghost pushing
+# source-attribution graders the wrong way. V8.1 routes the ladder through
+# ghost_lite (Malvar + noise-floor matching without heavy FPN/hot pixels) so
+# quality stays closer to V7 balanced while CFA/noise-mapping graders still
+# see camera structure.
+V8_1_QUALITY_FLOOR_PRESETS = {
+    "studio": {
+        "min_ssim": 0.88,
+        "relife_ladder": ["light"],
+        "label": "Studio (max quality)",
+    },
+    "high": {
+        "min_ssim": 0.85,
+        "relife_ladder": ["light", "balanced"],
+        "label": "High",
+    },
+    "balanced": {
+        "min_ssim": 0.82,
+        "relife_ladder": ["light", "balanced", "ghost_lite"],
+        "label": "Balanced (recommended)",
+    },
+    "strong": {
+        "min_ssim": 0.75,
+        "relife_ladder": ["balanced", "ghost_lite", "ghost"],
+        "label": "Strong (max laundering headroom)",
+    },
+}
+
 
 def is_ds_remint_v7(settings):
     return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v7"
@@ -111,6 +140,10 @@ def is_ds_remint_v7(settings):
 
 def is_ds_remint_v8(settings):
     return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8"
+
+
+def is_ds_remint_v8_1(settings):
+    return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.1"
 
 
 def apply_ds_remint_v8(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None):
@@ -130,14 +163,31 @@ def apply_ds_remint_v8(input_path, output_path, creator_id, settings=None, seed_
     )
 
 
+def apply_ds_remint_v8_1(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None):
+    """DS ReMint V8.1: the V8 pipeline with quality-first floors.
+
+    Same architecture as V8; the quality-floor ladders route through
+    ghost_lite instead of full ghost until the strong floor, and the gate
+    accepts per-grader (ensemble) verdicts."""
+    return apply_ds_remint_v7(
+        input_path=input_path,
+        output_path=output_path,
+        creator_id=creator_id,
+        settings=settings,
+        seed_extra=seed_extra,
+        detector=detector,
+    )
+
+
 def normalize_ds_remint_v7_settings(settings):
     raw = settings if isinstance(settings, dict) else {}
-    sub = raw.get("ds_remint_v7") if isinstance(raw.get("ds_remint_v7"), dict) else {}
-    if not sub and isinstance(raw.get("ds_remint_v8"), dict):
-        sub = raw["ds_remint_v8"]
+    sub = {}
+    for key in ("ds_remint_v7", "ds_remint_v8", "ds_remint_v8_1"):
+        if isinstance(raw.get(key), dict):
+            sub = raw[key]
     cfg = dict(DEFAULT_SETTINGS)
     cfg["mode"] = str(raw.get("mode") or "ds-remint-v7")
-    cfg["enabled"] = cfg["mode"] in ("ds-remint-v7", "ds-remint-v8")
+    cfg["enabled"] = cfg["mode"] in ("ds-remint-v7", "ds-remint-v8", "ds-remint-v8.1")
 
     engine_mode = str(sub.get("engine_mode", cfg["engine_mode"]))
     cfg["engine_mode"] = engine_mode if engine_mode in ("template", "adaptive") else "adaptive"
@@ -150,12 +200,17 @@ def normalize_ds_remint_v7_settings(settings):
     cfg["color_restore"] = bool(sub.get("color_restore", cfg["color_restore"]))
     cfg["color_restore_strength"] = float(_clamp(sub.get("color_restore_strength", cfg["color_restore_strength"]), 0.0, 1.0))
 
-    # V8 quality floor: applies the floor's min-SSIM + ladder defaults unless
-    # explicitly overridden (V7 requests without quality_floor keep the V7
-    # defaults byte-for-byte).
+    # V8/V8.1 quality floor: applies the floor's min-SSIM + ladder defaults
+    # unless explicitly overridden (V7 requests without quality_floor keep the
+    # V7 defaults byte-for-byte).
     quality_floor = str(sub.get("quality_floor", ""))
-    if quality_floor in V8_QUALITY_FLOOR_PRESETS:
-        floor = V8_QUALITY_FLOOR_PRESETS[quality_floor]
+    floors = (
+        V8_1_QUALITY_FLOOR_PRESETS
+        if cfg["mode"] == "ds-remint-v8.1"
+        else V8_QUALITY_FLOOR_PRESETS
+    )
+    if quality_floor in floors:
+        floor = floors[quality_floor]
         cfg["quality_floor"] = quality_floor
         if "min_ssim" not in sub:
             cfg["min_ssim"] = floor["min_ssim"]
@@ -189,6 +244,8 @@ def normalize_ds_remint_v7_settings(settings):
     )
 
     cfg["iphone_exif"] = bool(sub.get("iphone_exif", cfg["iphone_exif"]))
+    metadata_mode = str(sub.get("metadata_mode", cfg["metadata_mode"]))
+    cfg["metadata_mode"] = metadata_mode if metadata_mode in ("device", "minimal") else "device"
     cfg["device"] = str(sub.get("device", cfg["device"]))
     resolution_mode = str(sub.get("resolution_mode", cfg["resolution_mode"]))
     cfg["resolution_mode"] = (
@@ -386,7 +443,7 @@ def apply_ds_remint_v7(input_path, output_path, creator_id, settings=None, seed_
 
     # --- one encode (delivered bytes) ----------------------------------------
     exif_report = {"enabled": False}
-    if cfg["iphone_exif"]:
+    if cfg["iphone_exif"] and cfg.get("metadata_mode", "device") != "minimal":
         exif_bytes, exif_report = iphone_exif.build_iphone_exif(
             final_image.width,
             final_image.height,
@@ -401,6 +458,8 @@ def apply_ds_remint_v7(input_path, output_path, creator_id, settings=None, seed_
             final_image, output_path, exif_bytes, cfg["jpeg_quality"], cfg["jpeg_subsampling"]
         )
     else:
+        if cfg.get("metadata_mode") == "minimal":
+            exif_report = {"enabled": False, "reason": "metadata_mode_minimal_no_exif_written"}
         final_image.save(
             output_path, format="JPEG", quality=cfg["jpeg_quality"], optimize=True,
             subsampling=cfg["jpeg_subsampling"],
@@ -511,27 +570,22 @@ def _norm01(value):
     return max(0.0, min(1.0, value))
 
 
-def _v7_verdict(result, cfg):
-    """Full verdict: ai, flux-family source, deepfake, watermark. Cleared
-    requires ALL thresholds. None in any field means 'not measured', never a
-    pass -- except infra errors, which return cleared=None upstream."""
-    verdict = {
-        "ai": None, "flux_family": None, "deepfake": None, "watermark": None,
-        "cleared": None, "reasons": [],
-    }
-    if not isinstance(result, dict) or result.get("infra_error") or result.get("ok") is False:
-        return verdict
+def _single_verdict(result, cfg):
+    """Verdict for ONE grader's normalized payload: ai, flux-family, deepfake,
+    watermark, reasons. Cleared requires ALL measured signals under threshold
+    and no watermark; missing measurements block a clear upstream."""
+    v = {"ai": None, "flux_family": None, "deepfake": None, "watermark": None, "reasons": []}
 
     watermark = result.get("watermark_present")
     if isinstance(watermark, bool):
-        verdict["watermark"] = watermark
+        v["watermark"] = watermark
         if watermark:
-            verdict["reasons"].append("watermark_present")
+            v["reasons"].append("watermark_present")
 
     ai = _norm01(result.get("ai_probability"))
-    verdict["ai"] = ai
+    v["ai"] = ai
     if ai is not None and ai > cfg["ai_threshold"]:
-        verdict["reasons"].append("ai_probability_over_threshold")
+        v["reasons"].append("ai_probability_over_threshold")
 
     sources = result.get("sources") if isinstance(result.get("sources"), dict) else None
     flux_score = 0.0
@@ -541,27 +595,76 @@ def _v7_verdict(result, cfg):
             if "deepfake" in key_l:
                 df = _norm01(value)
                 if df is not None:
-                    verdict["deepfake"] = max(verdict["deepfake"] or 0.0, df)
+                    v["deepfake"] = max(v["deepfake"] or 0.0, df)
             if any(hint in key_l for hint in FLUX_FAMILY_HINTS):
                 score = _norm01(value)
                 if score is not None:
                     flux_score = max(flux_score, score)
-    if sources:
-        verdict["flux_family"] = flux_score
-    elif flux_score == 0.0 and not sources:
-        verdict["flux_family"] = None
+        v["flux_family"] = flux_score
+    else:
+        v["flux_family"] = None
 
-    if verdict["deepfake"] is not None and verdict["deepfake"] > cfg["deepfake_threshold"]:
-        verdict["reasons"].append("deepfake_over_threshold")
-    if verdict["flux_family"] is not None and verdict["flux_family"] > cfg["source_threshold"]:
-        verdict["reasons"].append("flux_family_over_threshold")
+    if v["deepfake"] is not None and v["deepfake"] > cfg["deepfake_threshold"]:
+        v["reasons"].append("deepfake_over_threshold")
+    if v["flux_family"] is not None and v["flux_family"] > cfg["source_threshold"]:
+        v["reasons"].append("flux_family_over_threshold")
+    return v
 
+
+def _v7_verdict(result, cfg):
+    """Ensemble-aware verdict.
+
+    V8.1: if the detector proxy returns a `graders` list (one normalized
+    payload per detector), the gate requires EVERY grader to clear and
+    reports the worst ai/flux/deepfake across the ensemble. You are scored by
+    the harshest grader, so the gate is too. Single-payload responses keep the
+    V7 behaviour exactly."""
+    verdict = {
+        "ai": None, "flux_family": None, "deepfake": None, "watermark": None,
+        "cleared": None, "reasons": [],
+    }
+    if not isinstance(result, dict) or result.get("infra_error") or result.get("ok") is False:
+        return verdict
+
+    graders = result.get("graders")
+    if isinstance(graders, list) and graders:
+        per = []
+        usable = 0
+        clear_all = True
+        for grader in graders:
+            if not isinstance(grader, dict):
+                continue
+            usable += 1
+            single = _single_verdict(grader, cfg)
+            per.append({
+                "grader": grader.get("name") or grader.get("provider") or f"grader_{usable}",
+                **single,
+            })
+            for key in ("ai", "flux_family", "deepfake"):
+                value = single[key]
+                if value is not None:
+                    verdict[key] = max(verdict[key] or 0.0, value)
+            if single["watermark"] is True:
+                verdict["watermark"] = True
+            verdict["reasons"].extend(single["reasons"])
+            if single["reasons"]:
+                clear_all = False
+        verdict["graders"] = per
+        if usable == 0:
+            return verdict
+        verdict["cleared"] = clear_all
+        return verdict
+
+    single = _single_verdict(result, cfg)
+    for key in ("ai", "flux_family", "deepfake", "watermark"):
+        verdict[key] = single[key]
+    verdict["reasons"] = single["reasons"]
     # Cleared only when every measured signal is under threshold and no
     # watermark is present. Missing measurements block a clear.
-    if ai is None or watermark is None:
+    if single["ai"] is None or single["watermark"] is None:
         verdict["cleared"] = None  # unusable verdict, never a pass
     else:
-        verdict["cleared"] = not verdict["reasons"]
+        verdict["cleared"] = not single["reasons"]
     return verdict
 
 

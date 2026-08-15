@@ -59,6 +59,7 @@ export type DsRemintV8Options = {
   engineMode: CxRemintEngineMode;
   qualityFloor: DsRemintV8QualityFloor;
   iphoneExif: boolean;
+  metadataMode?: "device" | "minimal";
   device: CxRemintDevice;
   resolutionMode: CxRemintResolutionMode;
   resolutionX: number;
@@ -119,7 +120,8 @@ export async function createDeepCleanJob(params: {
     | "max-cx-remint-v5"
     | "ds-remint-v6"
     | "ds-remint-v7"
-    | "ds-remint-v8";
+    | "ds-remint-v8"
+    | "ds-remint-v8.1";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;
@@ -182,6 +184,7 @@ export async function createDeepCleanJob(params: {
             engine_mode: params.dsRemintV8.engineMode,
             quality_floor: params.dsRemintV8.qualityFloor,
             iphone_exif: params.dsRemintV8.iphoneExif,
+            metadata_mode: params.dsRemintV8.metadataMode,
             device: params.dsRemintV8.device,
             resolution_mode: params.dsRemintV8.resolutionMode,
             x_resolution: params.dsRemintV8.resolutionX,
