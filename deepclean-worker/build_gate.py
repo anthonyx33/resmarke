@@ -188,13 +188,48 @@ def check_comfy_kitchen_version():
 
 
 def check_engine_imports():
-    """The v6 engine is pure numpy/PIL; ComfyUI is imported lazily in _run_regen."""
+    """The v6 + v7 engines are pure numpy/PIL; ComfyUI is imported lazily."""
     import ds_remint_v6
 
     for attr in ("apply_ds_remint_v6", "is_ds_remint_v6", "normalize_ds_remint_v6_settings"):
         if not hasattr(ds_remint_v6, attr):
             raise SystemExit(f"FAIL: ds_remint_v6 is missing {attr}")
     print("OK: ds_remint_v6 imports cleanly with its public entry points")
+
+    import ds_remint_v7
+
+    for attr in ("apply_ds_remint_v7", "is_ds_remint_v7", "normalize_ds_remint_v7_settings"):
+        if not hasattr(ds_remint_v7, attr):
+            raise SystemExit(f"FAIL: ds_remint_v7 is missing {attr}")
+    print("OK: ds_remint_v7 imports cleanly with its public entry points")
+
+
+def check_camera_relife_functional():
+    """Run the camera re-life stack on a tiny synthetic frame (CPU-safe).
+
+    Proves the numpy/PIL acquisition pipeline executes, not just imports."""
+    import numpy as np
+    from PIL import Image
+
+    from camera_relife import apply_camera_relife
+
+    height, width = 96, 128
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    frame = np.zeros((height, width, 3), dtype=np.float32)
+    frame[..., 0] = xx / width
+    frame[..., 1] = yy / height
+    frame[..., 2] = 0.5 + 0.5 * np.sin(xx / 7.0)
+    image = Image.fromarray(np.clip(frame * 255, 0, 255).astype(np.uint8))
+
+    relifed, report = apply_camera_relife(
+        image,
+        settings={"mode": "camera-relife", "camera_relife": {"preset": "balanced"}},
+        creator_id="build-gate",
+        seed_extra="build",
+    )
+    if not report.get("applied") or relifed.size != image.size:
+        raise SystemExit("FAIL: camera_relife did not produce a same-size output")
+    print("OK: camera_relife applied the full balanced stack on a synthetic frame")
 
 
 def main():
@@ -204,6 +239,7 @@ def main():
     check_c_toolchain()
     check_comfy_kitchen_version()
     check_engine_imports()
+    check_camera_relife_functional()
     print("OK: all CPU-safe build gates passed")
     return 0
 

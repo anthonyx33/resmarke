@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from content_repair import apply_content_repair_lab, is_content_repair_lab
 from deepclean_detector import make_detector
 from ds_remint_v6 import apply_ds_remint_v6, is_ds_remint_v6
+from ds_remint_v7 import apply_ds_remint_v7, is_ds_remint_v7
 from max_cx_remint import apply_cx_remint, is_cx_remint
 from max_optimised_remint import apply_max_optimised_remint, is_max_optimised_remint
 from max_remint import apply_max_remint, is_max_remint
@@ -208,6 +209,28 @@ def handler(job):
                 cleaned_sha = sha256_file(cleaned_path)
                 neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v6"}
                 content_repair_report = {"enabled": False, "reason": "integrated_into_ds_remint_v6"}
+            elif is_ds_remint_v7(expert_refinement):
+                # DS ReMint V7 is TERMINAL like V6: the unchanged Qwen
+                # pre-wash breaks SynthID, the non-generative camera re-life
+                # stack (Bayer CFA + pre-demosaic sensor noise + lens/color
+                # pipeline) replaces the wash's generative fingerprint with
+                # camera statistics, and the source-aware detector gate
+                # (ai_probability + flux-family + deepfake) picks the
+                # candidate on the DELIVERED bytes. The module writes the
+                # final camera-like JPEG with coherent iPhone EXIF straight
+                # to cleaned_path; finalize_output pass-throughs the bytes
+                # so the image is JPEG-encoded exactly ONCE.
+                engine_report = apply_ds_remint_v7(
+                    input_path=input_path,
+                    output_path=cleaned_path,
+                    creator_id=creator_id,
+                    settings=expert_refinement,
+                    seed_extra=f"{job_id}:{input_sha}",
+                    detector=make_detector(),
+                )
+                cleaned_sha = sha256_file(cleaned_path)
+                neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v7"}
+                content_repair_report = {"enabled": False, "reason": "integrated_into_ds_remint_v7"}
             else:
                 engine_report = run_deepclean(
                     input_path=input_path,
@@ -537,6 +560,7 @@ def final_naturalization_config(cfg, expert_refinement):
         or is_max_remint(expert_refinement)
         or is_cx_remint(expert_refinement)
         or is_ds_remint_v6(expert_refinement)
+        or is_ds_remint_v7(expert_refinement)
     ):
         # Max ReMint, CX Remint and DS ReMint V6 all do their own
         # acquisition-noise / camera re-acquisition in-module; a finalize
@@ -600,7 +624,7 @@ def finalize_output(
     # nothing (no seal, no naturalization to apply). Only when the bytes fit
     # the final-size cap, so behaviour stays identical to the old path.
     expert_mode = expert_refinement.get("mode") if isinstance(expert_refinement, dict) else None
-    passthrough_modes = {"max-cx-remint", "ds-remint-v6"}
+    passthrough_modes = {"max-cx-remint", "ds-remint-v6", "ds-remint-v7"}
     if (
         not bool(naturalization.get("enabled", True))
         and output_mode not in ("sealed", "sealed-stamped")

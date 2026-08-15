@@ -120,9 +120,11 @@ RUN python -m pip install --no-cache-dir -c /app/constraints.txt -r /app/require
 
 COPY bootstrap_models.py /app/bootstrap_models.py
 COPY comfyui_client.py /app/comfyui_client.py
+COPY camera_relife.py /app/camera_relife.py
 COPY content_repair.py /app/content_repair.py
 COPY deepclean_detector.py /app/deepclean_detector.py
 COPY ds_remint_v6.py /app/ds_remint_v6.py
+COPY ds_remint_v7.py /app/ds_remint_v7.py
 COPY iphone_exif.py /app/iphone_exif.py
 COPY max_cx_remint.py /app/max_cx_remint.py
 COPY max_optimised_remint.py /app/max_optimised_remint.py
