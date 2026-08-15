@@ -122,14 +122,27 @@ COPY workflows /app/workflows
 COPY tools /app/tools
 COPY custom_nodes/RemarkeeMax /app/ComfyUI/custom_nodes/RemarkeeMax
 COPY smoke_test.py /app/smoke_test.py
+COPY build_gate.py /app/build_gate.py
+COPY runtime_self_check.py /app/runtime_self_check.py
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
-# --- Fatal build-time gates ---
-RUN cd /app && PYTHONPATH=/app/ComfyUI python -c 'import importlib.metadata as metadata, json, torch, comfy_kitchen, comfy.utils, ds_remint_v6; assert torch.__version__.startswith("2.7.1"), torch.__version__; assert torch.version.cuda == "12.6", torch.version.cuda; backends = comfy_kitchen.list_backends(); print("torch:", torch.__version__); print("torch CUDA runtime:", torch.version.cuda); print("comfy-kitchen:", metadata.version("comfy-kitchen")); print("comfy-kitchen backends:", json.dumps(backends, sort_keys=True)); assert backends.get("eager", {}).get("available") is True, backends; print("OK: imports, versions, and eager backend")'
+# --- Fatal build-time gates (CPU-safe only) ---
+# CI runners have no GPU. comfy_kitchen eagerly imports its Triton backend and
+# Triton instantiates a GPU driver at import time, so it raises
+# `RuntimeError: 0 active drivers ([])` here. ComfyUI is in the same bucket —
+# comfy/ldm/modules/attention.py imports comfy_kitchen at module level — so
+# `main.py --quick-test-for-ci` and smoke_test.py cannot pass at build time
+# either, with or without --cpu.
+#
+# Those three checks moved to /app/runtime_self_check.py, which start.sh runs
+# on RunPod against a live GPU before the worker accepts any job. build_gate.py
+# covers what CPU genuinely can prove — including a direct test of the torch
+# infer_schema regression that caused the outage.
+# No PYTHONPATH=/app/ComfyUI here — deliberately. This gate must not be able to
+# reach into ComfyUI, because doing so pulls in comfy_kitchen and its GPU driver.
+RUN cd /app && python /app/build_gate.py
 RUN python /app/workflows/validate_api_workflow.py
-RUN cd /app/ComfyUI && python main.py --cpu --quick-test-for-ci
-RUN python /app/smoke_test.py
 RUN python -m pip check
 
 CMD ["/app/start.sh"]

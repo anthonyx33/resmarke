@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""CPU-safe build-time gates for the DeepClean worker image.
+
+These run inside `docker build` on a GPU-less CI runner, so nothing here may
+import `comfy_kitchen` — directly or transitively. comfy_kitchen eagerly
+imports its Triton backend, and Triton instantiates a GPU driver at import
+time, which raises `RuntimeError: 0 active drivers ([])` where no GPU exists.
+ComfyUI is in the same bucket: comfy/ldm/modules/attention.py imports
+comfy_kitchen at module level, so booting ComfyUI on a CI runner fails for the
+same reason. Those checks live in runtime_self_check.py, which start.sh runs
+against the live GPU before the worker accepts a job.
+
+What this gate still proves, without a GPU:
+
+  1. The base image really is torch 2.7.1 / CUDA 12.6.
+  2. torch's `infer_schema` accepts the exact annotation shapes that torch
+     2.5.1 rejected. This is the actual root cause of the outage, tested
+     directly rather than inferred from a successful comfy_kitchen import.
+  3. comfy-kitchen resolves to the pinned version (metadata read, no import).
+  4. The engine module — pure numpy/PIL — imports cleanly.
+"""
+
+import importlib.metadata as metadata
+import sys
+
+EXPECTED_TORCH = "2.7.1"
+EXPECTED_CUDA = "12.6"
+EXPECTED_COMFY_KITCHEN = "0.2.31"
+
+# The signature comfy_kitchen's na.py registers via @torch.library.custom_op.
+# torch 2.5.1's infer_schema rejects both `list[int]` and `float | None` here;
+# 2.7.1 accepts them. This exact string is the owner-verified expectation.
+EXPECTED_NA3D_SCHEMA = (
+    "(Tensor q, Tensor k, Tensor v, SymInt[] kernel_size, "
+    "bool[] is_causal, float? scale) -> Tensor"
+)
+
+
+def check_versions():
+    import torch
+
+    if not torch.__version__.startswith(EXPECTED_TORCH):
+        raise SystemExit(f"FAIL: torch is {torch.__version__}, expected {EXPECTED_TORCH}.x")
+    if torch.version.cuda != EXPECTED_CUDA:
+        raise SystemExit(f"FAIL: torch CUDA runtime is {torch.version.cuda}, expected {EXPECTED_CUDA}")
+
+    print(f"OK: torch {torch.__version__}, CUDA runtime {torch.version.cuda}")
+
+
+def check_custom_op_schema():
+    """Reproduce the na3d custom-op registration that broke under torch 2.5.1.
+
+    Registering the op is the real regression test: @torch.library.custom_op
+    calls infer_schema internally, which is precisely where 2.5.1 raised.
+    """
+    import torch
+
+    @torch.library.custom_op("deepclean_build_gate::na3d", mutates_args=())
+    def na3d(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        kernel_size: list[int],
+        is_causal: list[bool],
+        scale: float | None = None,
+    ) -> torch.Tensor:
+        return q
+
+    print("OK: @torch.library.custom_op accepted list[int] / list[bool] / float | None")
+
+    # Evidence: print the inferred schema and hold it to the owner-verified
+    # string. infer_schema is private, so a lookup failure is reported rather
+    # than treated as a gate failure — the registration above is the real test.
+    try:
+        from torch._library.infer_schema import infer_schema
+    except ImportError as exc:
+        print(f"WARN: could not import infer_schema for schema evidence ({exc})")
+        return
+
+    def na3d_proto(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        kernel_size: list[int],
+        is_causal: list[bool],
+        scale: float | None = None,
+    ) -> torch.Tensor:
+        return q
+
+    schema = infer_schema(na3d_proto, mutates_args=())
+    print(f"inferred na3d schema: {schema}")
+
+    # Compare on collapsed whitespace so a cosmetic spacing change cannot fail
+    # the build, while a genuinely different inferred type (e.g. `float`
+    # instead of `float?`, or `int[]` instead of `SymInt[]`) still does.
+    if " ".join(schema.split()) != " ".join(EXPECTED_NA3D_SCHEMA.split()):
+        raise SystemExit(
+            "FAIL: inferred na3d schema does not match the owner-verified signature.\n"
+            f"  expected: {EXPECTED_NA3D_SCHEMA}\n"
+            f"  actual:   {schema}"
+        )
+    print("OK: na3d schema matches the owner-verified signature")
+
+
+def check_comfy_kitchen_version():
+    """Read comfy-kitchen's version from installed metadata WITHOUT importing it."""
+    version = metadata.version("comfy-kitchen")
+    print(f"comfy-kitchen (metadata, not imported): {version}")
+    if version != EXPECTED_COMFY_KITCHEN:
+        raise SystemExit(
+            f"FAIL: comfy-kitchen is {version}, expected {EXPECTED_COMFY_KITCHEN}"
+        )
+    print(f"OK: comfy-kitchen pinned at {version}")
+
+
+def check_engine_imports():
+    """The v6 engine is pure numpy/PIL; ComfyUI is imported lazily in _run_regen."""
+    import ds_remint_v6
+
+    for attr in ("apply_ds_remint_v6", "is_ds_remint_v6", "normalize_ds_remint_v6_settings"):
+        if not hasattr(ds_remint_v6, attr):
+            raise SystemExit(f"FAIL: ds_remint_v6 is missing {attr}")
+    print("OK: ds_remint_v6 imports cleanly with its public entry points")
+
+
+def main():
+    print(f"--- build gate (CPU-safe) on python {sys.version.split()[0]} ---")
+    check_versions()
+    check_custom_op_schema()
+    check_comfy_kitchen_version()
+    check_engine_imports()
+    print("OK: all CPU-safe build gates passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

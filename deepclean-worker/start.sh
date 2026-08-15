@@ -40,5 +40,13 @@ if ! python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:
     exit 1
 fi
 
+# GPU-side gates that cannot run during `docker build` (CI has no CUDA driver):
+# comfy_kitchen's backend map and the live /object_info workflow surface. This
+# reuses the ComfyUI started above rather than booting a second instance, so a
+# broken image fails warmup instead of failing every job silently. `set -e`
+# makes a non-zero exit here fatal.
+echo "[deepclean:start] running runtime self-check"
+python /app/runtime_self_check.py
+
 echo "[deepclean:start] starting RunPod serverless handler"
 exec python -u /app/worker.py
