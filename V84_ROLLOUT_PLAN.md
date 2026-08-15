@@ -15,68 +15,82 @@
    things, and strong configs buy unreliable TruthScan movement by spending
    our best score.
 
+## 0.5 Consultant review (G8) — integrated
+
+External review of the vacuum prompt returned a coherent-camera-model
+redesign. Adopted (with owner decisions):
+
+- **Inverse ISP → camera space → forward ISP** with paired inverse/forward
+  CCM and WB (the biggest missing piece). WB drift reduced to ~0-1%.
+- **One combined resample** at target scale; micro-rotation removed from the
+  default path (the downscale IS the lattice breaker).
+- **Weak synthesis-residual cleanup BEFORE camera simulation** (edge-aware,
+  flat-region-only, 10-30% of residual energy) + **weak ISP denoise AFTER
+  demosaic**. Replace the residual; don't bury it under camera props.
+- **Optics before CFA**: per-channel RGB PSF (σ 0.25-0.5 px), restrained CA
+  (0.1-0.3 px corner displacement), 0.5-1.5% vignette — all BEFORE Bayer.
+- **MHC demosaic default**; bilinear only for a deliberate soft branch.
+- **Restorer policy**: Lanczos default. Neural branch = Real-ESRGAN as a
+  luma-restricted, edge-gated residual O = L + αG(SR − L), α ≈ 0.1-0.3.
+- **Degrade floors re-classified**: mild 0.80, deep 0.68, emergency 0.50.
+- **Selection criterion**: least destructive candidate that enters the
+  photographic reference envelope (Pareto), measured against a real-photo
+  calibration corpus (radial PSD, anisotropy, noise-vs-luminance, RGB
+  residual covariance, edge-spread, JPEG/DCT stats). Grader scores remain
+  acceptance/early-stop checks ONLY — never the objective.
+
+Rejected from the review: palette quantization, synthetic PRNU, engineered
+JPEG grids, visible FPN banding.
+
+Owner decision pending: generator-family blend as default candidate vs
+exceptional branch — resolved by experiment B1 below, not preference.
+
 ## 1. The V8.4 thesis
 
 > Stop searching for one config that beats every grader. None exists. Build a
 > small factory of the configs we KNOW win somewhere, and ship per image the
-> candidate with the lowest ensemble-max — with a downscale-normalized,
-> grain-averse "Natural" candidate as the new default.
+> LEAST DESTRUCTIVE candidate that enters the photographic reference
+> envelope — with grader scores as acceptance checks.
 
-## 2. Candidate factory (the pieces we already have)
+## 2. Candidate factory
 
-| Candidate | Recipe | Wins at | Cost |
-|---|---|---|---|
-| **C1 Natural (new default)** | Blend wash (Qwen⊕Z) → ghost_lite ladder → output capped ~1250px long edge → q92, smooth (no grain amplification, no FPN) | The "not grainy, HD+" tier. Downscale-normalization removes information density cheaply and softly — both graders lose signal without texture damage | base |
-| **C2 Light** | Qwen wash → V8.1 balanced chain (your 17.2% Sightengine score) | Source-attribution graders; watermark-critical jobs (Qwen = proven breaker) | base |
-| **C3 Deep Clean** | Degrade 0.62 → ghost at low res → **classical** restore (drop neural — its flux2 re-stamp never paid) → ghost_lite | TruthScan's best observed movement (80% Medium) at the least attribution cost | base |
-| **C4 Deep Clean + Blend** | C3 with Qwen⊕Z wash | The V8.3 blend cut Hive flux 26.2 → 16.7 | +2 GPU passes |
+| Candidate | Recipe | Role |
+|---|---|---|
+| **C1 Coherent (new default)** | Target-scale single resample → weak residual cleanup → inverse tone/CCM/WB → RGB PSF + CA + vignette → Bayer + shot/read noise → WB → MHC → weak ISP denoise → forward CCM → tone/sRGB → restrained luma sharpen → one JPEG | The G8 pipeline. Expected to replace the current camera_relife stack for minimal-destruction jobs |
+| **C2 Light** | Current V8.1 balanced (your 17.2% Sightengine score) | Control + watermark-critical jobs |
+| **C3 Deep Clean** | Coherent model at degrade 0.68 → classical restore → light re-pass | Deep-clean branch (0.50 only as emergency) |
+| **C4 Blend** | C1 with Qwen⊕Z wash blend | Empirical question B1 |
 
-Every candidate ends with: tone lock → ONE JPEG encode (probe bytes == delivery
-bytes) → final-byte QC → verdict recorded with ai/flux-family/deepfake.
+Every candidate ends with: one JPEG encode (probe bytes == delivery bytes) →
+final-byte QC → verdict recorded.
 
-## 3. Selector
+## 3. Selection
 
-- **Manual mode (today):** run candidates locally via `tools/v82_bench.py`,
-  paste TruthScan/Hive/Sightengine numbers, ship the min-max per image.
-- **Auto mode (when available):** detector proxy returns `graders` list; the
-  worker runs candidates in order C1 → C2 → C3 → C4, probes each on the
-  delivered bytes, ships the first whose ensemble-max clears, else the min-max.
-- **Report:** every candidate's scores + the shipped one, so support can
-  always explain a verdict.
+- **Envelope entry (primary):** least-destructive candidate whose calibration
+  features fall inside the real-photo reference band (Pareto over fidelity).
+- **Acceptance (secondary):** manual TruthScan/Hive/Sightengine scores as
+  early-stop + acceptance; `v82_bench.py` records them.
+- **Auto mode (when available):** proxy `graders` list.
 
 ## 4. Downscale-normalization (the user-accepted lever)
 
-You are willing to deliver 1440/1250px and mild blur, but never grain.
-Concretely, C1 enforces:
+- `output_target` default 1250, never upscale; single resample to it.
+- No grain amplification; injected noise only to the measured deficit
+  (display-domain residual RMS ~0.4-0.9/255 midtones).
+- q92 4:2:0 for photography, 4:4:4 for text/detail images.
 
-- `output_target` default 1250 (never upscale).
-- Ghost_lite minus FPN minus hot pixels: keep Malvar + noise-floor matching,
-  cap injected noise to the measured deficit only (never amplify).
-- Luma-unsharp light (14%) for crispness without halos.
-- q92, 4:2:2.
+## 5. The experiments that decide V8.4 (G8's six-output matrix)
 
-This is the config built for "HD+, smooth, natural" — and it is also, per
-your data, the right detector posture: less texture crime, less information
-density, no restorer re-stamp.
+A Reference (target resize + JPEG only) · B existing pipeline · C coherent
+model · D = C + pre-camera residual cleanup · E = D + LR processing +
+fidelity restore · F = D + ESRGAN residual α 0.2 · plus B1 = D with
+Qwen⊕Z blend wash.
 
-## 5. What we stop doing in V8.4
-
-- Neural restore as default (flux2 re-stamp never paid for itself).
-- Chasing TruthScan with stronger processing (no config moved it reliably
-  below 80 — spend stops there until we know what it keys on).
-- Single-config shipping.
+Run on your 5 graded images + ~15 natural reference photos. Record SSIM,
+MS-SSIM, low-freq color error, spectral distance to the calibration band,
+and both manual grader scores. The winner sets C1 and the default.
 
 ## 6. Honest positioning
 
-The selector's min-max is the product. "Shipped configuration beat X on the
-harshest grader we can reach" is true, verifiable, and per-image. "Passes
-every detector" remains not promised.
-
-## 7. Build order
-
-1. C1 candidate in the worker (`ds-remint-v8.4`: blend wash, ghost_lite
-   ladder, output cap 1250, smooth profile) + UI card.
-2. Selector in the worker: candidates list + min-max shipping (manual-scores
-   mode via bench tool first, auto mode behind the proxy contract).
-3. Corpus run: the five images you already have numbers for, all four
-   candidates, both graders — that table picks the default.
+"Shipped configuration beat X on the harshest grader we can reach" stays the
+product claim. "Passes every detector" remains not promised.
