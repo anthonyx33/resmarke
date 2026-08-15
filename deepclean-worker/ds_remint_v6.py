@@ -298,6 +298,11 @@ def apply_ds_remint_v6(input_path, output_path, creator_id, settings=None, seed_
                                        "detector_ok": detector_ok, "floor_ok": floor_ok})
         if not adaptive:
             break
+        if detector_ok is None:
+            # No usable detector verdict (infra error): never blind-escalate
+            # destruction. Ship the best candidate so far; the report note
+            # records that the detector was unavailable.
+            break
         if detector_ok and floor_ok:
             break  # minimum destruction that clears -> max quality
 
@@ -414,12 +419,18 @@ def apply_ds_remint_v6(input_path, output_path, creator_id, settings=None, seed_
         "beats_competitor_free_768": max(final_image.size) > 768,
     }
     if adaptive:
+        if chosen["detector_ok"] is None:
+            note = "detector_unavailable_shipped_best_effort"
+        elif chosen["detector_ok"]:
+            note = None
+        else:
+            note = "could_not_fully_clear_within_quality_floor_shipped_best_effort"
         report["detector_gate"] = {
             "evaluated": True,
-            "cleared": bool(chosen["detector_ok"]),
+            "cleared": chosen["detector_ok"] is True,
             "ai_threshold": cfg["ai_threshold"],
             "rungs_tried": len(report["attempts"]),
-            "note": None if chosen["detector_ok"] else "could_not_fully_clear_within_quality_floor_shipped_best_effort",
+            "note": note,
         }
 
     report["applied"] = True
@@ -633,18 +644,29 @@ def _encode_probe(image, path):
 def _safe_detect(detector, path):
     try:
         result = detector(path)
-        return result if isinstance(result, dict) else {"ok": False, "reason": "detector_returned_non_dict"}
+        if isinstance(result, dict):
+            return dict(result)
+        return {"ok": False, "reason": "detector_returned_non_dict", "infra_error": True}
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "reason": f"detector_error: {str(exc)[:200]}"}
+        return {"ok": False, "reason": f"detector_error: {str(exc)[:200]}", "infra_error": True}
 
 
 def _detector_pass(result, cfg):
-    if not isinstance(result, dict) or result.get("ok") is False:
-        return False
+    """Tri-state gate: True = cleared, False = genuine AI verdict fail,
+    None = no usable verdict (detector infra error / missing ai_probability).
+
+    None must never be treated as a genuine fail: escalating destruction
+    against a broken detector only burns the job's time budget.
+    """
+    if not isinstance(result, dict) or result.get("infra_error") or result.get("ok") is False:
+        return None
     ai = result.get("ai_probability")
     if ai is None:
-        return False
-    ai = float(ai)
+        return None
+    try:
+        ai = float(ai)
+    except (TypeError, ValueError):
+        return None
     if ai > 1.0:  # normalize 0-100 -> 0-1
         ai = ai / 100.0
     if result.get("watermark_present") is True:

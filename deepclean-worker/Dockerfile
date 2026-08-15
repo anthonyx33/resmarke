@@ -73,9 +73,12 @@ RUN set -eux; \
     fetch_repo https://github.com/ClownsharkBatwing/RES4LYF.git RES4LYF 26036f647ca15d3048a193daf99a40cecfc3820d
 
 # Impact-Pack otherwise installs SAM2 from a moving default branch.
+# The run-#39 snapshot's requirements.txt contains the line WITHOUT a trailing
+# `.git` (`git+https://github.com/facebookresearch/sam2`), so the sed pattern
+# must match the line by shape, not by an exact `.git` suffix.
 RUN set -eux; \
     sed -i \
-        's|git+https://github.com/facebookresearch/sam2.git|git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4|' \
+        's|^git+https://github.com/facebookresearch/sam2.*|git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4|' \
         /app/ComfyUI/custom_nodes/ComfyUI-Impact-Pack/requirements.txt; \
     grep -Fx \
         'git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4' \

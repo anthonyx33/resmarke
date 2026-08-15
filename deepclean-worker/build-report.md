@@ -6,7 +6,7 @@ Production fails before DS ReMint V6 because torch 2.5.1 cannot import the Comfy
 The candidate preserves run #39's worker/source snapshot while changing the base stack to torch 2.7.1 / CUDA 12.6 and constraining the torch triplet.
 ComfyUI, nine external node packs, and SAM2 now use immutable source commits; dependency-install failures are fatal.
 CI now publishes only the immutable git-SHA tag, and fatal build gates cover imports, versions, workflow shape, registered classes, `res_2s`, and `pip check`.
-Local static checks passed; Docker and GPU validation are pending the owner-triggered GitHub Actions build and release gates.
+Local static checks passed. The first CI attempt (GitHub Actions run #40, run id 31858918336) failed early at the SAM2 rewrite step — before any smoke gate or image push. That line is fixed in the current Dockerfile and the build is pending a rerun. No candidate image exists in the registry yet.
 
 ## 2. Files changed
 
@@ -49,19 +49,29 @@ No CI path, trigger, permission, runner, login, build context, or push behavior 
 | RES4LYF | `26036f647ca15d3048a193daf99a40cecfc3820d` |
 | SAM2 | `2b90b9f5ceec907a1c18123530e92e794ad901a4` |
 
-Exact SAM2 rewrite:
+Exact SAM2 rewrite (current, post-fix):
 
 ```dockerfile
 sed -i \
-    's|git+https://github.com/facebookresearch/sam2.git|git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4|' \
+    's|^git+https://github.com/facebookresearch/sam2.*|git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4|' \
     /app/ComfyUI/custom_nodes/ComfyUI-Impact-Pack/requirements.txt
 ```
 
-The Dockerfile immediately checks the rewritten requirement with `grep -Fx`, so a future source-layout mismatch fails the image build.
+The pinned Impact-Pack snapshot's requirements.txt contains the line
+`git+https://github.com/facebookresearch/sam2` WITHOUT a trailing `.git`.
+Run #40 used a pattern that assumed the `.git` suffix, matched nothing, and the
+following `grep -Fx` self-check exited 1 — failing the build before any pip
+install or gate ran. The current shape-anchored pattern matches the line
+regardless of suffix, and the same `grep -Fx` self-check remains as the guard.
 
 ## 4. Smoke-test plan and evidence
 
 Docker, Podman, actionlint, and hadolint are unavailable on this machine. No container build was claimed or simulated. GitHub Actions must execute the actual Dockerfile and capture the complete build log.
+
+Build history:
+
+- Run #40 (run id 31858918336, commit 88a663d): FAILED at Dockerfile step 8 of 34 — the SAM2 sed/grep rewrite — before any node-pack pip install, COPY layer, smoke gate, or image export. No image was published; no tag exists in the registry for this commit. The fix is in the current Dockerfile.
+- Next run (pending owner push): must reach and pass all seven gates below before a candidate digest is considered.
 
 | Gate | Command or behavior | Required evidence | Current status |
 |---|---|---|---|
@@ -99,7 +109,7 @@ OK rgthree-comfy 6b76ee6f2c5a007710b5a16f97c94330d6ecc871
 OK controlnet_aux e8b689a513c3e6b63edc44066560ca5919c0576e
 OK KJNodes 203eb357743402b437db8ae973a062a9b15387d2
 OK Inpaint-CropAndStitch 2dfaf6c9689f16315a428ce3df06983b22a163c0
-OK masquerade 432cb4d146a391b387a0cd25ace824328b5b61cf
+The full run-#40 log exists at the GitHub Actions URL (run id 31858918336); it ends at the sed/grep failure. Attach the next (green) run's unabridged
 OK RES4LYF 26036f647ca15d3048a193daf99a40cecfc3820d
 OK SAM2 2b90b9f5ceec907a1c18123530e92e794ad901a4
 ```
