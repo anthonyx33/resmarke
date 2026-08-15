@@ -773,6 +773,8 @@ DEFAULT_SETTINGS_V82 = {
     "enabled": True,
     "engine_mode": "adaptive",
     "quality_floor": "balanced",
+    "wash_model": "qwen",          # "qwen" (proven) | "zimage" | "qwen+zimage" blend
+    "zimage_denoise": 0.12,
     "pre_regen": True,
     "regen_level": 8,
     "regen_process_cap": 1536,
@@ -802,11 +804,38 @@ def is_ds_remint_v8_2(settings):
     return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.2"
 
 
+def is_ds_remint_v8_3(settings):
+    return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.3"
+
+
+def apply_ds_remint_v8_3(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None):
+    """DS ReMint V8.3: the V8.2 degrade->restore->re-life pipeline with the
+    wash-family unlock (qwen | zimage | qwen+zimage)."""
+    return apply_ds_remint_v8_2(
+        input_path=input_path,
+        output_path=output_path,
+        creator_id=creator_id,
+        settings=settings,
+        seed_extra=seed_extra,
+        detector=detector,
+    )
+
+
 def normalize_ds_remint_v8_2_settings(settings):
     raw = settings if isinstance(settings, dict) else {}
-    sub = raw.get("ds_remint_v8_2") if isinstance(raw.get("ds_remint_v8_2"), dict) else {}
+    sub = {}
+    for key in ("ds_remint_v8_2", "ds_remint_v8_3"):
+        if isinstance(raw.get(key), dict):
+            sub = raw[key]
     cfg = dict(DEFAULT_SETTINGS_V82)
-    cfg["enabled"] = raw.get("mode") == "ds-remint-v8.2"
+    cfg["mode"] = str(raw.get("mode") or "ds-remint-v8.2")
+    cfg["enabled"] = cfg["mode"] in ("ds-remint-v8.2", "ds-remint-v8.3")
+
+    wash_model = str(sub.get("wash_model", ""))
+    if not wash_model:
+        wash_model = "qwen+zimage" if cfg["mode"] == "ds-remint-v8.3" else "qwen"
+    cfg["wash_model"] = wash_model if wash_model in ("qwen", "zimage", "qwen+zimage") else "qwen"
+    cfg["zimage_denoise"] = float(_clamp(sub.get("zimage_denoise", cfg["zimage_denoise"]), 0.05, 0.3))
 
     engine_mode = str(sub.get("engine_mode", cfg["engine_mode"]))
     cfg["engine_mode"] = engine_mode if engine_mode in ("template", "adaptive") else "adaptive"
@@ -876,6 +905,7 @@ def apply_ds_remint_v8_2(input_path, output_path, creator_id, settings=None, see
         "settings": {
             "engine_mode": cfg["engine_mode"], "quality_floor": cfg["quality_floor"],
             "degrade_scale": cfg["degrade_scale"], "restore_engine": cfg["restore_engine"],
+            "wash_model": cfg["wash_model"], "zimage_denoise": cfg["zimage_denoise"],
             "restore_alpha": cfg["restore_alpha"], "launder_preset": cfg["launder_preset"],
             "final_relife_preset": cfg["final_relife_preset"], "min_ssim": cfg["min_ssim"],
             "ai_threshold": cfg["ai_threshold"], "source_threshold": cfg["source_threshold"],
@@ -911,12 +941,12 @@ def apply_ds_remint_v8_2(input_path, output_path, creator_id, settings=None, see
         except OSError:
             pass
 
-    # --- layer 0: the wash (unchanged SynthID carrier breaker) ---------------
+    # --- layer 0: the wash (SynthID carrier breaker; family per wash_model) --
     base = original
     if cfg["pre_regen"]:
         regen_path = Path(output_path).with_name(".v82-regen.png")
         try:
-            report["layers"]["pre_wash"] = _run_regen(
+            report["layers"]["pre_wash"] = _run_wash_v8(
                 input_path, str(regen_path), cfg, _seed(creator_id, seed_extra, original.size, 900)
             )
             base = Image.open(regen_path).convert("RGB")
@@ -1117,6 +1147,68 @@ def _v82_candidate(base, original, cfg, creator_id, seed_extra, rung_index, outp
     )
     layers["final_relife"] = {"preset": cfg["final_relife_preset"], "relife_report": final_relife}
     return final.convert("RGB"), layers
+
+
+def _run_wash_v8(input_path, output_path, cfg, seed):
+    """Dispatch the pre-wash by generator family.
+
+    - qwen: the proven SynthID carrier breaker (unchanged).
+    - zimage: the low-attribution family (graders read it at ~4-6% vs 12-72%).
+    - qwen+zimage: run both and blend 50/50 -- splits the source attribution
+      vote between two families while every pixel is still reconstructed.
+    """
+    wash_model = cfg.get("wash_model", "qwen")
+    if wash_model == "zimage":
+        from zimage_wash import run_zimage_wash
+
+        report = run_zimage_wash(
+            input_path,
+            output_path,
+            denoise=cfg["zimage_denoise"],
+            seed=seed,
+            process_cap=cfg["regen_process_cap"],
+            timeout=cfg["regen_timeout"],
+        )
+        report["purpose"] = "break_synthid_carrier_low_attribution_family"
+        report["wash_model"] = wash_model
+        return report
+    if wash_model == "qwen+zimage":
+        from zimage_wash import run_zimage_wash
+
+        qwen_path = Path(output_path).with_name(".v83-qwen.png")
+        z_path = Path(output_path).with_name(".v83-z.png")
+        try:
+            qwen_report = _run_regen(input_path, str(qwen_path), cfg, seed)
+            z_report = run_zimage_wash(
+                input_path,
+                str(z_path),
+                denoise=cfg["zimage_denoise"],
+                seed=seed,
+                process_cap=cfg["regen_process_cap"],
+                timeout=cfg["regen_timeout"],
+            )
+            a = Image.open(qwen_path).convert("RGB")
+            b = Image.open(z_path).convert("RGB")
+            if a.size != b.size:
+                b = b.resize(a.size, Image.Resampling.LANCZOS)
+            Image.blend(a, b, 0.5).convert("RGB").save(output_path, format="PNG")
+        finally:
+            for path in (qwen_path, z_path):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+        return {
+            "applied": True,
+            "method": "qwen+zimage_blend_0.5",
+            "wash_model": wash_model,
+            "qwen": qwen_report,
+            "zimage": z_report,
+            "purpose": "split_source_attribution_between_generator_families",
+        }
+    report = _run_regen(input_path, output_path, cfg, seed)
+    report["wash_model"] = wash_model
+    return report
 
 
 def _neural_restore(laundered, target_size, cfg, output_path):

@@ -115,7 +115,8 @@ type MintDeepCleanProfile =
   | "ds-remint-v7"
   | "ds-remint-v8"
   | "ds-remint-v8.1"
-  | "ds-remint-v8.2";
+  | "ds-remint-v8.2"
+  | "ds-remint-v8.3";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
@@ -360,6 +361,17 @@ export default function MintApp() {
     useState<"device" | "minimal">("device");
   const [dsV82RestoreEngine, setDsV82RestoreEngine] =
     useState<"neural" | "classical">("neural");
+  // DS ReMint V8.3 controls (wash-family lab + restore engine).
+  const [dsV83EngineMode, setDsV83EngineMode] = useState<CxRemintEngineMode>("adaptive");
+  const [dsV83QualityFloor, setDsV83QualityFloor] =
+    useState<"studio" | "balanced" | "strong">("balanced");
+  const [dsV83WashModel, setDsV83WashModel] =
+    useState<"qwen" | "zimage" | "qwen+zimage">("qwen+zimage");
+  const [dsV83RestoreEngine, setDsV83RestoreEngine] =
+    useState<"neural" | "classical">("neural");
+  const [dsV83IphoneExif, setDsV83IphoneExif] = useState(true);
+  const [dsV83MetadataMode, setDsV83MetadataMode] =
+    useState<"device" | "minimal">("device");
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -414,7 +426,9 @@ export default function MintApp() {
       // DS ReMint V8.1: quality-first floors through ghost_lite + metadata mode.
       "ds-remint-v8.1": 13,
       // DS ReMint V8.2 Max: degrade + neural restore costs an extra GPU pass.
-      "ds-remint-v8.2": 14
+      "ds-remint-v8.2": 14,
+      // DS ReMint V8.3: wash-family lab (mix = two GPU wash passes).
+      "ds-remint-v8.3": 15
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -436,6 +450,8 @@ export default function MintApp() {
     if (deepCleanProfile === "ds-remint-v8.1" && dsV8EngineMode === "adaptive") cost += 2;
     // Adaptive DS ReMint V8.2 probes each degrade floor against the live detector.
     if (deepCleanProfile === "ds-remint-v8.2" && dsV82EngineMode === "adaptive") cost += 2;
+    // Adaptive DS ReMint V8.3 probes each floor against the live detector.
+    if (deepCleanProfile === "ds-remint-v8.3" && dsV83EngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
   }, [
@@ -447,7 +463,8 @@ export default function MintApp() {
     dsV6EngineMode,
     dsV7EngineMode,
     dsV8EngineMode,
-    dsV82EngineMode
+    dsV82EngineMode,
+    dsV83EngineMode
   ]);
 
   // CX Remint quality-floor slider: map the selected preset to its slider index
@@ -466,6 +483,8 @@ export default function MintApp() {
   const dsV8Active = deepCleanProfile === "ds-remint-v8.1";
   // DS ReMint V8.2 derived state: active toggle.
   const dsV82Active = deepCleanProfile === "ds-remint-v8.2";
+  // DS ReMint V8.3 derived state: active toggle.
+  const dsV83Active = deepCleanProfile === "ds-remint-v8.3";
   const dsV6QualityFloorIndex = Math.max(
     0,
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
@@ -960,11 +979,15 @@ export default function MintApp() {
                 }
               : undefined,
           outputNameStyle:
-            deepCleanProfile === "ds-remint-v8.1" || deepCleanProfile === "ds-remint-v8.2"
+            deepCleanProfile === "ds-remint-v8.1" ||
+            deepCleanProfile === "ds-remint-v8.2" ||
+            deepCleanProfile === "ds-remint-v8.3"
               ? dsV8OutputNameStyle
               : undefined,
           outputNameCustom:
-            deepCleanProfile === "ds-remint-v8.1" || deepCleanProfile === "ds-remint-v8.2"
+            deepCleanProfile === "ds-remint-v8.1" ||
+            deepCleanProfile === "ds-remint-v8.2" ||
+            deepCleanProfile === "ds-remint-v8.3"
               ? dsV8OutputNameCustom
               : undefined,
           dsRemintV82:
@@ -975,6 +998,17 @@ export default function MintApp() {
                   iphoneExif: dsV82IphoneExif,
                   metadataMode: dsV82MetadataMode,
                   restoreEngine: dsV82RestoreEngine
+                }
+              : undefined,
+          dsRemintV83:
+            deepCleanProfile === "ds-remint-v8.3"
+              ? {
+                  engineMode: dsV83EngineMode,
+                  qualityFloor: dsV83QualityFloor,
+                  washModel: dsV83WashModel,
+                  restoreEngine: dsV83RestoreEngine,
+                  iphoneExif: dsV83IphoneExif,
+                  metadataMode: dsV83MetadataMode
                 }
               : undefined
         });
@@ -1216,6 +1250,16 @@ export default function MintApp() {
     if (profile === "ds-remint-v8.2") {
       // DS ReMint V8.2 Max is terminal: degrade -> low-res ghost launder ->
       // neural restore -> ghost_lite re-life -> single encode.
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
+      return;
+    }
+    if (profile === "ds-remint-v8.3") {
+      // DS ReMint V8.3 is terminal like V8.2 with the wash-family lab
+      // (qwen | zimage | qwen+zimage) and both restore engines.
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -2845,7 +2889,231 @@ export default function MintApp() {
                     </div>
                   ) : null}
 
-                  {!dsV6Active && !dsV7Active && !dsV8Active && !dsV82Active ? (
+                  <label className={`rm-v6-toggle${dsV83Active ? " is-active" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={dsV83Active}
+                      disabled={batchRunning}
+                      onChange={(event) =>
+                        chooseDeepCleanProfile(
+                          event.target.checked ? "ds-remint-v8.3" : "max-cx-remint-v5"
+                        )
+                      }
+                    />
+                    <span className="rm-switch-track" aria-hidden="true">
+                      <span className="rm-switch-thumb" />
+                    </span>
+                    <span className="rm-v6-toggle-text">
+                      <strong>DS ReMint V8.3 · Wash Lab</strong>
+                      <small>Wash family · restore engine · degrade floors</small>
+                    </span>
+                    <span className="rm-badge">{dsV83Active ? "Enabled" : "Off"}</span>
+                  </label>
+
+                  {dsV83Active ? (
+                    <div className="rm-v6-panel">
+                      <div className="rm-v6-banner">
+                        <Sparkles size={15} aria-hidden="true" />
+                        <span>
+                          The wash-family unlock: graders read Z-Image at ~4-6% where they
+                          read Qwen at 12-72%. V8.3 lets you wash with Qwen, Z-Image, or a
+                          50/50 blend of both, then runs the full degrade → restore → re-life
+                          chain. SynthID removal must be re-verified per wash choice.
+                        </span>
+                      </div>
+
+                      <div className="rm-v6-stats" aria-label="Pipeline indicators">
+                        <span className="rm-stat">
+                          <em>Wash</em>
+                          <b>{dsV83WashModel === "qwen+zimage" ? "Qwen ⊕ Z-Image" : dsV83WashModel}</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Degrade</em>
+                          <b>
+                            {dsV83QualityFloor === "strong"
+                              ? "~50% scale"
+                              : dsV83QualityFloor === "studio"
+                              ? "~78% scale"
+                              : "~62% scale"}
+                          </b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Restore</em>
+                          <b>{dsV83RestoreEngine === "neural" ? "Real-ESRGAN" : "Classical (0 stamp)"}</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Engine</em>
+                          <b>{dsV83EngineMode === "adaptive" ? "≤3 gated floors" : "1 pass"}</b>
+                        </span>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Wash model</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.3 wash model">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83WashModel === "qwen"}
+                            className={dsV83WashModel === "qwen" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83WashModel("qwen")}
+                          >
+                            Qwen (proven)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83WashModel === "zimage"}
+                            className={dsV83WashModel === "zimage" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83WashModel("zimage")}
+                          >
+                            Z-Image (~4-6%)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83WashModel === "qwen+zimage"}
+                            className={dsV83WashModel === "qwen+zimage" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83WashModel("qwen+zimage")}
+                          >
+                            Qwen ⊕ Z-Image
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV83WashModel === "qwen"
+                            ? "The proven SynthID breaker — also the strongest flux attribution source (12-72%)."
+                            : dsV83WashModel === "zimage"
+                            ? "The low-attribution family: full-frame Z-Image img2img at low denoise. Verify SynthID removal before trusting it as the default."
+                            : "Both washes blended 50/50 — splits the source-attribution vote between families while every pixel is still reconstructed. Recommended first test."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Restore engine</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.3 restore engine">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83RestoreEngine === "neural"}
+                            className={dsV83RestoreEngine === "neural" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83RestoreEngine("neural")}
+                          >
+                            Neural (Real-ESRGAN)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83RestoreEngine === "classical"}
+                            className={dsV83RestoreEngine === "classical" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83RestoreEngine("classical")}
+                          >
+                            Classical (no re-stamp)
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV83RestoreEngine === "neural"
+                            ? "Real-ESRGAN rebuilds detail but stamps its own GAN fingerprint — final re-life strips most of it."
+                            : "Lanczos + dehalo + luma sharpening: zero new fingerprint, slightly softer detail."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Quality floor</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.3 quality floor">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83QualityFloor === "studio"}
+                            className={dsV83QualityFloor === "studio" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83QualityFloor("studio")}
+                          >
+                            Studio
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83QualityFloor === "balanced"}
+                            className={dsV83QualityFloor === "balanced" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83QualityFloor("balanced")}
+                          >
+                            Balanced
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83QualityFloor === "strong"}
+                            className={dsV83QualityFloor === "strong" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83QualityFloor("strong")}
+                          >
+                            Strong
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Engine</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.3 engine">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83EngineMode === "adaptive"}
+                            className={dsV83EngineMode === "adaptive" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83EngineMode("adaptive")}
+                          >
+                            Adaptive (detector-gated)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV83EngineMode === "template"}
+                            className={dsV83EngineMode === "template" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV83EngineMode("template")}
+                          >
+                            Optimised template
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Metadata</span>
+                        <select
+                          className="rm-select"
+                          value={dsV83MetadataMode}
+                          disabled={batchRunning}
+                          onChange={(event) =>
+                            setDsV83MetadataMode(event.target.value as "device" | "minimal")
+                          }
+                        >
+                          <option value="device">Device EXIF (coherent)</option>
+                          <option value="minimal">Minimal (no EXIF)</option>
+                        </select>
+                      </div>
+
+                      <label className="rm-switch">
+                        <input
+                          type="checkbox"
+                          checked={dsV83IphoneExif}
+                          disabled={batchRunning}
+                          onChange={(event) => setDsV83IphoneExif(event.target.checked)}
+                        />
+                        <span className="rm-switch-track" aria-hidden="true">
+                          <span className="rm-switch-thumb" />
+                        </span>
+                        <span>Coherent device EXIF</span>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {!dsV6Active && !dsV7Active && !dsV8Active && !dsV82Active && !dsV83Active ? (
                   <div className="rm-field-grid">
                     <label className="rm-field">
                       <span className="rm-field-label">Profile</span>
@@ -2872,6 +3140,7 @@ export default function MintApp() {
                         <option value="ds-remint-v8">DS ReMint V8</option>
                         <option value="ds-remint-v8.1">DS ReMint V8.1 (new)</option>
                         <option value="ds-remint-v8.2">DS ReMint V8.2 Max (new)</option>
+                        <option value="ds-remint-v8.3">DS ReMint V8.3 Wash Lab (new)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -3201,7 +3470,8 @@ export default function MintApp() {
                   !dsV6Active &&
                   !dsV7Active &&
                   !dsV8Active &&
-                  !dsV82Active ? (
+                  !dsV82Active &&
+                  !dsV83Active ? (
                     <details className="rm-disc">
                       <summary>
                         <SlidersHorizontal size={15} aria-hidden="true" /> Expert refinement
