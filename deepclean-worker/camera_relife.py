@@ -83,6 +83,31 @@ PRESETS = {
         "sharpen_percent": 16,
         "bayer_mix": 1.0,
     },
+    # V8 "ghost": full camera re-acquisition realism. Malvar-He-Cutler
+    # demosaic (directional zipper structure, not boxy bilinear 2x2), fixed-
+    # pattern noise (column/row banding), hot pixels, and noise-floor matching
+    # (measure the wash's noise floor and inject only the deficit to a
+    # camera-plausible target). Built for graders that run CFA + noise-mapping
+    # checks (e.g. TruthScan) in addition to source attribution.
+    "ghost": {
+        "rotation_deg": 0.22,
+        "blur_luma": 0.20,
+        "blur_chroma_mult": 1.30,
+        "shot_noise": 0.0009,
+        "read_noise": 0.0015,
+        "wb_drift": 0.025,
+        "tone": 0.06,
+        "ca_amount": 0.18,
+        "vignette": 0.08,
+        "sharpen_percent": 13,
+        "bayer_mix": 1.0,
+        "malvar_demosaic": True,
+        "fpn_column_sigma": 0.0003,
+        "fpn_row_sigma": 0.0002,
+        "hot_pixel_frac": 0.000002,
+        "noise_match": True,
+        "noise_target_sigma": 0.0016,
+    },
 }
 
 DEFAULT_SETTINGS = {
@@ -105,9 +130,11 @@ def normalize_camera_relife_settings(settings):
     cfg["enabled"] = raw.get("mode") == "camera-relife" if raw else True
     if "enabled" in sub:
         cfg["enabled"] = bool(sub["enabled"])
-    for key in PRESETS[preset]:
+    bool_keys = {"malvar_demosaic", "noise_match"}
+    all_keys = {key for preset_name in PRESETS for key in PRESETS[preset_name]}
+    for key in all_keys:
         if key in sub:
-            cfg[key] = _clamp(sub[key], 0.0, 2.0)
+            cfg[key] = bool(sub[key]) if key in bool_keys else _clamp(sub[key], 0.0, 2.0)
     cfg["preset"] = preset
     return cfg
 
@@ -164,14 +191,33 @@ def apply_camera_relife(image, settings=None, creator_id="camera-relife", seed_e
 
     # --- 3. sensor domain: Bayer + pre-demosaic noise + demosaic --------------
     linear = srgb_to_linear(np.asarray(work).astype(np.float32) / 255.0)
-    linear = _bayer_roundtrip(linear, rng, cfg["shot_noise"], cfg["read_noise"], cfg["bayer_mix"])
+    match_read = 0.0
+    if cfg.get("noise_match"):
+        match_read = _noise_deficit(linear, cfg["noise_target_sigma"])
+    linear = _bayer_roundtrip(
+        linear,
+        rng,
+        cfg["shot_noise"],
+        cfg["read_noise"],
+        cfg["bayer_mix"],
+        malvar=bool(cfg.get("malvar_demosaic")),
+        fpn_col=cfg.get("fpn_column_sigma", 0.0),
+        fpn_row=cfg.get("fpn_row_sigma", 0.0),
+        hot_frac=cfg.get("hot_pixel_frac", 0.0),
+        match_read=match_read,
+    )
     report["layers"]["bayer_cfa"] = {
-        "method": "bayer_rggb_mosaic + pre_demosaic_shot_read_noise + bilinear_demosaic",
+        "method": "bayer_rggb_mosaic + pre_demosaic_shot_read_noise + demosaic",
         "pattern": "RGGB",
         "shot_noise": cfg["shot_noise"],
         "read_noise": cfg["read_noise"],
         "mix": cfg["bayer_mix"],
         "noise_before_demosaic": True,
+        "demosaic": "malvar_he_cutler" if cfg.get("malvar_demosaic") else "bilinear",
+        "fpn_column_sigma": cfg.get("fpn_column_sigma", 0.0),
+        "fpn_row_sigma": cfg.get("fpn_row_sigma", 0.0),
+        "hot_pixel_frac": cfg.get("hot_pixel_frac", 0.0),
+        "noise_floor_match_read": round(match_read, 6),
     }
 
     # --- 4. color pipeline: WB drift ------------------------------------------
@@ -230,13 +276,15 @@ def _rotate_crop(image, rng, max_degrees):
     return rotated.crop((left, top, left + width, top + height))
 
 
-def _bayer_roundtrip(linear, rng, shot, read, mix):
+def _bayer_roundtrip(linear, rng, shot, read, mix, malvar=False,
+                     fpn_col=0.0, fpn_row=0.0, hot_frac=0.0, match_read=0.0):
     """Full-strength RGGB CFA round-trip in linear light.
 
-    Mosaic -> per-sample shot/read noise -> bilinear demosaic. The noise is
-    added at the SAMPLED positions only, then spread by the interpolation --
-    physically, this is where sensor noise enters a real camera, and it makes
-    the noise part of the image structure instead of a coat on top of it.
+    Mosaic -> per-sample shot/read noise + fixed-pattern noise + hot pixels ->
+    demosaic (bilinear or Malvar-He-Cutler). The noise is added at the SAMPLED
+    positions only, then spread by the interpolation -- physically, this is
+    where sensor noise enters a real camera, and it makes the noise part of
+    the image structure instead of a coat on top of it.
     """
     height, width, _ = linear.shape
     yy, xx = np.indices((height, width))
@@ -250,19 +298,126 @@ def _bayer_roundtrip(linear, rng, shot, read, mix):
         + linear[..., 1] * 0.7152
         + linear[..., 2] * 0.0722
     )
-    variance = luma * shot + read ** 2
+    variance = luma * shot + read ** 2 + match_read ** 2
     noise = rng.normal(0.0, np.sqrt(variance).astype(np.float32)).astype(np.float32)
+
+    # Fixed-pattern noise: per-column + per-row sensor offsets (banding) -- a
+    # structural signature real sensors carry and synthetic noise lacks.
+    fpn = np.zeros((height, width), dtype=np.float32)
+    if fpn_col > 0:
+        fpn += rng.normal(0.0, fpn_col, (1, width)).astype(np.float32)
+    if fpn_row > 0:
+        fpn += rng.normal(0.0, fpn_row, (height, 1)).astype(np.float32)
 
     demosaiced = []
     for channel, mask in enumerate(masks):
-        # Sensor sample: value at the CFA position plus the photon/read noise
-        # drawn at that position.
-        sampled = (linear[..., channel] + noise) * mask.astype(np.float32)
-        demosaiced.append(demosaic_channel(sampled, mask.astype(np.float32)))
+        sampled = (linear[..., channel] + noise + fpn) * mask.astype(np.float32)
+        if hot_frac > 0:
+            hot = rng.random((height, width)).astype(np.float32) < hot_frac
+            sampled = np.where(hot & mask, 1.0, sampled)
+        demosaiced.append(
+            _demosaic_malvar(sampled, channel, mask)
+            if malvar
+            else demosaic_channel(sampled, mask.astype(np.float32))
+        )
     demosaiced_rgb = np.stack(demosaiced, axis=2)
 
     mix = min(1.0, max(0.0, float(mix)))
     return linear * (1.0 - mix) + demosaiced_rgb * mix
+
+
+def _demosaic_malvar(channel, channel_index, mask):
+    """Malvar-He-Cutler gradient-corrected demosaic for one CFA channel.
+
+    channel: full-resolution array of SAMPLED values (zero elsewhere).
+    The laplacian correction makes edges render with the directional zipper
+    structure of a real camera pipeline instead of the boxy 2x2 structure of
+    bilinear demosaics -- the exact structure CFA checkers use to tell a
+    camera image from a synthetic one.
+    """
+    pad = 2
+    height, width = channel.shape
+    padded = np.pad(channel, pad, mode="edge").astype(np.float32)
+    n = np.roll(padded, 1, axis=0)
+    s = np.roll(padded, -1, axis=0)
+    e = np.roll(padded, 1, axis=1)
+    w = np.roll(padded, -1, axis=1)
+    nn = np.roll(padded, 2, axis=0)
+    ss = np.roll(padded, -2, axis=0)
+    ee = np.roll(padded, 2, axis=1)
+    ww = np.roll(padded, -2, axis=1)
+    ne = np.roll(np.roll(padded, 1, axis=1), 1, axis=0)
+    nw = np.roll(np.roll(padded, -1, axis=1), 1, axis=0)
+    se = np.roll(np.roll(padded, 1, axis=1), -1, axis=0)
+    sw = np.roll(np.roll(padded, -1, axis=1), -1, axis=0)
+
+    yy_idx, _ = np.indices((height + 2 * pad, width + 2 * pad))
+    red_mask = ((yy_idx % 2) == 0) & ((np.indices((height + 2 * pad, width + 2 * pad))[1] % 2) == 0)
+    blue_mask = ((yy_idx % 2) == 1) & ((np.indices((height + 2 * pad, width + 2 * pad))[1] % 2) == 1)
+    green_mask = ~(red_mask | blue_mask)
+
+    if channel_index == 1:
+        # Green at red/blue sites: 4-neighbour mean + same-channel laplacian.
+        interp = (n + s + e + w) / 4.0 + (4.0 * padded - (nn + ss + ee + ww)) / 8.0
+        out = np.where(green_mask, padded, interp)
+    else:
+        # Red/blue at green sites split by row parity (vertical vs horizontal
+        # same-channel neighbours), corners use the green-corrected mean.
+        if channel_index == 0:  # red
+            g_v = green_mask & (yy_idx % 2 == 1)
+            g_h = green_mask & (yy_idx % 2 == 0)
+            corners = blue_mask
+        else:  # blue
+            g_v = green_mask & (yy_idx % 2 == 0)
+            g_h = green_mask & (yy_idx % 2 == 1)
+            corners = red_mask
+        interp = np.where(
+            g_v,
+            (n + s) / 2.0 + (2.0 * padded - (nn + ss)) / 4.0,
+            np.where(
+                g_h,
+                (e + w) / 2.0 + (2.0 * padded - (ee + ww)) / 4.0,
+                np.where(
+                    corners,
+                    (ne + nw + se + sw) / 4.0
+                    + (4.0 * padded - (n + s + e + w)) / 8.0,
+                    padded,
+                ),
+            ),
+        )
+        # mask is the padded channel's own CFA mask (same geometry).
+        out = np.where(mask_padded(mask), padded, interp)
+    return out[pad:-pad, pad:-pad].astype(np.float32)
+
+
+def mask_padded(mask):
+    return np.pad(mask, 2, mode="edge")
+
+
+def _noise_deficit(linear, target_sigma):
+    """Estimate the existing noise floor and return the extra read-noise sigma
+    needed to reach a camera-plausible target (noise-floor matching).
+
+    Graders that MAP noise (TruthScan's 'mapping noise' check) look for
+    inconsistent local noise. Injecting the deficit (instead of stacking a
+    fixed amount on top) keeps the delivered noise floor coherent with the
+    signal -- the thing a real sensor produces."""
+    luma = (
+        linear[..., 0] * 0.2126
+        + linear[..., 1] * 0.7152
+        + linear[..., 2] * 0.0722
+    )
+    height, width = luma.shape
+    small = luma[::2, ::2] if height > 64 and width > 64 else luma
+    lap = (
+        np.roll(small, 1, axis=0)
+        + np.roll(small, -1, axis=0)
+        + np.roll(small, 1, axis=1)
+        + np.roll(small, -1, axis=1)
+    ) / 4.0 - small
+    sigma_est = float(np.median(np.abs(lap))) / 0.75
+    deficit = max(0.0, target_sigma ** 2 - sigma_est ** 2)
+    return float(np.sqrt(deficit))
 
 
 def _tone_curve(image, amount):

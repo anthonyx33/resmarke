@@ -626,7 +626,7 @@ function dsRemintV7ExpertRefinement(input: unknown) {
   // pipeline itself is fixed server-side.
   const raw = isRecord(input) ? input : {};
   const engineModes = ["template", "adaptive"];
-  const presets = ["light", "balanced", "strong"];
+  const presets = ["light", "balanced", "strong", "ghost"];
   const subsamplings = ["4:2:0", "4:2:2", "4:4:4"];
 
   const engineMode =
