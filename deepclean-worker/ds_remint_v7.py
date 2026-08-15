@@ -77,16 +77,67 @@ DEFAULT_SETTINGS = {
 # attributed our Qwen wash as "flux: 72.5%" -- this is the family to gate.
 FLUX_FAMILY_HINTS = ("flux", "auraflow")
 
+# V8 quality floors: the owner-selected trade between quality preservation and
+# laundering headroom. Lower SSIM floors allow stronger re-life presets (the
+# pixel budget the heavier camera simulation spends), so "strong" buys more
+# detector headroom and "studio" buys more fidelity.
+V8_QUALITY_FLOOR_PRESETS = {
+    "studio": {
+        "min_ssim": 0.88,
+        "relife_ladder": ["light", "balanced"],
+        "label": "Studio (max quality)",
+    },
+    "high": {
+        "min_ssim": 0.85,
+        "relife_ladder": ["light", "balanced", "strong"],
+        "label": "High",
+    },
+    "balanced": {
+        "min_ssim": 0.82,
+        "relife_ladder": ["light", "balanced", "strong"],
+        "label": "Balanced (recommended)",
+    },
+    "strong": {
+        "min_ssim": 0.75,
+        "relife_ladder": ["balanced", "strong", "ghost"],
+        "label": "Strong (max laundering headroom)",
+    },
+}
+
 
 def is_ds_remint_v7(settings):
     return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v7"
 
 
+def is_ds_remint_v8(settings):
+    return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8"
+
+
+def apply_ds_remint_v8(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None):
+    """DS ReMint V8: the V7 pipeline with the V8 quality-floor extension.
+
+    Same wash -> camera re-life -> source-aware gate architecture. V8 adds the
+    owner-selectable quality floor (studio / high / balanced / strong) that
+    trades fidelity for laundering headroom via the min-SSIM floor and the
+    re-life ladder (strong reaches the ghost preset)."""
+    return apply_ds_remint_v7(
+        input_path=input_path,
+        output_path=output_path,
+        creator_id=creator_id,
+        settings=settings,
+        seed_extra=seed_extra,
+        detector=detector,
+    )
+
+
 def normalize_ds_remint_v7_settings(settings):
     raw = settings if isinstance(settings, dict) else {}
     sub = raw.get("ds_remint_v7") if isinstance(raw.get("ds_remint_v7"), dict) else {}
+    if not sub and isinstance(raw.get("ds_remint_v8"), dict):
+        sub = raw["ds_remint_v8"]
     cfg = dict(DEFAULT_SETTINGS)
-    cfg["enabled"] = raw.get("mode") == "ds-remint-v7"
+    cfg["mode"] = str(raw.get("mode") or "ds-remint-v7")
+    cfg["enabled"] = cfg["mode"] in ("ds-remint-v7", "ds-remint-v8")
 
     engine_mode = str(sub.get("engine_mode", cfg["engine_mode"]))
     cfg["engine_mode"] = engine_mode if engine_mode in ("template", "adaptive") else "adaptive"
@@ -98,6 +149,18 @@ def normalize_ds_remint_v7_settings(settings):
 
     cfg["color_restore"] = bool(sub.get("color_restore", cfg["color_restore"]))
     cfg["color_restore_strength"] = float(_clamp(sub.get("color_restore_strength", cfg["color_restore_strength"]), 0.0, 1.0))
+
+    # V8 quality floor: applies the floor's min-SSIM + ladder defaults unless
+    # explicitly overridden (V7 requests without quality_floor keep the V7
+    # defaults byte-for-byte).
+    quality_floor = str(sub.get("quality_floor", ""))
+    if quality_floor in V8_QUALITY_FLOOR_PRESETS:
+        floor = V8_QUALITY_FLOOR_PRESETS[quality_floor]
+        cfg["quality_floor"] = quality_floor
+        if "min_ssim" not in sub:
+            cfg["min_ssim"] = floor["min_ssim"]
+        if "relife_ladder" not in sub:
+            cfg["relife_ladder"] = list(floor["relife_ladder"])
 
     ladder = sub.get("relife_ladder", cfg["relife_ladder"])
     if isinstance(ladder, list):
@@ -165,7 +228,7 @@ def apply_ds_remint_v7(input_path, output_path, creator_id, settings=None, seed_
     cfg = normalize_ds_remint_v7_settings(settings)
     report = {
         "enabled": bool(cfg["enabled"]),
-        "pipeline": "ds_remint_v7",
+        "pipeline": cfg.get("mode") or "ds_remint_v7",
         "engine": "ds_remint_v7",
         "applied": False,
         "settings": _public_settings(cfg),
@@ -551,10 +614,10 @@ def _num(value):
 
 
 def _public_settings(cfg):
-    return {k: cfg[k] for k in (
+    return {k: cfg.get(k) for k in (
         "engine_mode", "pre_regen", "regen_level", "regen_process_cap",
         "regen_timeout", "color_restore", "color_restore_strength",
-        "relife_ladder", "template_preset", "max_rungs", "ai_threshold",
-        "source_threshold", "deepfake_threshold", "min_ssim", "output_target",
-        "jpeg_quality", "jpeg_subsampling", "iphone_exif",
+        "quality_floor", "relife_ladder", "template_preset", "max_rungs",
+        "ai_threshold", "source_threshold", "deepfake_threshold", "min_ssim",
+        "output_target", "jpeg_quality", "jpeg_subsampling", "iphone_exif",
     )}

@@ -52,6 +52,18 @@ export type DsRemintV7Options = {
   aiThreshold?: number;
   sourceThreshold?: number;
 };
+
+export type DsRemintV8QualityFloor = "studio" | "high" | "balanced" | "strong";
+
+export type DsRemintV8Options = {
+  engineMode: CxRemintEngineMode;
+  qualityFloor: DsRemintV8QualityFloor;
+  iphoneExif: boolean;
+  device: CxRemintDevice;
+  resolutionMode: CxRemintResolutionMode;
+  resolutionX: number;
+  resolutionY: number;
+};
 export type ExpertRefinementMode = "off" | "light" | "balanced" | "optical";
 export type ExpertRefinementTechnique =
   | "pixel_alignment_break"
@@ -106,13 +118,17 @@ export async function createDeepCleanJob(params: {
     | "max-cx-remint-v4"
     | "max-cx-remint-v5"
     | "ds-remint-v6"
-    | "ds-remint-v7";
+    | "ds-remint-v7"
+    | "ds-remint-v8";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;
   cxRemint?: CxRemintOptions;
   dsRemintV6?: DsRemintV6Options;
   dsRemintV7?: DsRemintV7Options;
+  dsRemintV8?: DsRemintV8Options;
+  outputNameStyle?: "photo-style" | "original" | "custom";
+  outputNameCustom?: string;
 }): Promise<DeepCleanJob> {
   if (!supabase) {
     throw new Error("Supabase is not configured for Remarkee Max jobs.");
@@ -160,7 +176,20 @@ export async function createDeepCleanJob(params: {
             ai_threshold: params.dsRemintV7.aiThreshold,
             source_threshold: params.dsRemintV7.sourceThreshold
           }
-        : undefined
+        : undefined,
+      ds_remint_v8: params.dsRemintV8
+        ? {
+            engine_mode: params.dsRemintV8.engineMode,
+            quality_floor: params.dsRemintV8.qualityFloor,
+            iphone_exif: params.dsRemintV8.iphoneExif,
+            device: params.dsRemintV8.device,
+            resolution_mode: params.dsRemintV8.resolutionMode,
+            x_resolution: params.dsRemintV8.resolutionX,
+            y_resolution: params.dsRemintV8.resolutionY
+          }
+        : undefined,
+      output_name_style: params.outputNameStyle,
+      output_name_custom: params.outputNameCustom
     }
   });
 

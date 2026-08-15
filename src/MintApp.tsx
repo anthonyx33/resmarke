@@ -112,7 +112,8 @@ type MintDeepCleanProfile =
   | "max-cx-remint-v4"
   | "max-cx-remint-v5"
   | "ds-remint-v6"
-  | "ds-remint-v7";
+  | "ds-remint-v7"
+  | "ds-remint-v8";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
@@ -333,6 +334,19 @@ export default function MintApp() {
   // DS ReMint V7 controls (wash -> camera re-life -> source-aware gate).
   const [dsV7EngineMode, setDsV7EngineMode] = useState<CxRemintEngineMode>("adaptive");
   const [dsV7IphoneExif, setDsV7IphoneExif] = useState(true);
+  // DS ReMint V8 controls (quality floor + ghost ladder + device/naming expert set).
+  const [dsV8EngineMode, setDsV8EngineMode] = useState<CxRemintEngineMode>("adaptive");
+  const [dsV8QualityFloor, setDsV8QualityFloor] =
+    useState<"studio" | "high" | "balanced" | "strong">("balanced");
+  const [dsV8IphoneExif, setDsV8IphoneExif] = useState(true);
+  const [dsV8Device, setDsV8Device] = useState<CxRemintDevice>("auto");
+  const [dsV8ResolutionMode, setDsV8ResolutionMode] =
+    useState<CxRemintResolutionMode>("off");
+  const [dsV8ResolutionX, setDsV8ResolutionX] = useState(72);
+  const [dsV8ResolutionY, setDsV8ResolutionY] = useState(72);
+  const [dsV8OutputNameStyle, setDsV8OutputNameStyle] =
+    useState<"photo-style" | "original" | "custom">("photo-style");
+  const [dsV8OutputNameCustom, setDsV8OutputNameCustom] = useState("");
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -381,7 +395,9 @@ export default function MintApp() {
       // DS ReMint V6: regen + laundering + classical reconstruction + QC.
       "ds-remint-v6": 13,
       // DS ReMint V7: wash + camera re-life + source-aware gate + single encode.
-      "ds-remint-v7": 13
+      "ds-remint-v7": 13,
+      // DS ReMint V8: V7 + quality floor + ghost ladder + device/naming options.
+      "ds-remint-v8": 13
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -399,6 +415,8 @@ export default function MintApp() {
     if (deepCleanProfile === "ds-remint-v6" && dsV6EngineMode === "adaptive") cost += 2;
     // Adaptive DS ReMint V7 runs repeated real-detector probes per re-life rung.
     if (deepCleanProfile === "ds-remint-v7" && dsV7EngineMode === "adaptive") cost += 2;
+    // Adaptive DS ReMint V8 does the same detector-gated escalation.
+    if (deepCleanProfile === "ds-remint-v8" && dsV8EngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
   }, [
@@ -408,7 +426,8 @@ export default function MintApp() {
     deepCleanOutputMode,
     cxEngineMode,
     dsV6EngineMode,
-    dsV7EngineMode
+    dsV7EngineMode,
+    dsV8EngineMode
   ]);
 
   // CX Remint quality-floor slider: map the selected preset to its slider index
@@ -423,6 +442,8 @@ export default function MintApp() {
   const dsV6Active = deepCleanProfile === "ds-remint-v6";
   // DS ReMint V7 derived state: active toggle.
   const dsV7Active = deepCleanProfile === "ds-remint-v7";
+  // DS ReMint V8 derived state: active toggle.
+  const dsV8Active = deepCleanProfile === "ds-remint-v8";
   const dsV6QualityFloorIndex = Math.max(
     0,
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
@@ -902,7 +923,23 @@ export default function MintApp() {
                   engineMode: dsV7EngineMode,
                   iphoneExif: dsV7IphoneExif
                 }
-              : undefined
+              : undefined,
+          dsRemintV8:
+            deepCleanProfile === "ds-remint-v8"
+              ? {
+                  engineMode: dsV8EngineMode,
+                  qualityFloor: dsV8QualityFloor,
+                  iphoneExif: dsV8IphoneExif,
+                  device: dsV8Device,
+                  resolutionMode: dsV8ResolutionMode,
+                  resolutionX: dsV8ResolutionX,
+                  resolutionY: dsV8ResolutionY
+                }
+              : undefined,
+          outputNameStyle:
+            deepCleanProfile === "ds-remint-v8" ? dsV8OutputNameStyle : undefined,
+          outputNameCustom:
+            deepCleanProfile === "ds-remint-v8" ? dsV8OutputNameCustom : undefined
         });
         createdJob = job;
         updateQueueItem(item.id, { status: "preparing", job });
@@ -1121,6 +1158,17 @@ export default function MintApp() {
       // camera re-life stack replaces the generative fingerprint, the
       // source-aware gate picks the candidate on the delivered bytes. One
       // JPEG encode with coherent EXIF from the pipeline itself.
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
+      return;
+    }
+    if (profile === "ds-remint-v8") {
+      // DS ReMint V8 is terminal like V7 and adds the quality-floor trade:
+      // studio preserves fidelity, strong buys detector headroom via the
+      // ghost ladder. Stripped output; pipeline handles its own EXIF.
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -2290,7 +2338,253 @@ export default function MintApp() {
                     </div>
                   ) : null}
 
-                  {!dsV6Active && !dsV7Active ? (
+                  <label className={`rm-v6-toggle${dsV8Active ? " is-active" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={dsV8Active}
+                      disabled={batchRunning}
+                      onChange={(event) =>
+                        chooseDeepCleanProfile(
+                          event.target.checked ? "ds-remint-v8" : "max-cx-remint-v5"
+                        )
+                      }
+                    />
+                    <span className="rm-switch-track" aria-hidden="true">
+                      <span className="rm-switch-thumb" />
+                    </span>
+                    <span className="rm-v6-toggle-text">
+                      <strong>DS ReMint V8 · Ghost</strong>
+                      <small>Quality floor · ghost re-life · device & file naming</small>
+                    </span>
+                    <span className="rm-badge">{dsV8Active ? "Enabled" : "Off"}</span>
+                  </label>
+
+                  {dsV8Active ? (
+                    <div className="rm-v6-panel">
+                      <div className="rm-v6-banner">
+                        <Sparkles size={15} aria-hidden="true" />
+                        <span>
+                          V8 adds a quality floor to the V7 pipeline: Studio preserves
+                          maximum fidelity, Strong spends more pixel budget on the ghost
+                          camera simulation (Malvar CFA · fixed-pattern noise · hot pixels ·
+                          noise-floor matching) for the most detector headroom.
+                        </span>
+                      </div>
+
+                      <div className="rm-v6-stats" aria-label="Pipeline indicators">
+                        <span className="rm-stat">
+                          <em>Wash</em>
+                          <b>Qwen · denoise .08–.15</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Re-life</em>
+                          <b>
+                            {dsV8QualityFloor === "strong"
+                              ? "ghost ladder"
+                              : dsV8QualityFloor === "studio"
+                              ? "light ladder"
+                              : "balanced ladder"}
+                          </b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Encode</em>
+                          <b>JPEG · q94</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Engine</em>
+                          <b>{dsV8EngineMode === "adaptive" ? "≤3 gated passes" : "1 pass"}</b>
+                        </span>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Quality floor</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8 quality floor">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV8QualityFloor === "studio"}
+                            className={dsV8QualityFloor === "studio" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV8QualityFloor("studio")}
+                          >
+                            Studio
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV8QualityFloor === "balanced"}
+                            className={dsV8QualityFloor === "balanced" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV8QualityFloor("balanced")}
+                          >
+                            Balanced
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV8QualityFloor === "strong"}
+                            className={dsV8QualityFloor === "strong" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV8QualityFloor("strong")}
+                          >
+                            Strong
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV8QualityFloor === "studio"
+                            ? "Studio: maximum fidelity, lightest re-life — for images that already grade well. Fewer pixels are touched, so detector headroom is lowest."
+                            : dsV8QualityFloor === "strong"
+                            ? "Strong: spends more pixel budget on the ghost simulation (Malvar CFA + sensor realism) for maximum detector headroom — accept slightly softer fine detail."
+                            : "Balanced: the recommended trade between fidelity and detector headroom."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Engine</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8 engine">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV8EngineMode === "adaptive"}
+                            className={dsV8EngineMode === "adaptive" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV8EngineMode("adaptive")}
+                          >
+                            Adaptive (detector-gated)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV8EngineMode === "template"}
+                            className={dsV8EngineMode === "template" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV8EngineMode("template")}
+                          >
+                            Optimised template
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV8EngineMode === "adaptive"
+                            ? "Each rung of the quality-floor ladder is probed against the live detector on the DELIVERED bytes; the first pass that clears ships. +2 credits."
+                            : "One deterministic pass at the chosen quality floor. Fast and predictable, no detector calls."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field-grid">
+                        <label className="rm-field">
+                          <span className="rm-field-label">File name</span>
+                          <select
+                            className="rm-select"
+                            value={dsV8OutputNameStyle}
+                            disabled={batchRunning}
+                            onChange={(event) =>
+                              setDsV8OutputNameStyle(
+                                event.target.value as "photo-style" | "original" | "custom"
+                              )
+                            }
+                          >
+                            <option value="photo-style">Photo style (IMG_0000.JPG)</option>
+                            <option value="original">Original name + -clean</option>
+                            <option value="custom">Custom prefix…</option>
+                          </select>
+                        </label>
+                        {dsV8OutputNameStyle === "custom" ? (
+                          <label className="rm-field">
+                            <span className="rm-field-label">Custom prefix</span>
+                            <input
+                              className="rm-input"
+                              type="text"
+                              value={dsV8OutputNameCustom}
+                              disabled={batchRunning}
+                              placeholder="ResMarke"
+                              maxLength={60}
+                              onChange={(event) => setDsV8OutputNameCustom(event.target.value)}
+                            />
+                          </label>
+                        ) : null}
+                      </div>
+
+                      <div className="rm-field-grid">
+                        <label className="rm-field">
+                          <span className="rm-field-label">Device (EXIF)</span>
+                          <select
+                            className="rm-select"
+                            value={dsV8Device}
+                            disabled={batchRunning}
+                            onChange={(event) => setDsV8Device(event.target.value as CxRemintDevice)}
+                          >
+                            <option value="auto">Auto</option>
+                            <option value="iphone-16-pro-max">iPhone 16 Pro Max</option>
+                            <option value="iphone-16-pro">iPhone 16 Pro</option>
+                            <option value="iphone-16">iPhone 16</option>
+                            <option value="iphone-15-pro-max">iPhone 15 Pro Max</option>
+                            <option value="iphone-15-pro">iPhone 15 Pro</option>
+                            <option value="iphone-15">iPhone 15</option>
+                            <option value="iphone-14-pro">iPhone 14 Pro</option>
+                          </select>
+                        </label>
+                        <label className="rm-field">
+                          <span className="rm-field-label">Resolution metadata</span>
+                          <select
+                            className="rm-select"
+                            value={dsV8ResolutionMode}
+                            disabled={batchRunning}
+                            onChange={(event) =>
+                              setDsV8ResolutionMode(event.target.value as CxRemintResolutionMode)
+                            }
+                          >
+                            <option value="off">Off</option>
+                            <option value="standard">Standard (72 DPI)</option>
+                            <option value="custom">Custom…</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      {dsV8ResolutionMode === "custom" ? (
+                        <div className="rm-field-grid">
+                          <label className="rm-field">
+                            <span className="rm-field-label">X resolution (DPI)</span>
+                            <input
+                              className="rm-input"
+                              type="number"
+                              min={1}
+                              max={12000}
+                              value={dsV8ResolutionX}
+                              disabled={batchRunning}
+                              onChange={(event) => setDsV8ResolutionX(Number(event.target.value))}
+                            />
+                          </label>
+                          <label className="rm-field">
+                            <span className="rm-field-label">Y resolution (DPI)</span>
+                            <input
+                              className="rm-input"
+                              type="number"
+                              min={1}
+                              max={12000}
+                              value={dsV8ResolutionY}
+                              disabled={batchRunning}
+                              onChange={(event) => setDsV8ResolutionY(Number(event.target.value))}
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+
+                      <label className="rm-switch">
+                        <input
+                          type="checkbox"
+                          checked={dsV8IphoneExif}
+                          disabled={batchRunning}
+                          onChange={(event) => setDsV8IphoneExif(event.target.checked)}
+                        />
+                        <span className="rm-switch-track" aria-hidden="true">
+                          <span className="rm-switch-thumb" />
+                        </span>
+                        <span>Coherent device EXIF</span>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {!dsV6Active && !dsV7Active && !dsV8Active ? (
                   <div className="rm-field-grid">
                     <label className="rm-field">
                       <span className="rm-field-label">Profile</span>
@@ -2314,6 +2608,7 @@ export default function MintApp() {
                         <option value="max-cx-remint-v5">CX Remint v5 · Max removal + upscale to 1080+ (recommended)</option>
                         <option value="ds-remint-v6">DS ReMint V6 (new)</option>
                         <option value="ds-remint-v7">DS ReMint V7 (new)</option>
+                        <option value="ds-remint-v8">DS ReMint V8 (new)</option>
                       </select>
                     </label>
                     <label className="rm-field">
