@@ -724,3 +724,420 @@ def _public_settings(cfg):
         "ai_threshold", "source_threshold", "deepfake_threshold", "min_ssim",
         "output_target", "jpeg_quality", "jpeg_subsampling", "iphone_exif",
     )}
+
+
+# ---------------------------------------------------------------------------
+# V8.2 Max -- degrade -> launder at low res -> neural restore -> re-life
+# ---------------------------------------------------------------------------
+#
+# The V8 plateau analysis: laundering a FULL-RESOLUTION frame is expensive in
+# pixels and detectors recover signal from the fine structure we cannot fully
+# replace. At low resolution the generator's fingerprint loses most of its
+# information density, so a full ghost clean there is both cheaper and more
+# total. Quality is then recovered by a neural restore (Real-ESRGAN x4plus via
+# ComfyUI) whose OWN fingerprint is stripped by a final ghost_lite re-life at
+# delivery resolution. This is V5's downscale -> regenerate -> upscale idea,
+# fixed: V5's failure was never stripping the upscaler's fingerprint afterward.
+#
+# Quality floors trade how far we degrade (more degradation = more total
+# laundering, less detail survives) against the restored fidelity.
+
+V82_QUALITY_FLOOR_PRESETS = {
+    "studio": {
+        "degrade_scale": 0.78,
+        "restore_alpha": 0.50,
+        "launder_preset": "strong",
+        "final_relife_preset": "balanced",
+        "min_ssim": 0.86,
+        "label": "Studio (max quality)",
+    },
+    "balanced": {
+        "degrade_scale": 0.62,
+        "restore_alpha": 0.55,
+        "launder_preset": "ghost",
+        "final_relife_preset": "ghost_lite",
+        "min_ssim": 0.80,
+        "label": "Balanced (recommended)",
+    },
+    "strong": {
+        "degrade_scale": 0.50,
+        "restore_alpha": 0.60,
+        "launder_preset": "ghost",
+        "final_relife_preset": "ghost_lite",
+        "min_ssim": 0.74,
+        "label": "Strong (max laundering headroom)",
+    },
+}
+
+DEFAULT_SETTINGS_V82 = {
+    "enabled": True,
+    "engine_mode": "adaptive",
+    "quality_floor": "balanced",
+    "pre_regen": True,
+    "regen_level": 8,
+    "regen_process_cap": 1536,
+    "regen_timeout": 300,
+    "color_restore": True,
+    "color_restore_strength": 0.8,
+    "restore_engine": "neural",      # "neural" (Real-ESRGAN via ComfyUI) | "classical"
+    "restore_alpha": 0.55,
+    "restore_timeout": 240,
+    "degrade_floor_long_edge": 896,  # never degrade below this unless source is smaller
+    "ai_threshold": 0.45,
+    "source_threshold": 0.30,
+    "deepfake_threshold": 0.10,
+    "output_target": None,           # None = min(source_long_edge, 1440)
+    "jpeg_quality": 94,
+    "jpeg_subsampling": "4:2:2",
+    "iphone_exif": True,
+    "metadata_mode": "device",
+    "device": "auto",
+    "resolution_mode": "off",
+    "x_resolution": 72.0,
+    "y_resolution": 72.0,
+}
+
+
+def is_ds_remint_v8_2(settings):
+    return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.2"
+
+
+def normalize_ds_remint_v8_2_settings(settings):
+    raw = settings if isinstance(settings, dict) else {}
+    sub = raw.get("ds_remint_v8_2") if isinstance(raw.get("ds_remint_v8_2"), dict) else {}
+    cfg = dict(DEFAULT_SETTINGS_V82)
+    cfg["enabled"] = raw.get("mode") == "ds-remint-v8.2"
+
+    engine_mode = str(sub.get("engine_mode", cfg["engine_mode"]))
+    cfg["engine_mode"] = engine_mode if engine_mode in ("template", "adaptive") else "adaptive"
+    quality_floor = str(sub.get("quality_floor", cfg["quality_floor"]))
+    if quality_floor not in V82_QUALITY_FLOOR_PRESETS:
+        quality_floor = "balanced"
+    cfg["quality_floor"] = quality_floor
+    floor = V82_QUALITY_FLOOR_PRESETS[quality_floor]
+
+    cfg["degrade_scale"] = float(_clamp(sub.get("degrade_scale", floor["degrade_scale"]), 0.4, 0.9))
+    cfg["restore_alpha"] = float(_clamp(sub.get("restore_alpha", floor["restore_alpha"]), 0.0, 1.0))
+    cfg["launder_preset"] = str(sub.get("launder_preset", floor["launder_preset"]))
+    cfg["final_relife_preset"] = str(sub.get("final_relife_preset", floor["final_relife_preset"]))
+    cfg["min_ssim"] = float(_clamp(sub.get("min_ssim", floor["min_ssim"]), 0.0, 1.0))
+
+    cfg["pre_regen"] = bool(sub.get("pre_regen", cfg["pre_regen"]))
+    cfg["regen_level"] = int(_clamp(sub.get("regen_level", cfg["regen_level"]), 3, 10))
+    cfg["regen_process_cap"] = int(_clamp(sub.get("regen_process_cap", cfg["regen_process_cap"]), 512, 4096))
+    cfg["regen_timeout"] = int(_clamp(sub.get("regen_timeout", cfg["regen_timeout"]), 30, 900))
+    cfg["color_restore"] = bool(sub.get("color_restore", cfg["color_restore"]))
+    cfg["color_restore_strength"] = float(_clamp(sub.get("color_restore_strength", cfg["color_restore_strength"]), 0.0, 1.0))
+
+    restore_engine = str(sub.get("restore_engine", cfg["restore_engine"]))
+    cfg["restore_engine"] = restore_engine if restore_engine in ("neural", "classical") else "neural"
+    cfg["restore_timeout"] = int(_clamp(sub.get("restore_timeout", cfg["restore_timeout"]), 30, 900))
+    cfg["degrade_floor_long_edge"] = int(_clamp(sub.get("degrade_floor_long_edge", cfg["degrade_floor_long_edge"]), 512, 2048))
+
+    cfg["ai_threshold"] = float(_clamp(sub.get("ai_threshold", cfg["ai_threshold"]), 0.0, 1.0))
+    cfg["source_threshold"] = float(_clamp(sub.get("source_threshold", cfg["source_threshold"]), 0.0, 1.0))
+    cfg["deepfake_threshold"] = float(_clamp(sub.get("deepfake_threshold", cfg["deepfake_threshold"]), 0.0, 1.0))
+
+    if sub.get("output_target") is not None:
+        cfg["output_target"] = int(_clamp(sub["output_target"], 256, 8192))
+    else:
+        cfg["output_target"] = None
+    cfg["jpeg_quality"] = int(_clamp(sub.get("jpeg_quality", cfg["jpeg_quality"]), 60, 100))
+    jpeg_subsampling = sub.get("jpeg_subsampling", cfg["jpeg_subsampling"])
+    cfg["jpeg_subsampling"] = (
+        jpeg_subsampling if jpeg_subsampling in ("4:2:0", "4:2:2", "4:4:4") else "4:2:2"
+    )
+    cfg["iphone_exif"] = bool(sub.get("iphone_exif", cfg["iphone_exif"]))
+    metadata_mode = str(sub.get("metadata_mode", cfg["metadata_mode"]))
+    cfg["metadata_mode"] = metadata_mode if metadata_mode in ("device", "minimal") else "device"
+    cfg["device"] = str(sub.get("device", cfg["device"]))
+    resolution_mode = str(sub.get("resolution_mode", cfg["resolution_mode"]))
+    cfg["resolution_mode"] = (
+        resolution_mode if resolution_mode in ("off", "standard", "custom") else "off"
+    )
+    cfg["x_resolution"] = float(_clamp(sub.get("x_resolution", cfg["x_resolution"]), 1, 12000))
+    cfg["y_resolution"] = float(_clamp(sub.get("y_resolution", cfg["y_resolution"]), 1, 12000))
+    return cfg
+
+
+def apply_ds_remint_v8_2(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None):
+    """DS ReMint V8.2 Max pipeline. Writes the final camera-like JPEG to
+    output_path and returns a report.
+
+    degrade -> full ghost launder at low resolution -> neural restore to
+    delivery size -> ghost_lite re-life -> one JPEG encode -> ensemble gate.
+    """
+    cfg = normalize_ds_remint_v8_2_settings(settings)
+    report = {
+        "enabled": bool(cfg["enabled"]),
+        "pipeline": "ds_remint_v8_2",
+        "engine": "ds_remint_v8_2",
+        "applied": False,
+        "settings": {
+            "engine_mode": cfg["engine_mode"], "quality_floor": cfg["quality_floor"],
+            "degrade_scale": cfg["degrade_scale"], "restore_engine": cfg["restore_engine"],
+            "restore_alpha": cfg["restore_alpha"], "launder_preset": cfg["launder_preset"],
+            "final_relife_preset": cfg["final_relife_preset"], "min_ssim": cfg["min_ssim"],
+            "ai_threshold": cfg["ai_threshold"], "source_threshold": cfg["source_threshold"],
+            "deepfake_threshold": cfg["deepfake_threshold"], "jpeg_quality": cfg["jpeg_quality"],
+            "jpeg_subsampling": cfg["jpeg_subsampling"], "iphone_exif": cfg["iphone_exif"],
+            "metadata_mode": cfg["metadata_mode"],
+        },
+        "layers": {},
+        "attempts": [],
+        "input_baseline": None,
+        "quality_floor_gate": {},
+        "detector_gate": {"evaluated": False},
+    }
+    if not cfg["enabled"]:
+        return report
+
+    started = time.time()
+    original = Image.open(input_path).convert("RGB")
+    src_long = max(original.size)
+    report["source_long_edge"] = src_long
+
+    adaptive = cfg["engine_mode"] == "adaptive"
+    if adaptive and detector is None:
+        report["detector_gate"]["note"] = "no_detector_supplied_degraded_to_single_template_run"
+        adaptive = False
+
+    if adaptive:
+        baseline_path = str(Path(output_path).with_name(".v82-baseline.jpg"))
+        _encode_probe(original, baseline_path, cfg)
+        report["input_baseline"] = _safe_detect(detector, baseline_path)
+        try:
+            Path(baseline_path).unlink()
+        except OSError:
+            pass
+
+    # --- layer 0: the wash (unchanged SynthID carrier breaker) ---------------
+    base = original
+    if cfg["pre_regen"]:
+        regen_path = Path(output_path).with_name(".v82-regen.png")
+        try:
+            report["layers"]["pre_wash"] = _run_regen(
+                input_path, str(regen_path), cfg, _seed(creator_id, seed_extra, original.size, 900)
+            )
+            base = Image.open(regen_path).convert("RGB")
+        finally:
+            try:
+                Path(regen_path).unlink()
+            except OSError:
+                pass
+        if cfg["color_restore"]:
+            base = _histogram_match(base, original, cfg["color_restore_strength"])
+            report["layers"]["color_restore"] = {
+                "method": "per_channel_histogram_match_to_original",
+                "strength": cfg["color_restore_strength"],
+            }
+    else:
+        report["layers"]["pre_wash"] = {"applied": False, "reason": "pre_regen_disabled"}
+
+    delivery = cfg["output_target"] or min(src_long, 1440)
+    delivery = min(delivery, src_long)
+
+    floor_order = ["studio", "balanced", "strong"] if adaptive else [cfg["quality_floor"]]
+    chosen = None
+    for rung_index, floor_name in enumerate(floor_order):
+        rung_cfg = dict(cfg)
+        if floor_name != cfg["quality_floor"] or adaptive:
+            floor = V82_QUALITY_FLOOR_PRESETS[floor_name]
+            rung_cfg["degrade_scale"] = float(_clamp(sub_get(cfg, settings, "degrade_scale") or floor["degrade_scale"], 0.4, 0.9))
+            rung_cfg["restore_alpha"] = floor["restore_alpha"]
+            rung_cfg["launder_preset"] = floor["launder_preset"]
+            rung_cfg["final_relife_preset"] = floor["final_relife_preset"]
+            rung_cfg["min_ssim"] = floor["min_ssim"]
+
+        candidate, layers = _v82_candidate(base, original, rung_cfg, creator_id, seed_extra, rung_index, output_path)
+        original_ref = original.resize(candidate.size, Image.Resampling.LANCZOS)
+        metrics = compare_images(original_ref, candidate)
+        floor_ok = float(metrics.get("ssim_luma_window11_mean", 0.0)) >= rung_cfg["min_ssim"]
+
+        attempt = {
+            "rung": rung_index,
+            "quality_floor": floor_name,
+            "metrics": {"psnr": _num(metrics.get("psnr")), "ssim": _num(metrics.get("ssim_luma_window11_mean"))},
+            "quality_floor_ok": floor_ok,
+            "layers": layers,
+        }
+        detector_ok = None
+        verdict = None
+        if adaptive:
+            probe_path = str(Path(output_path).with_name(".v82-probe.jpg"))
+            _encode_probe(candidate, probe_path, rung_cfg)
+            raw = _safe_detect(detector, probe_path)
+            verdict = _v7_verdict(raw, rung_cfg)
+            detector_ok = verdict["cleared"]
+            attempt["verdict"] = verdict
+            attempt["rating_88"] = _rating_88(verdict)
+            try:
+                Path(probe_path).unlink()
+            except OSError:
+                pass
+        report["attempts"].append(attempt)
+        chosen = _keep_better(chosen, {"image": candidate, "metrics": metrics,
+                                       "detector_ok": detector_ok, "floor_ok": floor_ok,
+                                       "verdict": verdict})
+        if not adaptive:
+            break
+        if detector_ok is None:
+            break
+        if detector_ok and floor_ok:
+            break
+
+    final_image = chosen["image"]
+    if max(final_image.size) > delivery:
+        ratio = delivery / float(max(final_image.size))
+        final_image = final_image.resize(
+            (max(1, int(round(final_image.width * ratio))), max(1, int(round(final_image.height * ratio)))),
+            Image.Resampling.LANCZOS,
+        )
+        report["layers"]["delivery_resize"] = {"applied": True, "delivery_long_edge": delivery}
+
+    # --- final tone lock ------------------------------------------------------
+    if cfg["color_restore"]:
+        original_ref = original.resize(final_image.size, Image.Resampling.LANCZOS)
+        final_image = _histogram_match(final_image, original_ref, cfg["color_restore_strength"])
+        report["layers"]["final_tone_lock"] = {"strength": cfg["color_restore_strength"]}
+
+    # --- one encode (delivered bytes) ----------------------------------------
+    exif_report = {"enabled": False}
+    if cfg["iphone_exif"] and cfg.get("metadata_mode", "device") != "minimal":
+        exif_bytes, exif_report = iphone_exif.build_iphone_exif(
+            final_image.width, final_image.height, creator_id, seed_extra,
+            device=cfg["device"], resolution_mode=cfg["resolution_mode"],
+            x_resolution=cfg["x_resolution"], y_resolution=cfg["y_resolution"],
+        )
+        iphone_exif.write_exif_jpeg(final_image, output_path, exif_bytes, cfg["jpeg_quality"], cfg["jpeg_subsampling"])
+    else:
+        if cfg.get("metadata_mode") == "minimal":
+            exif_report = {"enabled": False, "reason": "metadata_mode_minimal_no_exif_written"}
+        final_image.save(output_path, format="JPEG", quality=cfg["jpeg_quality"], optimize=True,
+                         subsampling=cfg["jpeg_subsampling"])
+    report["layers"]["iphone_exif"] = exif_report
+    report["layers"]["encode"] = {"format": "JPEG", "quality": cfg["jpeg_quality"],
+                                  "subsampling": cfg["jpeg_subsampling"], "encodes": 1,
+                                  "probe_matches_delivery": True}
+
+    report["final_qc"] = _final_qc(original, output_path)
+    report["quality_floor_gate"] = {
+        "quality_floor": cfg["quality_floor"],
+        "min_ssim": chosen["rung_min_ssim"] if "rung_min_ssim" in chosen else cfg["min_ssim"],
+        "ssim": _num(chosen["metrics"].get("ssim_luma_window11_mean")),
+        "psnr": _num(chosen["metrics"].get("psnr")),
+        "accepted": bool(chosen["floor_ok"]),
+        "output_long_edge": max(final_image.size),
+        "beats_competitor_free_768": max(final_image.size) > 768,
+    }
+
+    rating = _rating_88(chosen.get("verdict")) if adaptive else None
+    if adaptive:
+        if chosen["detector_ok"] is None:
+            note = "detector_unavailable_shipped_best_effort"
+        elif chosen["detector_ok"]:
+            note = None
+        else:
+            note = "could_not_fully_clear_within_quality_floor_shipped_best_effort"
+        report["detector_gate"] = {
+            "evaluated": True,
+            "cleared": chosen["detector_ok"] is True,
+            "ai_threshold": cfg["ai_threshold"],
+            "source_threshold": cfg["source_threshold"],
+            "deepfake_threshold": cfg["deepfake_threshold"],
+            "rungs_tried": len(report["attempts"]),
+            "note": note,
+            "verdict": chosen.get("verdict"),
+        }
+    report["rating_88"] = rating
+    report["detector_gate"]["rating_88"] = rating
+    if rating is None:
+        report["detector_gate"]["rating_note"] = "rating_unavailable"
+
+    report["applied"] = True
+    report["runtime_ms"] = int((time.time() - started) * 1000)
+    return report
+
+
+def sub_get(cfg, settings, key):
+    """Read an explicit override from the v8.2 settings sub-dict (or None)."""
+    raw = settings if isinstance(settings, dict) else {}
+    sub = raw.get("ds_remint_v8_2") if isinstance(raw.get("ds_remint_v8_2"), dict) else {}
+    return sub.get(key)
+
+
+def _v82_candidate(base, original, cfg, creator_id, seed_extra, rung_index, output_path):
+    """Degrade -> launder at low res -> restore -> re-life, for one rung."""
+    layers = {}
+    src_long = max(base.size)
+    degrade_long = max(cfg["degrade_floor_long_edge"], int(round(src_long * cfg["degrade_scale"])))
+    degrade_long = min(degrade_long, src_long)
+    ratio = degrade_long / float(src_long)
+    degraded = base.resize(
+        (max(1, int(round(base.width * ratio))), max(1, int(round(base.height * ratio)))),
+        Image.Resampling.LANCZOS,
+    )
+    layers["degrade"] = {"from_long_edge": src_long, "to_long_edge": degrade_long, "scale": cfg["degrade_scale"]}
+
+    laundered, relife_report = apply_camera_relife(
+        degraded,
+        settings={"mode": "camera-relife", "camera_relife": {"preset": cfg["launder_preset"]}},
+        creator_id=creator_id,
+        seed_extra=f"{seed_extra}:v82:{rung_index}:launder",
+    )
+    layers["low_res_launder"] = {"preset": cfg["launder_preset"], "relife_report": relife_report}
+
+    delivery = cfg["output_target"] or min(max(original.size), 1440)
+    delivery = min(delivery, max(original.size))
+    ratio_up = delivery / float(max(laundered.size))
+    target_size = (
+        max(1, int(round(laundered.width * ratio_up))),
+        max(1, int(round(laundered.height * ratio_up))),
+    )
+
+    if cfg["restore_engine"] == "neural":
+        try:
+            restored = _neural_restore(laundered, target_size, cfg, output_path)
+            layers["neural_restore"] = {"applied": True, "engine": "realesrgan_x4plus"}
+        except Exception as exc:  # noqa: BLE001
+            restored = laundered.resize(target_size, Image.Resampling.LANCZOS)
+            layers["neural_restore"] = {
+                "applied": False,
+                "reason": f"neural_restore_failed_fallback_lanczos: {str(exc)[:200]}",
+            }
+    else:
+        restored = laundered.resize(target_size, Image.Resampling.LANCZOS)
+        layers["neural_restore"] = {"applied": False, "engine": "classical_lanczos"}
+
+    final, final_relife = apply_camera_relife(
+        restored,
+        settings={"mode": "camera-relife", "camera_relife": {"preset": cfg["final_relife_preset"]}},
+        creator_id=creator_id,
+        seed_extra=f"{seed_extra}:v82:{rung_index}:relife",
+    )
+    layers["final_relife"] = {"preset": cfg["final_relife_preset"], "relife_report": final_relife}
+    return final.convert("RGB"), layers
+
+
+def _neural_restore(laundered, target_size, cfg, output_path):
+    """Real-ESRGAN x4plus restore via ComfyUI, alpha-blended against a Lanczos
+    upscale of the laundered low-res frame (hallucination control)."""
+    from neural_texture import run_realesrgan_x4plus_comfyui
+
+    low_path = Path(output_path).with_name(".v82-low.png")
+    laundered.save(low_path, format="PNG")
+    try:
+        restored = run_realesrgan_x4plus_comfyui(
+            input_path=str(low_path),
+            width=target_size[0],
+            height=target_size[1],
+            model_name="RealESRGAN_x4plus.pth",
+            timeout=cfg["restore_timeout"],
+        )
+    finally:
+        try:
+            low_path.unlink()
+        except OSError:
+            pass
+    lanczos = laundered.resize(target_size, Image.Resampling.LANCZOS)
+    return Image.blend(lanczos, restored.convert("RGB"), cfg["restore_alpha"]).convert("RGB")

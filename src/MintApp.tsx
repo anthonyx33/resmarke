@@ -114,7 +114,8 @@ type MintDeepCleanProfile =
   | "ds-remint-v6"
   | "ds-remint-v7"
   | "ds-remint-v8"
-  | "ds-remint-v8.1";
+  | "ds-remint-v8.1"
+  | "ds-remint-v8.2";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
@@ -350,6 +351,13 @@ export default function MintApp() {
   const [dsV8OutputNameCustom, setDsV8OutputNameCustom] = useState("");
   const [dsV8MetadataMode, setDsV8MetadataMode] =
     useState<"device" | "minimal">("device");
+  // DS ReMint V8.2 Max controls (degrade -> low-res launder -> neural restore -> re-life).
+  const [dsV82EngineMode, setDsV82EngineMode] = useState<CxRemintEngineMode>("adaptive");
+  const [dsV82QualityFloor, setDsV82QualityFloor] =
+    useState<"studio" | "balanced" | "strong">("balanced");
+  const [dsV82IphoneExif, setDsV82IphoneExif] = useState(true);
+  const [dsV82MetadataMode, setDsV82MetadataMode] =
+    useState<"device" | "minimal">("device");
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -402,7 +410,9 @@ export default function MintApp() {
       // DS ReMint V8: V7 + quality floor + ghost ladder + device/naming options.
       "ds-remint-v8": 13,
       // DS ReMint V8.1: quality-first floors through ghost_lite + metadata mode.
-      "ds-remint-v8.1": 13
+      "ds-remint-v8.1": 13,
+      // DS ReMint V8.2 Max: degrade + neural restore costs an extra GPU pass.
+      "ds-remint-v8.2": 14
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -422,6 +432,8 @@ export default function MintApp() {
     if (deepCleanProfile === "ds-remint-v7" && dsV7EngineMode === "adaptive") cost += 2;
     // Adaptive DS ReMint V8 does the same detector-gated escalation.
     if (deepCleanProfile === "ds-remint-v8.1" && dsV8EngineMode === "adaptive") cost += 2;
+    // Adaptive DS ReMint V8.2 probes each degrade floor against the live detector.
+    if (deepCleanProfile === "ds-remint-v8.2" && dsV82EngineMode === "adaptive") cost += 2;
     if (deepCleanOutputMode === "sealed-stamped") cost += 1;
     return cost;
   }, [
@@ -432,7 +444,8 @@ export default function MintApp() {
     cxEngineMode,
     dsV6EngineMode,
     dsV7EngineMode,
-    dsV8EngineMode
+    dsV8EngineMode,
+    dsV82EngineMode
   ]);
 
   // CX Remint quality-floor slider: map the selected preset to its slider index
@@ -449,6 +462,8 @@ export default function MintApp() {
   const dsV7Active = deepCleanProfile === "ds-remint-v7";
   // DS ReMint V8.1 derived state: active toggle.
   const dsV8Active = deepCleanProfile === "ds-remint-v8.1";
+  // DS ReMint V8.2 derived state: active toggle.
+  const dsV82Active = deepCleanProfile === "ds-remint-v8.2";
   const dsV6QualityFloorIndex = Math.max(
     0,
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
@@ -943,9 +958,23 @@ export default function MintApp() {
                 }
               : undefined,
           outputNameStyle:
-            deepCleanProfile === "ds-remint-v8.1" ? dsV8OutputNameStyle : undefined,
+            deepCleanProfile === "ds-remint-v8.1" || deepCleanProfile === "ds-remint-v8.2"
+              ? dsV8OutputNameStyle
+              : undefined,
           outputNameCustom:
-            deepCleanProfile === "ds-remint-v8.1" ? dsV8OutputNameCustom : undefined
+            deepCleanProfile === "ds-remint-v8.1" || deepCleanProfile === "ds-remint-v8.2"
+              ? dsV8OutputNameCustom
+              : undefined,
+          dsRemintV82:
+            deepCleanProfile === "ds-remint-v8.2"
+              ? {
+                  engineMode: dsV82EngineMode,
+                  qualityFloor: dsV82QualityFloor,
+                  iphoneExif: dsV82IphoneExif,
+                  metadataMode: dsV82MetadataMode,
+                  restoreEngine: "neural"
+                }
+              : undefined
         });
         createdJob = job;
         updateQueueItem(item.id, { status: "preparing", job });
@@ -1175,6 +1204,16 @@ export default function MintApp() {
       // DS ReMint V8.1 is terminal like V8 with quality-first floors routed
       // through ghost_lite and metadata mode control. Stripped output;
       // pipeline handles its own EXIF.
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
+      return;
+    }
+    if (profile === "ds-remint-v8.2") {
+      // DS ReMint V8.2 Max is terminal: degrade -> low-res ghost launder ->
+      // neural restore -> ghost_lite re-life -> single encode.
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -2611,7 +2650,169 @@ export default function MintApp() {
                     </div>
                   ) : null}
 
-                  {!dsV6Active && !dsV7Active && !dsV8Active ? (
+                  <label className={`rm-v6-toggle${dsV82Active ? " is-active" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={dsV82Active}
+                      disabled={batchRunning}
+                      onChange={(event) =>
+                        chooseDeepCleanProfile(
+                          event.target.checked ? "ds-remint-v8.2" : "max-cx-remint-v5"
+                        )
+                      }
+                    />
+                    <span className="rm-switch-track" aria-hidden="true">
+                      <span className="rm-switch-thumb" />
+                    </span>
+                    <span className="rm-v6-toggle-text">
+                      <strong>DS ReMint V8.2 · Max</strong>
+                      <small>Degrade → deep clean → neural restore → re-life</small>
+                    </span>
+                    <span className="rm-badge">{dsV82Active ? "Enabled" : "Off"}</span>
+                  </label>
+
+                  {dsV82Active ? (
+                    <div className="rm-v6-panel">
+                      <div className="rm-v6-banner">
+                        <Sparkles size={15} aria-hidden="true" />
+                        <span>
+                          V8.2 Max cleans the frame at reduced resolution where the
+                          generator's fingerprint is cheapest to destroy, restores the detail
+                          with a neural upscaler, then re-lifes the restoration so the
+                          upscaler's own fingerprint never reaches the grader.
+                        </span>
+                      </div>
+
+                      <div className="rm-v6-stats" aria-label="Pipeline indicators">
+                        <span className="rm-stat">
+                          <em>Degrade</em>
+                          <b>
+                            {dsV82QualityFloor === "strong"
+                              ? "~50% scale"
+                              : dsV82QualityFloor === "studio"
+                              ? "~78% scale"
+                              : "~62% scale"}
+                          </b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Clean</em>
+                          <b>ghost @ low res</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Restore</em>
+                          <b>Real-ESRGAN · ghost_lite</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Engine</em>
+                          <b>{dsV82EngineMode === "adaptive" ? "≤3 gated floors" : "1 pass"}</b>
+                        </span>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Quality floor</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.2 quality floor">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV82QualityFloor === "studio"}
+                            className={dsV82QualityFloor === "studio" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV82QualityFloor("studio")}
+                          >
+                            Studio
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV82QualityFloor === "balanced"}
+                            className={dsV82QualityFloor === "balanced" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV82QualityFloor("balanced")}
+                          >
+                            Balanced
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV82QualityFloor === "strong"}
+                            className={dsV82QualityFloor === "strong" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV82QualityFloor("strong")}
+                          >
+                            Strong
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV82QualityFloor === "studio"
+                            ? "Studio: lightest degradation (~78%), most original detail survives — for images that already grade well."
+                            : dsV82QualityFloor === "strong"
+                            ? "Strong: deepest degradation (~50%), most total fingerprint destruction, then neural restore rebuilds the detail."
+                            : "Balanced: the recommended trade — ~62% degrade, full ghost clean at low res, neural restore + ghost_lite re-life."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Engine</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="DS ReMint V8.2 engine">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV82EngineMode === "adaptive"}
+                            className={dsV82EngineMode === "adaptive" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV82EngineMode("adaptive")}
+                          >
+                            Adaptive (detector-gated)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={dsV82EngineMode === "template"}
+                            className={dsV82EngineMode === "template" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setDsV82EngineMode("template")}
+                          >
+                            Optimised template
+                          </button>
+                        </div>
+                        <p className="rm-hint">
+                          {dsV82EngineMode === "adaptive"
+                            ? "Floors run lightest-first (Studio → Balanced → Strong); each candidate is probed on the DELIVERED bytes and the first that clears ships. +2 credits."
+                            : "One deterministic pass at the chosen floor. Fast and predictable, no detector calls."}
+                        </p>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Metadata</span>
+                        <select
+                          className="rm-select"
+                          value={dsV82MetadataMode}
+                          disabled={batchRunning}
+                          onChange={(event) =>
+                            setDsV82MetadataMode(event.target.value as "device" | "minimal")
+                          }
+                        >
+                          <option value="device">Device EXIF (coherent)</option>
+                          <option value="minimal">Minimal (no EXIF)</option>
+                        </select>
+                      </div>
+
+                      <label className="rm-switch">
+                        <input
+                          type="checkbox"
+                          checked={dsV82IphoneExif}
+                          disabled={batchRunning}
+                          onChange={(event) => setDsV82IphoneExif(event.target.checked)}
+                        />
+                        <span className="rm-switch-track" aria-hidden="true">
+                          <span className="rm-switch-thumb" />
+                        </span>
+                        <span>Coherent device EXIF</span>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {!dsV6Active && !dsV7Active && !dsV8Active && !dsV82Active ? (
                   <div className="rm-field-grid">
                     <label className="rm-field">
                       <span className="rm-field-label">Profile</span>
@@ -2637,6 +2838,7 @@ export default function MintApp() {
                         <option value="ds-remint-v7">DS ReMint V7 (new)</option>
                         <option value="ds-remint-v8">DS ReMint V8</option>
                         <option value="ds-remint-v8.1">DS ReMint V8.1 (new)</option>
+                        <option value="ds-remint-v8.2">DS ReMint V8.2 Max (new)</option>
                       </select>
                     </label>
                     <label className="rm-field">
@@ -2965,7 +3167,8 @@ export default function MintApp() {
                   !isCxProfile(deepCleanProfile) &&
                   !dsV6Active &&
                   !dsV7Active &&
-                  !dsV8Active ? (
+                  !dsV8Active &&
+                  !dsV82Active ? (
                     <details className="rm-disc">
                       <summary>
                         <SlidersHorizontal size={15} aria-hidden="true" /> Expert refinement

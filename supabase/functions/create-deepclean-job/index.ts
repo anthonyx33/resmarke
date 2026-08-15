@@ -35,6 +35,7 @@ type CreateJobBody = {
   ds_remint_v7?: unknown;
   ds_remint_v8?: unknown;
   ds_remint_v8_1?: unknown;
+  ds_remint_v8_2?: unknown;
   output_name_style?: unknown;
   output_name_custom?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
@@ -75,7 +76,8 @@ Deno.serve(async (request) => {
         "ds-remint-v6",
         "ds-remint-v7",
         "ds-remint-v8",
-        "ds-remint-v8.1"
+        "ds-remint-v8.1",
+        "ds-remint-v8.2"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -138,6 +140,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "ds-remint-v8.1"
         ? "max"
+        : requestedProfile === "ds-remint-v8.2"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -154,7 +158,8 @@ Deno.serve(async (request) => {
       requestedProfile === "ds-remint-v6" ||
       requestedProfile === "ds-remint-v7" ||
       requestedProfile === "ds-remint-v8" ||
-      requestedProfile === "ds-remint-v8.1"
+      requestedProfile === "ds-remint-v8.1" ||
+      requestedProfile === "ds-remint-v8.2"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -188,6 +193,8 @@ Deno.serve(async (request) => {
         ? dsRemintV8ExpertRefinement(body.ds_remint_v8)
         : requestedProfile === "ds-remint-v8.1"
         ? dsRemintV8_1ExpertRefinement(body.ds_remint_v8_1)
+        : requestedProfile === "ds-remint-v8.2"
+        ? dsRemintV8_2ExpertRefinement(body.ds_remint_v8_2)
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -253,6 +260,8 @@ Deno.serve(async (request) => {
               ? "ds-remint-v8"
               : requestedProfile === "ds-remint-v8.1"
               ? "ds-remint-v8.1"
+              : requestedProfile === "ds-remint-v8.2"
+              ? "ds-remint-v8.2"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -867,6 +876,93 @@ function dsRemintV8_1ExpertRefinement(input: unknown) {
           ? raw.template_preset
           : "balanced",
       max_rungs: 3,
+      ai_threshold: clampNumber(raw.ai_threshold, 0, 1, 0.45),
+      source_threshold: clampNumber(raw.source_threshold, 0, 1, 0.3),
+      deepfake_threshold: clampNumber(raw.deepfake_threshold, 0, 1, 0.1),
+      output_target:
+        raw.output_target === null || raw.output_target === undefined
+          ? null
+          : clampNumber(raw.output_target, 256, 8192, null),
+      jpeg_quality: clampNumber(raw.jpeg_quality, 60, 100, 94),
+      jpeg_subsampling:
+        typeof raw.jpeg_subsampling === "string" && subsamplings.includes(raw.jpeg_subsampling)
+          ? raw.jpeg_subsampling
+          : "4:2:2",
+      iphone_exif: iphoneExif,
+      metadata_mode: metadataMode,
+      device,
+      resolution_mode: resolutionMode,
+      x_resolution: xResolution,
+      y_resolution: yResolution
+    }
+  };
+}
+
+function dsRemintV8_2ExpertRefinement(input: unknown) {
+  // DS ReMint V8.2 Max: degrade -> low-res ghost launder -> neural restore ->
+  // ghost_lite re-life -> single encode. Same whitelist discipline.
+  const raw = isRecord(input) ? input : {};
+  const engineModes = ["template", "adaptive"];
+  const qualityFloors = ["studio", "balanced", "strong"];
+  const restoreEngines = ["neural", "classical"];
+  const subsamplings = ["4:2:0", "4:2:2", "4:4:4"];
+  const metadataModes = ["device", "minimal"];
+  const devices = [
+    "auto",
+    "iphone-16-pro-max",
+    "iphone-16-pro",
+    "iphone-16",
+    "iphone-15-pro-max",
+    "iphone-15-pro",
+    "iphone-15",
+    "iphone-14-pro"
+  ];
+  const resolutionModes = ["off", "standard", "custom"];
+
+  const engineMode =
+    typeof raw.engine_mode === "string" && engineModes.includes(raw.engine_mode)
+      ? raw.engine_mode
+      : "adaptive";
+  const qualityFloor =
+    typeof raw.quality_floor === "string" && qualityFloors.includes(raw.quality_floor)
+      ? raw.quality_floor
+      : "balanced";
+  const restoreEngine =
+    typeof raw.restore_engine === "string" && restoreEngines.includes(raw.restore_engine)
+      ? raw.restore_engine
+      : "neural";
+  const iphoneExif = typeof raw.iphone_exif === "boolean" ? raw.iphone_exif : true;
+  const metadataMode =
+    typeof raw.metadata_mode === "string" && metadataModes.includes(raw.metadata_mode)
+      ? raw.metadata_mode
+      : "device";
+  const device =
+    typeof raw.device === "string" && devices.includes(raw.device) ? raw.device : "auto";
+  const resolutionMode =
+    typeof raw.resolution_mode === "string" && resolutionModes.includes(raw.resolution_mode)
+      ? raw.resolution_mode
+      : "off";
+  const xResolution = clampNumber(raw.x_resolution, 1, 12000, 72);
+  const yResolution = clampNumber(raw.y_resolution, 1, 12000, 72);
+
+  return {
+    mode: "ds-remint-v8.2",
+    intensity: 100,
+    preserve_straight_lines: true,
+    techniques: {},
+    ds_remint_v8_2: {
+      engine_mode: engineMode,
+      quality_floor: qualityFloor,
+      pre_regen: true,
+      regen_level: 8,
+      regen_process_cap: 1536,
+      regen_timeout: 300,
+      color_restore: true,
+      color_restore_strength: 0.8,
+      restore_engine: restoreEngine,
+      restore_alpha: clampNumber(raw.restore_alpha, 0, 1, 0.55),
+      restore_timeout: clampNumber(raw.restore_timeout, 30, 900, 240),
+      degrade_floor_long_edge: clampNumber(raw.degrade_floor_long_edge, 512, 2048, 896),
       ai_threshold: clampNumber(raw.ai_threshold, 0, 1, 0.45),
       source_threshold: clampNumber(raw.source_threshold, 0, 1, 0.3),
       deepfake_threshold: clampNumber(raw.deepfake_threshold, 0, 1, 0.1),
