@@ -15,13 +15,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DIFFUSERS_CACHE=/runpod-volume/hf/diffusers \
     TORCH_HOME=/runpod-volume/torch \
     XDG_CACHE_HOME=/runpod-volume/.cache \
-    COMFYUI_BASE=/runpod-volume/ComfyUI
+    COMFYUI_BASE=/runpod-volume/ComfyUI \
+    CC=gcc \
+    TRITON_CACHE_DIR=/runpod-volume/.cache/triton
 
 WORKDIR /app
 
+# gcc/g++/libc6-dev are NOT optional despite this being a `-runtime` base image.
+# comfy_kitchen imports Triton's NVIDIA backend at module load, and that backend
+# JIT-compiles driver.c into a Python C extension on first import. Without a C
+# compiler it raises "Failed to find C compiler" and ComfyUI never becomes
+# ready. This only surfaces on a GPU host: on a CPU-only CI runner Triton bails
+# out earlier at driver discovery, before it ever tries to compile. CC is pinned
+# above so the compiler search is deterministic rather than order-dependent.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
+    gcc \
+    g++ \
+    libc6-dev \
     libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*

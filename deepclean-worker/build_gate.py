@@ -21,6 +21,7 @@ What this gate still proves, without a GPU:
 """
 
 import importlib.metadata as metadata
+import os
 import re
 import sys
 
@@ -110,6 +111,71 @@ def check_custom_op_schema():
     print("OK: na3d schema matches the owner-verified signature")
 
 
+def check_c_toolchain():
+    """Prove Triton can JIT-compile its CUDA driver shim at runtime.
+
+    Triton's NVIDIA backend compiles driver.c into a Python C extension the
+    first time it is imported. On a `-runtime` base image with no compiler that
+    raises "Failed to find C compiler" and ComfyUI never boots — and it only
+    shows up on a GPU host, because a CPU-only runner bails out earlier at
+    driver discovery. So compile the same shape of thing here: a C file that
+    includes Python.h, built into a shared object with the interpreter's own
+    include paths. That catches a missing compiler and missing Python headers
+    at build time instead of on RunPod.
+    """
+    import shutil
+    import subprocess
+    import sysconfig
+    import tempfile
+    from pathlib import Path
+
+    cc = os.environ.get("CC") or "gcc"
+    resolved = shutil.which(cc)
+    if not resolved:
+        raise SystemExit(f"FAIL: C compiler {cc!r} not found on PATH")
+    print(f"OK: C compiler {cc} -> {resolved}")
+
+    include_dir = sysconfig.get_paths()["include"]
+    header = Path(include_dir) / "Python.h"
+    if not header.is_file():
+        raise SystemExit(
+            f"FAIL: Python.h not found at {header}. Triton compiles a Python C "
+            "extension at import time and will fail without it; install the "
+            "interpreter's development headers in the image."
+        )
+    print(f"OK: Python.h present at {header}")
+
+    source = "#include <Python.h>\nint probe(void) { return 0; }\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        c_path = Path(tmp) / "probe.c"
+        so_path = Path(tmp) / "probe.so"
+        c_path.write_text(source, encoding="utf-8")
+        command = [
+            cc, "-shared", "-fPIC",
+            "-I", include_dir,
+            str(c_path), "-o", str(so_path),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0 or not so_path.exists():
+            raise SystemExit(
+                "FAIL: could not compile a Python C extension — Triton will fail "
+                "the same way at runtime.\n"
+                f"  command: {' '.join(command)}\n"
+                f"  stderr:  {result.stderr.strip()}"
+            )
+    print("OK: compiled a Python C extension (Python.h + linker reachable)")
+
+    # Triton ships its own cuda.h, so a -runtime base needs no CUDA headers.
+    # Confirm that assumption rather than discovering it on RunPod.
+    roots = [Path(p) / "triton" / "backends" / "nvidia" / "include" / "cuda.h"
+             for p in sys.path if p]
+    found = next((p for p in roots if p.is_file()), None)
+    if found is None:
+        print("WARN: triton's bundled cuda.h not found; runtime JIT may need CUDA headers")
+    else:
+        print(f"OK: triton bundles cuda.h at {found}")
+
+
 def check_comfy_kitchen_version():
     """Read comfy-kitchen's version from installed metadata WITHOUT importing it."""
     version = metadata.version("comfy-kitchen")
@@ -135,6 +201,7 @@ def main():
     print(f"--- build gate (CPU-safe) on python {sys.version.split()[0]} ---")
     check_versions()
     check_custom_op_schema()
+    check_c_toolchain()
     check_comfy_kitchen_version()
     check_engine_imports()
     print("OK: all CPU-safe build gates passed")
