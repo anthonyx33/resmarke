@@ -40,10 +40,11 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ds_remint_v7 import apply_ds_remint_v8_1, apply_ds_remint_v8_2  # noqa: E402
+from ds_remint_v8_8 import apply_ds_remint_v8_8  # noqa: E402
 from neural_texture import compare_images  # noqa: E402
 
 SUPPORTED_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
-FLOORS = ["studio", "balanced", "strong"]
+FLOORS = ["studio", "balanced", "strong", "light", "deep"]
 METADATA_MODES = ["device", "minimal"]
 
 
@@ -77,6 +78,22 @@ def run_config(mode, floor, metadata, input_path, out_jpg, args, creator_id, see
             input_path=str(input_path), output_path=str(out_jpg),
             creator_id=creator_id, settings=settings, seed_extra=seed_extra,
         )
+    elif mode == "v8.8":
+        strength = floor if floor in ("light", "balanced", "deep") else "balanced"
+        settings = {
+            "mode": "ds-remint-v8.8",
+            "ds_remint_v8_8": {
+                "engine_mode": "template",
+                "pre_regen": bool(args.pre_regen),
+                "strength": strength,
+                "metadata_mode": metadata,
+                "iphone_exif": metadata == "device",
+            },
+        }
+        report = apply_ds_remint_v8_8(
+            input_path=str(input_path), output_path=str(out_jpg),
+            creator_id=creator_id, settings=settings, seed_extra=seed_extra,
+        )
     else:
         settings = {
             "mode": "ds-remint-v8.2",
@@ -101,7 +118,7 @@ def main() -> int:
     parser.add_argument("input_dir", type=Path)
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("--scores", type=Path, help="Manual grader verdicts keyed by output filename.")
-    parser.add_argument("--mode", choices=["v8.2", "v8.1"], default="v8.2")
+    parser.add_argument("--mode", choices=["v8.2", "v8.1", "v8.8"], default="v8.2")
     parser.add_argument("--floors", default="balanced,strong", help="Comma list from studio,balanced,strong.")
     parser.add_argument("--metadata", default="device,minimal", help="Comma list from device,minimal.")
     parser.add_argument("--control", choices=["v8.1-balanced"], default=None,
