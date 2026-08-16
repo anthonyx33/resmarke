@@ -47,6 +47,7 @@ PRESETS = {
         "deblock_amt": 0.12,
         "mosquito_luma": 0.08,
         "mosquito_chroma": 0.20,
+        "luma_shrink_base": 0.35,
         "shadow_luma_floor": 0.88,
         "shadow_chroma_floor": 0.80,
         "shadow_shrink": 0.5,
@@ -59,8 +60,9 @@ PRESETS = {
         "deblock_amt": 0.22,
         "mosquito_luma": 0.15,
         "mosquito_chroma": 0.35,
-        "shadow_luma_floor": 0.75,
-        "shadow_chroma_floor": 0.62,
+        "luma_shrink_base": 0.7,
+        "shadow_luma_floor": 0.70,
+        "shadow_chroma_floor": 0.60,
         "shadow_shrink": 0.7,
         "chroma_guided": 0.65,
         "chroma_gain": 0.08,
@@ -71,6 +73,7 @@ PRESETS = {
         "deblock_amt": 0.38,
         "mosquito_luma": 0.25,
         "mosquito_chroma": 0.50,
+        "luma_shrink_base": 0.9,
         "shadow_luma_floor": 0.65,
         "shadow_chroma_floor": 0.50,
         "shadow_shrink": 0.9,
@@ -398,11 +401,52 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
     edge_band = _dilate(strong_edge.astype(np.float32), 2)
 
     y_sm = _gauss(y, 1.2)
-    local_var = _box(y * y, 4) - _box(y, 4) ** 2
-    flat_mask = np.clip(local_var < 0.006 ** 2, 0.0, 1.0) * np.clip(
-        gm < 0.04, 0.0, 1.0
+
+    # Fine band + local variance drive BOTH the noise model and the
+    # structural-flatness mask. Flatness is NOISE-AWARE: "flat" means no
+    # structure ABOVE the noise floor -- a grainy mid-luma wall is flat,
+    # and a variance-only detector (which reads grain as texture) misses
+    # exactly the owner's worst-case region.
+    l0 = _gauss(y, 0.6)
+    l1 = _gauss(y, 1.2)
+    h0 = y - l0
+    h1 = l0 - l1
+    var_h0 = _box(h0 * h0, 3) - _box(h0, 3) ** 2
+
+    # Per-luminance noise floor (C8 section 3): MAD of the fine band over
+    # the LOWEST-VARIANCE (noise-dominated) pixels, per luma bin.
+    bins = 16
+    bin_idx = np.clip((y * bins).astype(np.int32), 0, bins - 1)
+    noise_bool = var_h0 < float(np.quantile(var_h0, 0.25))
+    sigma_n = np.zeros(bins, dtype=np.float32)
+    for k in range(bins):
+        sel = noise_bool & (bin_idx == k)
+        if sel.sum() > 8:
+            vals = h0[sel]
+            med_k = float(np.median(vals))
+            sigma_n[k] = 1.4826 * float(np.median(np.abs(vals - med_k)))
+    valid = sigma_n > 0
+    if valid.any():
+        xs = np.nonzero(valid)[0].astype(np.float32)
+        ys = sigma_n[valid].astype(np.float32)
+        all_x = np.arange(bins, dtype=np.float32)
+        sigma_n = np.interp(all_x, xs, ys, left=ys[0], right=ys[-1])
+    else:
+        sigma_n = np.full(bins, float(np.std(h0)), dtype=np.float32)
+    sigma_n = np.maximum(sigma_n, 1e-3)
+    sigma_n_img = sigma_n[bin_idx]
+
+    # 8x headroom: after a q92 decode the fine band is dominated by
+    # quantization grain with variance ~2x the MAD-based noise floor, so a
+    # tighter headroom misclassifies grainy walls as textured and leaves the
+    # owner's worst-case region untouched. Structure at >8x noise energy is
+    # real texture and keeps its sharpen.
+    flat_float = np.clip(
+        (8.0 * sigma_n_img ** 2 - var_h0) / (8.0 * sigma_n_img ** 2 + 1e-12),
+        0.0,
+        1.0,
     )
-    flat_float = _box(flat_mask, 2)
+    flat_float = _box(flat_float, 2)
 
     shadow = np.clip((0.34 - y_sm) / 0.22, 0.0, 1.0)
 
@@ -420,39 +464,13 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
     # ---- Shadow noise regularization (two-band Wiener with hard floors) ---
     # C8: shrink ONLY the fine band H0 = Y - G_0.6(Y); preserve the mid band
     # H1 = G_0.6(Y) - G_1.2(Y). Removing both bands is how images become waxy.
-    l0 = _gauss(y, 0.6)
-    l1 = _gauss(y, 1.2)
-    h0 = y - l0
-    h1 = l0 - l1
-    var_h0 = _box(h0 * h0, 3) - _box(h0, 3) ** 2
-
-    # Per-luminance noise floor from flat patches (C8 section 3): MAD of the
-    # high band across 16 luma bins, interpolated over empty bins.
-    bins = 16
-    flat_bool = flat_mask > 0.5
-    if flat_bool.sum() > 256:
-        bin_idx = np.clip((y * bins).astype(np.int32), 0, bins - 1)
-        sigma_n = np.zeros(bins, dtype=np.float32)
-        med = np.zeros(bins, dtype=np.float32)
-        for k in range(bins):
-            sel = flat_bool & (bin_idx == k)
-            if sel.sum() > 8:
-                vals = h0[sel]
-                med[k] = float(np.median(vals))
-                sigma_n[k] = 1.4826 * float(np.median(np.abs(vals - med[k])))
-        valid = sigma_n > 0
-        if valid.any():
-            xs = np.nonzero(valid)[0].astype(np.float32)
-            ys = sigma_n[valid].astype(np.float32)
-            all_x = np.arange(bins, dtype=np.float32)
-            sigma_n = np.interp(all_x, xs, ys, left=ys[0], right=ys[-1])
-        else:
-            sigma_n = np.full(bins, float(np.std(h0[flat_bool])), dtype=np.float32)
-    else:
-        sigma_n = np.full(bins, float(np.std(h0)), dtype=np.float32)
-    sigma_n_img = sigma_n[np.clip((y * bins).astype(np.int32), 0, bins - 1)]
-
-    w_shrink = np.clip(shadow + 0.6 * flat_float, 0.0, 1.0)
+    # Luma shrink weight: shadow-boosted baseline. The Wiener gain itself
+    # separates noise from structure (texture keeps its energy), so no
+    # additional flat gating is needed -- gating was exactly what left the
+    # owner's grainy lit walls untouched.
+    w_shrink = np.clip(
+        p["luma_shrink_base"] + (1.0 - p["luma_shrink_base"]) * shadow, 0.0, 1.0
+    )
     wiener = np.clip(
         (var_h0 - (sigma_n_img ** 2)) / (var_h0 + 1e-9),
         0.0,
@@ -464,7 +482,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
     y = l1 + h1 + h0
 
     # Chroma: same idea, stronger floors.
-    flat_bool_c = flat_mask > 0.5
+    flat_bool_c = flat_float > 0.5
     chroma_cleaned = []
     for ch in (cb, cr):
         c_sm = _gauss(ch, 0.8)
@@ -479,7 +497,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
             (var_c - sigma_c ** 2) / (var_c + 1e-9), 0.0, 1.0
         ) ** p["shadow_shrink"]
         g_c = np.maximum(wiener_c, p["shadow_chroma_floor"])
-        w_c = np.clip(0.9 * shadow + 0.8 * flat_float, 0.0, 1.0)
+        w_c = np.clip(0.9 * shadow + 1.0 * flat_float, 0.0, 1.0)
         g_c = 1.0 - w_c * (1.0 - g_c)
         chroma_cleaned.append(c_sm + c_hf * g_c)
     cb, cr = chroma_cleaned
@@ -552,7 +570,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
     # ---- QC pass ------------------------------------------------------------
     qc, passed = _run_qc(
         y_before, y, cb_before, cb, cr_before, cr,
-        flat_mask, edge_band, shadow, standalone, seed_extra, scale,
+        flat_float, edge_band, shadow, standalone, seed_extra, scale,
     )
 
     # ---- Emergency deterministic dither if banding QC tripped ---------------
@@ -561,7 +579,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
         y = y + noise * flat_float
         qc, passed = _run_qc(
             y_before, y, cb_before, cb, cr_before, cr,
-            flat_mask, edge_band, shadow, standalone, seed_extra, scale,
+            flat_float, edge_band, shadow, standalone, seed_extra, scale,
             dithered=True,
         )
 
@@ -583,6 +601,10 @@ def _run_qc(
         cb_after = _resample2d(cb_after, s, 2)
         cr_after = _resample2d(cr_after, s, 2)
         edge_band = _resample2d(edge_band, s, 2)
+        flat_mask = _resample2d(flat_mask, s, 2)
+    elif flat_mask.shape != y_before.shape:
+        s = y_before.shape[1] / float(flat_mask.shape[1])
+        flat_mask = _resample2d(flat_mask, s, 2)
     hf_before = y_before - _gauss(y_before, 0.7)
     hf_after = y_after - _gauss(y_after, 0.7)
 
@@ -595,12 +617,15 @@ def _run_qc(
     rms_after = float(np.sqrt(np.mean((hf_after * region) ** 2)))
     noise_floor_ratio = rms_after / max(rms_before, 1e-9)
 
+    # Flatness increase: RELATIVE variance collapse in flat regions (an
+    # absolute floor misfires on legitimately deblocked smooth JPEG areas).
     var_hf_before = _box(hf_before * hf_before, 4)
     var_hf_after = _box(hf_after * hf_after, 4)
     flat_bool = flat_mask > 0.5
     if flat_bool.sum() > 256:
-        flat_before = float(np.mean(var_hf_before[flat_bool] < 1e-5))
-        flat_after = float(np.mean(var_hf_after[flat_bool] < 1e-5))
+        collapse = (var_hf_after < 0.3 * np.maximum(var_hf_before, 1e-12)) & flat_bool
+        flat_before = 0.0
+        flat_after = float(np.mean(collapse[flat_bool]))
     else:
         flat_before = flat_after = 0.0
     flatness_delta = flat_after - flat_before
@@ -652,16 +677,15 @@ def _run_qc(
         gx_b = np.abs(y_before[:, 1:] - y_before[:, :-1])
         gx_a = np.abs(y_after[:, 1:] - y_after[:, :-1])
         grid = (np.arange(w - 1) % 8 == 7)
-        smooth_band = flat_mask[:, 1:] + flat_mask[:, :-1] > 1.0
+        smooth_band = np.clip(flat_mask[:, 1:] + flat_mask[:, :-1], 0, 1) > 1.0
         if smooth_band.sum() > 256 and np.sum(~grid) > 0:
-            b8_before = float(
-                np.mean(gx_b[smooth_band][:, grid])
-                / max(float(np.mean(gx_b[smooth_band][:, ~grid])), 1e-9)
-            )
-            b8_after = float(
-                np.mean(gx_a[smooth_band][:, grid])
-                / max(float(np.mean(gx_a[smooth_band][:, ~grid])), 1e-9)
-            )
+            wgt = smooth_band.astype(np.float32)
+            grid_num_b = float(np.sum((gx_b * wgt)[:, grid]) / max(float(np.sum(wgt[:, grid])), 1e-9))
+            grid_den_b = float(np.sum((gx_b * wgt)[:, ~grid]) / max(float(np.sum(wgt[:, ~grid])), 1e-9))
+            grid_num_a = float(np.sum((gx_a * wgt)[:, grid]) / max(float(np.sum(wgt[:, grid])), 1e-9))
+            grid_den_a = float(np.sum((gx_a * wgt)[:, ~grid]) / max(float(np.sum(wgt[:, ~grid])), 1e-9))
+            b8_before = grid_num_b / max(grid_den_b, 1e-9)
+            b8_after = grid_num_a / max(grid_den_a, 1e-9)
             b8_ok = b8_after <= b8_before * 1.25 + 0.02
 
     # Fidelity: SSIM on luma at a proxy scale (both arrays are native-sized).
