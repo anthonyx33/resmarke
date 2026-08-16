@@ -995,10 +995,30 @@ def delete_storage_object(bucket, storage_path):
         print(f"Warning: failed to delete {bucket}/{storage_path}: {response.status_code}")
 
 
+def _json_safe(value):
+    """Recursively coerce numpy scalars/arrays (and Path objects) to plain
+    JSON-serializable Python types. Engine reports are assembled deep inside
+    numpy-heavy pipelines (coherent camera, quality finish QC) and can leak a
+    bare np.float32/np.int64/etc; json.dumps rejects those. This changes only
+    the wire representation of a number (np.float32(0.93) -> 0.93), never the
+    value itself, so report contents are unchanged."""
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, Path):
+        return str(value)
+    return value
+
+
 def notify(webhook_url, secret, body):
     response = requests.post(
         webhook_url,
-        data=json.dumps({**body, "signature": secret}),
+        data=json.dumps({**_json_safe(body), "signature": secret}),
         headers={"content-type": "application/json"},
         timeout=30,
     )
