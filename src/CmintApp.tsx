@@ -1401,6 +1401,9 @@ export default function CmintApp() {
                         <div className="cm-qc">
                           <QcRow label="SSIM vs input" value={qfReport.qc.ssim} />
                           <QcRow label="Noise floor kept" value={qfReport.qc.noise_floor_ratio} />
+                          <QcRow label="Grain correlation ρ₁" value={qfReport.qc.rho1} />
+                          <QcRow label="Residual RMS (LSB)" value={qfReport.qc.residual_rms} />
+                          <QcRow label="H1/H0 ratio" value={qfReport.qc.h1h0_ratio} />
                           <QcRow label="Ringing" value={qfReport.qc.ringing} />
                           <QcRow label="Flatness Δ" value={qfReport.qc.flatness_delta} />
                           <div className="cm-qc-row">
@@ -1640,6 +1643,9 @@ type QfView = {
   qc?: {
     ssim?: number;
     noise_floor_ratio?: number;
+    rho1?: number;
+    residual_rms?: number;
+    h1h0_ratio?: number;
     ringing?: number;
     flatness_delta?: number;
   };
@@ -1667,6 +1673,9 @@ function readQfReport(engine: Record<string, unknown> | undefined): QfView | nul
       ? {
           ssim: numberOr(qc.ssim),
           noise_floor_ratio: numberOr(qc.noise_floor_ratio),
+          rho1: numberOr(qc.rho1),
+          residual_rms: numberOr(qc.residual_rms),
+          h1h0_ratio: numberOr(qc.h1h0_ratio),
           ringing: numberOr(qc.ringing),
           flatness_delta: numberOr(qc.flatness_delta)
         }
