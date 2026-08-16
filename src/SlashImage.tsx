@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowRight,
   Check,
   ChevronDown,
@@ -104,6 +105,9 @@ export default function SlashImage() {
   const [dragging, setDragging] = useState(false);
   const [running, setRunning] = useState(false);
   const [statusLine, setStatusLine] = useState("");
+  const [downloadingId, setDownloadingId] = useState("");
+  const [zipBusy, setZipBusy] = useState(false);
+  const [notice, setNotice] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -306,6 +310,85 @@ export default function SlashImage() {
       const job = await getDeepCleanJob(jobId);
       if (job.status === "completed" || job.status === "failed") return job;
       if (Date.now() > deadline) throw new Error("Timed out waiting for the worker.");
+    }
+  }
+
+  /* ---------------- downloads ---------------- */
+
+  function outputNameFor(item: QueueItem, position?: number) {
+    const raw = item.file.name.replace(/\.[^.]+$/, "");
+    const base = raw.replace(/[<>:"/\\|?*\u0000-\u001f\s]+/g, "-").slice(0, 90) || "image";
+    const prefix = position === undefined ? "" : `${String(position + 1).padStart(2, "0")}-`;
+    const suffix = mode === "finish" ? "finish" : mode === "remint" ? "remint" : "slash";
+    return `${prefix}${base}-${suffix}.jpg`;
+  }
+
+  function saveBlob(blob: Blob, name: string) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function freshJob(item: QueueItem) {
+    if (!item.job?.id) throw new Error("This image has no completed job.");
+    const job = await getDeepCleanJob(item.job.id);
+    if (job.status !== "completed" || !job.outputUrl) throw new Error("Output is not ready yet.");
+    setQueue((q) =>
+      q.map((x) => (x.id === item.id ? { ...x, status: "completed", job, outputUrl: job.outputUrl } : x))
+    );
+    return job;
+  }
+
+  async function downloadItem(item: QueueItem) {
+    if (downloadingId || zipBusy) return;
+    setDownloadingId(item.id);
+    setNotice("");
+    try {
+      const job = await freshJob(item);
+      const response = await fetch(job.outputUrl as string);
+      if (!response.ok) throw new Error("The secure download link could not be opened.");
+      saveBlob(await response.blob(), outputNameFor(item));
+      setNotice(`Saved ${outputNameFor(item)}.`);
+    } catch (nextError) {
+      setNotice(nextError instanceof Error ? nextError.message : "Download failed.");
+    } finally {
+      setDownloadingId("");
+    }
+  }
+
+  async function downloadAll() {
+    const done = queue.filter((item) => item.status === "completed" && item.job?.id);
+    if (!done.length || zipBusy || downloadingId) return;
+    setZipBusy(true);
+    setNotice(`Preparing ${done.length} images…`);
+    try {
+      const files: Record<string, Uint8Array> = {};
+      for (const [index, item] of done.entries()) {
+        const job = await freshJob(item);
+        const response = await fetch(job.outputUrl as string);
+        if (!response.ok) throw new Error(`Could not download ${item.file.name}.`);
+        files[outputNameFor(item, index)] = new Uint8Array(await response.arrayBuffer());
+        setNotice(`Packaging ${index + 1} of ${done.length}…`);
+      }
+      const { zip } = await import("fflate");
+      const zipped = await new Promise<Uint8Array>((resolve, reject) => {
+        zip(files, { level: 0 }, (zipError, data) => (zipError ? reject(zipError) : resolve(data)));
+      });
+      const buffer = zipped.buffer.slice(
+        zipped.byteOffset,
+        zipped.byteOffset + zipped.byteLength
+      ) as ArrayBuffer;
+      saveBlob(new Blob([buffer], { type: "application/zip" }), "slash-images.zip");
+      setNotice(`${done.length} images downloaded as a ZIP.`);
+    } catch (nextError) {
+      setNotice(nextError instanceof Error ? nextError.message : "The ZIP could not be created.");
+    } finally {
+      setZipBusy(false);
     }
   }
 
@@ -644,6 +727,16 @@ export default function SlashImage() {
                   {failedCount > 0 ? ` · ${failedCount} failed` : ""}
                 </span>
                 <div className="slash-summary-actions">
+                  {doneCount > 0 ? (
+                    <button
+                      className="slash-btn slash-btn-ghost"
+                      disabled={zipBusy || running}
+                      onClick={() => void downloadAll()}
+                    >
+                      {zipBusy ? <Loader2 size={14} className="slash-spin" /> : <Archive size={14} />}
+                      Download all ({doneCount})
+                    </button>
+                  ) : null}
                   {queue.length > 1 && doneCount === 0 && failedCount === 0 ? (
                     <button className="slash-btn slash-btn-ghost" onClick={() => setQueue([])}>
                       <Trash2 size={14} /> Clear
@@ -693,15 +786,19 @@ export default function SlashImage() {
                       )}
                     </div>
                     <div className="slash-item-actions">
-                      {item.status === "completed" && item.outputUrl ? (
-                        <a
-                          className="slash-icon-btn"
-                          href={item.outputUrl}
-                          title="Download"
-                          download={item.job?.outputName ?? item.file.name}
+                      {item.status === "completed" ? (
+                        <button
+                          className="slash-btn slash-btn-primary slash-btn-sm"
+                          disabled={downloadingId === item.id || zipBusy}
+                          onClick={() => void downloadItem(item)}
                         >
-                          <Download size={16} />
-                        </a>
+                          {downloadingId === item.id ? (
+                            <Loader2 size={13} className="slash-spin" />
+                          ) : (
+                            <Download size={13} />
+                          )}
+                          Save
+                        </button>
                       ) : null}
                       {!running && item.status !== "processing" ? (
                         <button
@@ -723,6 +820,7 @@ export default function SlashImage() {
           ) : null}
 
           {statusLine ? <p className="slash-status-line">{statusLine}</p> : null}
+          {notice ? <p className="slash-notice">{notice}</p> : null}
         </section>
       </main>
 
