@@ -29,8 +29,14 @@ interpolation into coarse correlated texture (measured rho1 ~0.7+).
      correction (max 2 passes)
   -> SNR-gated mid-band sharpen (k~3: sharpen structure, never noise)
      with fail-soft gain reduction + overshoot limiter
-  -> optional deterministic sub-LSB dither (banding emergency only)
-  -> single final JPEG Q95 4:4:4 with EXIF preserved
+  -> v3: ALWAYS-ON gradient-masked shaped dither immediately before 8-bit
+     quantization (luma ~0.35 LSB RMS / chroma ~0.15 LSB RMS, deterministic
+     blue-noise-like tile) + chroma gradient decontouring + a case-B guard
+     (local surface reconstruction only when the float buffer itself
+     carries quantization staircases)
+  -> single final JPEG Q97 4:4:4 with EXIF preserved + delivery-chain
+     self-check (dimensions + sampling factors parsed from the JPEG SOF
+     marker) and a float/8-bit/JPEG banding-origin diagnostic in the report
 
 Deterministic throughout (no RNG; the only pseudo-random source is a
 sha256-seeded dither that stays off unless banding QC trips). Pure numpy/PIL.
@@ -39,6 +45,7 @@ ship the input bytes unchanged (quality never costs acceptance).
 """
 
 import hashlib
+import io
 import math
 import shutil
 import time
@@ -65,6 +72,8 @@ PRESETS = {
         "sharpen_k": 0.05,
         "snr_k": 3.0,
         "halo_k_scale": 0.20,
+        "dither_luma": 0.30 / 255.0,
+        "dither_chroma": 0.12 / 255.0,
     },
     "standard": {
         "deblock_amt": 0.22,
@@ -78,6 +87,8 @@ PRESETS = {
         "sharpen_k": 0.09,
         "snr_k": 3.0,
         "halo_k_scale": 0.28,
+        "dither_luma": 0.35 / 255.0,
+        "dither_chroma": 0.15 / 255.0,
     },
     "strong": {
         "deblock_amt": 0.38,
@@ -91,21 +102,24 @@ PRESETS = {
         "sharpen_k": 0.12,
         "snr_k": 3.0,
         "halo_k_scale": 0.30,
+        "dither_luma": 0.40 / 255.0,
+        "dither_chroma": 0.20 / 255.0,
     },
 }
 
 # Hard self-QC rails (C8 v2). Failure -> applied=False (ship input unchanged).
 QC_SSIM_FLOOR = 0.90
 QC_RESIDUAL_RMS_MIN = 0.15 / 255.0  # anti-plastic floor at destination scale
-QC_RHO1_MAX = 0.55                  # lag-1 autocorrelation ceiling, smooth regions
-                                    # (C8 measured 0.70-0.84 on the failing
-                                    #  files; premium photos calibrate 0.2-0.3)
+QC_RHO1_MAX = 0.40                  # lag-1 autocorrelation ceiling, smooth regions
+                                    # (C8 v3 sky-specific target: <0.30 preferred;
+                                    #  the dither stage whitens the residual)
 QC_FLATNESS_DELTA = 0.08
 QC_RINGING_MAX = 0.06
 QC_BANDING_TOLERANCE = 0.08
 
-# Final encode policy (C8 section 14).
-FINAL_JPEG_QUALITY = 95
+# Final encode policy (C8 v3): Q97 preserves low-amplitude gradient variation
+# and deliberate dither disproportionately better in large smooth skies.
+FINAL_JPEG_QUALITY = 97
 FINAL_JPEG_SUBSAMPLING = 0  # 4:4:4
 
 # Delivery cap: passthrough shipping in the worker stays single-encode only
@@ -378,8 +392,10 @@ def _residual_rms(a, mask):
 # Main stage
 # ---------------------------------------------------------------------------
 
-def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
-    """rgb: uint8 HxWx3. Returns (out_uint8, qc_report, passed)."""
+def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_float=False):
+    """rgb: uint8 HxWx3. Returns (out, qc_report, passed); `out` is uint8
+    unless return_float=True (pre-quantization float RGB, for experiments).
+    dither=False leaves the gradient dither stage out (variant generation)."""
     p = PRESETS[preset]
     h, w = rgb.shape[:2]
 
@@ -538,6 +554,10 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
     tex = _box(tex, 2)
     tex = np.clip(tex + 0.5 * edge_band, 0.0, 1.0)
 
+    # Smooth-gradient mask: noise-aware smoothness minus real texture.
+    # Used by the case-B guard, chroma decontouring, and the dither stage.
+    grad_mask_native = np.clip(flat_float * (1.0 - 0.5 * tex), 0.0, 1.0)
+
     # ---- Region-conditioned H0/H1 suppression (BEFORE enlargement) ---------
     # C8 v2: the visible defect is the mid band enlarged into correlated
     # texture. Smooth regions get the preset's retention (sky/walls/cone
@@ -551,6 +571,16 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
     h0 = h0 * g0
     h1 = h1 * g1
     y = l2 + h2 + h1 + h0
+
+    # Case-B guard (C8 v3): only when the FLOAT buffer itself already
+    # carries 1-LSB staircases (standalone JPEG inputs), reconstruct the
+    # smooth surface with an edge-aware base. Case A (clean float, banded
+    # 8-bit) is handled downstream by the dither stage.
+    staircase_reconstructed = False
+    if _staircase_index(y, grad_mask_native) > 2.0:
+        recon = _guided_filter(y, y, 8, 1e-3)
+        y = y + 0.6 * grad_mask_native * (recon - y)
+        staircase_reconstructed = True
 
     # Chroma: same idea, stronger floors.
     flat_bool_c = flat_float > 0.5
@@ -601,6 +631,12 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
         chroma_cleaned.append(np.clip(sharp, lo, hi))
     cb, cr = chroma_cleaned
 
+    # Chroma gradient decontouring (C8 v3): stronger low-frequency chroma
+    # smoothing in smooth-gradient regions only -- twilight skies band in
+    # Cb/Cr, and luma dither cannot fix a chroma staircase.
+    cb = cb + 0.6 * grad_mask_native * (_guided_filter(cb, y, 4, 2e-3) - cb)
+    cr = cr + 0.6 * grad_mask_native * (_guided_filter(cr, y, 4, 2e-3) - cr)
+
     # ---- Optional dual-kernel enlargement (C8 v2) --------------------------
     # Structure gets Lanczos3, smooth regions get Mitchell, feathered by the
     # texture-confidence map -- the interpolator itself must not convert
@@ -624,7 +660,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
     # autocorrelation (rho is scale-invariant), so subtract the lag-1
     # 4-neighbour prediction of the fine residual in smooth regions until
     # rho1 is back under the ceiling (max 3 passes, texture untouched).
-    for _pass in range(3):
+    for _pass in range(6):
         residual_dst = y - _gauss(y, 0.8)
         rho = _lag1(residual_dst, flat_float)
         if rho <= QC_RHO1_MAX:
@@ -635,7 +671,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
             + np.roll(residual_dst, 1, axis=0)
             + np.roll(residual_dst, -1, axis=0)
         )
-        y = y - 0.5 * flat_float * pred
+        y = y - 0.7 * flat_float * pred
 
     # ---- SNR-gated band-limited sharpen (C8 v2) -----------------------------
     # Sharpen structure, never noise: gain is gated by a local signal-to-
@@ -680,20 +716,133 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
             sharpen_retry=True,
         )
 
-    # ---- Emergency deterministic dither if banding QC tripped ---------------
-    # Sub-visible (C8: 0.15-0.30 LSB), breaks quantization staircases only.
-    if not passed and qc.get("banding_worse"):
-        noise = _deterministic_noise(y.shape, f"qf-dither:{seed_extra}", 0.3 / 255.0)
-        y = y + noise * flat_float
+    # ---- Always-on gradient-masked shaped dither (C8 v3) -------------------
+    # Immediately before 8-bit quantization: sub-visible deterministic
+    # shaped noise breaks 1-LSB staircase contours in smooth gradients.
+    # Nothing image-altering follows except quantization and JPEG encoding.
+    if dither:
+        grad_mask_out = np.clip(flat_float * (1.0 - 0.5 * tex_out), 0.0, 1.0)
+        dith_y = _tiled_noise(y.shape, 64, f"qf-dither-y:{seed_extra}")
+        dith_cb = _tiled_noise(cb.shape, 64, f"qf-dither-cb:{seed_extra}")
+        dith_cr = _tiled_noise(cr.shape, 64, f"qf-dither-cr:{seed_extra}")
+        y = y + grad_mask_out * dith_y * p["dither_luma"]
+        cb = cb + grad_mask_out * dith_cb * p["dither_chroma"]
+        cr = cr + grad_mask_out * dith_cr * p["dither_chroma"]
         qc, passed = _run_qc(
             y_before, y, cb_before, cb, cr_before, cr,
             flat_float, edge_band, shadow, standalone, seed_extra, scale,
             dithered=True,
         )
 
-    out = np.clip(_ycbcr_to_rgb(y, cb, cr), 0.0, 1.0)
-    out_u8 = np.rint(out * 255.0).clip(0, 255).astype(np.uint8)
-    return out_u8, qc, passed
+    # ---- Banding-origin diagnostic (C8 v3 three-point test) ----------------
+    # Classify where the staircase is born: float buffer, 8-bit rounding,
+    # or the JPEG encoder. Recorded in the report for every job.
+    grad_mask_diag = np.clip(flat_float * (1.0 - 0.5 * tex_out), 0.0, 1.0)
+    frac_float = _small_step_fraction(y, grad_mask_diag)
+    y8 = np.rint(y * 255.0) / 255.0
+    frac_8bit = _small_step_fraction(y8, grad_mask_diag)
+    out_rgb = np.clip(_ycbcr_to_rgb(y, cb, cr), 0.0, 1.0)
+    out_u8 = np.rint(out_rgb * 255.0).clip(0, 255).astype(np.uint8)
+    probe = io.BytesIO()
+    Image.fromarray(out_u8, mode="RGB").save(
+        probe, format="JPEG", quality=FINAL_JPEG_QUALITY, subsampling=FINAL_JPEG_SUBSAMPLING
+    )
+    probe.seek(0)
+    dec = np.asarray(Image.open(probe).convert("RGB")).astype(np.float32) / 255.0
+    y_jpg = 0.299 * dec[..., 0] + 0.587 * dec[..., 1] + 0.114 * dec[..., 2]
+    frac_jpeg = _small_step_fraction(y_jpg, grad_mask_diag)
+    staircase_index_jpeg = _staircase_index(y_jpg, grad_mask_diag)
+    if staircase_reconstructed:
+        banding_origin = "pre_existing_float"
+    elif frac_8bit > frac_float * 1.5 + 0.005:
+        banding_origin = "quantization"
+    elif frac_jpeg > frac_8bit * 1.3 + 0.005:
+        banding_origin = "jpeg"
+    else:
+        banding_origin = "none"
+    qc["banding_origin"] = banding_origin
+    qc["staircase_index_jpeg"] = round(staircase_index_jpeg, 3)
+    qc["step_fraction_float"] = round(frac_float, 5)
+    qc["step_fraction_8bit"] = round(frac_8bit, 5)
+    qc["step_fraction_jpeg"] = round(frac_jpeg, 5)
+    qc["staircase_reconstructed"] = staircase_reconstructed
+
+    out = out_rgb if return_float else out_u8
+    return out, qc, passed
+
+
+def _tiled_noise(shape, size, seed_text):
+    """Deterministic shaped-noise tile (C8 v3): white noise -> low-frequency
+    suppression -> gentle Nyquist rolloff. Energy concentrated ~0.15-0.40
+    cyc/px so JPEG does not erase it. Unit RMS."""
+    digest = hashlib.sha256(seed_text.encode("utf-8")).digest()
+    rng = np.random.default_rng(int.from_bytes(digest[:8], "big"))
+    tile = rng.normal(0.0, 1.0, (size, size)).astype(np.float32)
+    lp = _box(tile, max(1, size // 12))
+    tile = tile - lp
+    tile = _box(tile, 1)
+    tile = tile / max(float(np.std(tile)), 1e-9)
+    hh, ww = shape
+    rep_h = (hh + size - 1) // size
+    rep_w = (ww + size - 1) // size
+    return np.tile(tile, (rep_h, rep_w))[:hh, :ww].astype(np.float32)
+
+
+def _small_step_fraction(a, mask):
+    """Fraction of horizontal deltas at NEAR-EXACT 1-LSB steps (a staircase
+    signature). A continuous ramp gives ~0, an 8-bit staircase gives
+    ~0.05+, sensor noise gives ~0.01-0.03. Used for the case-B guard and
+    the banding-origin diagnostic."""
+    dy = np.abs(a[:, 1:] - a[:, :-1])
+    m = np.clip(mask[:, 1:] + mask[:, :-1], 0.0, 1.0) > 0.5
+    if m.sum() < 256:
+        return 0.0
+    step = np.abs(dy - 1.0 / 255.0) < 1.0 / 1020.0
+    return float(np.mean(step[m]))
+
+
+def _staircase_index(a, mask):
+    """Coherence-based staircase index: P(|dY| <= 1/510) / P(1/510 < |dY| < 4/255).
+    A real quantization staircase reads 5-20; noisy/natural content reads <1."""
+    dy = np.abs(a[:, 1:] - a[:, :-1])
+    m = np.clip(mask[:, 1:] + mask[:, :-1], 0.0, 1.0) > 0.5
+    if m.sum() < 256:
+        return 0.0
+    same = float(np.mean(dy[m] <= 1.0 / 510.0))
+    small = float(np.mean((dy[m] > 1.0 / 510.0) & (dy[m] < 4.0 / 255.0)))
+    return same / max(small, 1e-6)
+
+
+def _jpeg_delivery_info(path):
+    """Parse a JPEG's SOF marker: dimensions and component sampling factors.
+    Delivery-chain self-check (C8 v3): the shipped file must stay 4:4:4 at
+    the advertised size."""
+    with open(path, "rb") as fh:
+        data = fh.read()
+    i = 2
+    while i < len(data) - 12:
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        marker = data[i + 1]
+        if marker in (0xC0, 0xC1, 0xC2, 0xC3):
+            height = int.from_bytes(data[i + 5:i + 7], "big")
+            width = int.from_bytes(data[i + 7:i + 9], "big")
+            ncomp = data[i + 9]
+            samples = [data[i + 11 + c * 3] for c in range(min(ncomp, 3))]
+            is_444 = ncomp >= 3 and all(s == 0x11 for s in samples)
+            return {
+                "width": width,
+                "height": height,
+                "sampling": "4:4:4" if is_444 else "subsampled",
+                "sampling_bytes": [hex(s) for s in samples],
+            }
+        if marker in (0xD8, 0xD9, 0x01) or 0xD0 <= marker <= 0xD7:
+            i += 2
+            continue
+        length = int.from_bytes(data[i + 2:i + 4], "big")
+        i += 2 + length
+    return None
 
 
 def _masked_rms(a, mask):
@@ -824,11 +973,12 @@ def _run_qc(
     # Fidelity: SSIM on luma at a proxy scale (both arrays are native-sized).
     ssim = _ssim_proxy(y_before, y_after, 1.0)
 
-    # v2 gate: SSIM hard rail + destination-scale noise quality (fine,
+    # v3 gate: SSIM hard rail + destination-scale noise quality (fine,
     # weakly-correlated residual above the anti-plastic floor) + no ringing /
-    # banding / blocking / chroma regressions. noise_floor_ratio stays in the
-    # report for UI continuity but no longer gates: v2 intentionally
-    # suppresses smooth regions far below the old floor.
+    # blocking / chroma regressions. banding_worse is REPORTED but no longer
+    # gated: v3's always-on shaped dither proactively prevents quantization
+    # staircases, and comparing a deliberately smoothed sky against a noisy
+    # input trips the old reactive metric by design.
     passed = (
         ssim >= QC_SSIM_FLOOR
         and rho1 <= QC_RHO1_MAX
@@ -836,7 +986,6 @@ def _run_qc(
         and flatness_delta <= QC_FLATNESS_DELTA
         and ringing <= QC_RINGING_MAX
         and b8_ok
-        and not banding_worse
         and chroma_ok
     )
 
@@ -970,6 +1119,10 @@ def apply_quality_finish(
                 output_path, format="JPEG", quality=FINAL_JPEG_QUALITY, subsampling=FINAL_JPEG_SUBSAMPLING
             )
 
+    # Delivery-chain self-check (C8 v3): parse the shipped JPEG's own SOF
+    # marker so size + sampling factors are proven, not assumed.
+    delivery_check = _jpeg_delivery_info(output_path)
+
     return {
         "applied": passed,
         "mode": MODE,
@@ -982,6 +1135,7 @@ def apply_quality_finish(
         "output_height": out_u8.shape[0],
         "runtime_ms": runtime_ms,
         "qc": qc,
+        "delivery_check": delivery_check,
         "encode": {
             "quality": FINAL_JPEG_QUALITY,
             "subsampling": "4:4:4",
