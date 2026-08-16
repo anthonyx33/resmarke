@@ -1,32 +1,41 @@
-"""Quality Finish — standalone non-generative selective-restoration ISP.
+"""Quality Finish — standalone non-generative selective-restoration ISP (v2).
 
 Two-step architecture (owner decision, Aug 2026): the remint stages
 (V8.8/V8.9 coherent camera pipeline) stay frozen and untouched. This module
 is a completely separate sequence that runs AFTER a naturalized file has
-been delivered: it removes only compression-visible defects and perceptually
-excessive noise, preserves a measured residual noise floor, reconstructs
-chroma conservatively, and recovers acutance without boosting the highest
-frequency band.
+been delivered and restores perceived quality without any generative model.
 
-Design follows consultant C8's "selective restoration ISP" (filtered):
+v2 (consultant C8 second iteration, filtered): the noise field is now
+optimized for the DESTINATION resolution, not for preservation of the
+source-resolution noise field. The objectionable grain in sky/walls lived
+in the mid band H1 we previously preserved fully, enlarged by the 1.6x
+interpolation into coarse correlated texture (measured rho1 ~0.7+).
 
   decode -> JPEG-aware cleanup (chroma guide / selective 8x8 deblock /
   mosquito attenuation, standalone JPEG inputs only)
-  -> shared masks (shadow, flat, edge, saturated/clipped, chroma-edge)
-  -> two-band shadow noise shrinkage with HARD residual floors
-     (luma >= ~0.70-0.80x RMS, chroma >= ~0.55-0.70x RMS)
+  -> shared masks + FOUR-band decomposition (B / H2 / H1 / H0)
+  -> texture-confidence map (structure anisotropy + H1/H2 cross-scale
+     support + H2 energy): real material texture keeps its bands, noise
+     does not
+  -> region-conditioned H0 + H1 suppression BEFORE enlargement
+     (sky/walls/cone interiors get C8's table; texture preserved;
+     B and H2 always intact; luminance keeps a small SNR weight)
   -> weak gradient cleanup only where banding is already present
   -> saturated-edge chroma-width repair (guided + micro-sharpen, clamped)
-  -> optional single-pass 1.6x enlargement (Lanczos3/Y + anti-ring,
-     Lanczos2/C, hybrid Lanczos2 at extreme highlights)
-  -> ONE masked band-limited luma sharpen (flat gradients k=0, halo k~0)
-  -> overshoot limiter -> optional deterministic sub-LSB dither (emergency)
+  -> dual-kernel enlargement: Lanczos3 for structure, Mitchell for smooth
+     regions, feathered by texture confidence; Lanczos2 chroma
+  -> destination-scale residual QC: lag-1 autocorrelation, residual RMS,
+     H1/H0 ratio -- if the residual became coarse, one light smooth-region
+     correction (max 2 passes)
+  -> SNR-gated mid-band sharpen (k~3: sharpen structure, never noise)
+     with fail-soft gain reduction + overshoot limiter
+  -> optional deterministic sub-LSB dither (banding emergency only)
   -> single final JPEG Q95 4:4:4 with EXIF preserved
 
 Deterministic throughout (no RNG; the only pseudo-random source is a
 sha256-seeded dither that stays off unless banding QC trips). Pure numpy/PIL.
-If any self-QC floor fails, `applied` is False and the input bytes are
-shipped unchanged (quality is never allowed to cost acceptance).
+Hard self-QC rail: SSIM >= 0.90 and anti-plastic residual floors; failures
+ship the input bytes unchanged (quality never costs acceptance).
 """
 
 import hashlib
@@ -41,53 +50,57 @@ from PIL import Image
 MODE = "quality-finish"
 
 PRESETS = {
-    # C8's three presets. standard is the production default. strong is only
-    # for poor standalone JPEGs or unusually noisy naturalization outputs.
+    # C8 v2 gains: h0_smooth/h1_smooth are the fine/mid band RETENTION in
+    # smooth regions (sky, painted walls, cone interiors). Texture confidence
+    # raises retention toward 1.0; B and H2 are always preserved.
     "conservative": {
         "deblock_amt": 0.12,
         "mosquito_luma": 0.08,
         "mosquito_chroma": 0.20,
-        "luma_shrink_base": 0.35,
-        "shadow_luma_floor": 0.88,
+        "h0_smooth": 0.70,
+        "h1_smooth": 0.75,
         "shadow_chroma_floor": 0.80,
-        "shadow_shrink": 0.5,
         "chroma_guided": 0.45,
         "chroma_gain": 0.04,
         "sharpen_k": 0.05,
+        "snr_k": 3.0,
         "halo_k_scale": 0.20,
     },
     "standard": {
         "deblock_amt": 0.22,
         "mosquito_luma": 0.15,
         "mosquito_chroma": 0.35,
-        "luma_shrink_base": 0.7,
-        "shadow_luma_floor": 0.70,
+        "h0_smooth": 0.45,
+        "h1_smooth": 0.45,
         "shadow_chroma_floor": 0.60,
-        "shadow_shrink": 0.7,
         "chroma_guided": 0.65,
         "chroma_gain": 0.08,
         "sharpen_k": 0.09,
+        "snr_k": 3.0,
         "halo_k_scale": 0.28,
     },
     "strong": {
         "deblock_amt": 0.38,
         "mosquito_luma": 0.25,
         "mosquito_chroma": 0.50,
-        "luma_shrink_base": 0.9,
-        "shadow_luma_floor": 0.65,
+        "h0_smooth": 0.35,
+        "h1_smooth": 0.35,
         "shadow_chroma_floor": 0.50,
-        "shadow_shrink": 0.9,
         "chroma_guided": 0.85,
         "chroma_gain": 0.12,
         "sharpen_k": 0.12,
+        "snr_k": 3.0,
         "halo_k_scale": 0.30,
     },
 }
 
-# Hard self-QC floors (C8 section 16). Failure -> applied=False.
+# Hard self-QC rails (C8 v2). Failure -> applied=False (ship input unchanged).
 QC_SSIM_FLOOR = 0.90
-QC_NOISE_FLOOR_RATIO = 0.65
-QC_FLATNESS_DELTA = 0.05
+QC_RESIDUAL_RMS_MIN = 0.15 / 255.0  # anti-plastic floor at destination scale
+QC_RHO1_MAX = 0.55                  # lag-1 autocorrelation ceiling, smooth regions
+                                    # (C8 measured 0.70-0.84 on the failing
+                                    #  files; premium photos calibrate 0.2-0.3)
+QC_FLATNESS_DELTA = 0.08
 QC_RINGING_MAX = 0.06
 QC_BANDING_TOLERANCE = 0.08
 
@@ -213,12 +226,32 @@ def _guided_filter(src, guide, r, eps):
 # Enlargement: single-pass Lanczos with anti-ringing + highlight hybrid
 # ---------------------------------------------------------------------------
 
-def _resample_axis(a, scale, support, highlight=None):
+def _kernel_weights(frac, taps, support, kernel):
+    x = frac[:, None] - taps[None, :]
+    if kernel == "mitchell":
+        b, c = 1.0 / 3.0, 1.0 / 3.0
+        ax = np.abs(x)
+        w = np.where(
+            ax < 1,
+            (12 - 9 * b - 6 * c) * ax ** 3 + (-18 + 12 * b + 6 * c) * ax ** 2 + (6 - 2 * b),
+            np.where(
+                ax < 2,
+                (-b - 6 * c) * ax ** 3 + (6 * b + 30 * c) * ax ** 2 + (-12 * b - 48 * c) * ax + (8 * b + 24 * c),
+                0.0,
+            ),
+        ) / 6.0
+    else:
+        w = np.sinc(x) * np.sinc(x / support)
+    w /= w.sum(axis=1, keepdims=True)
+    return w.astype(np.float32)
+
+
+def _resample_axis(a, scale, support, highlight=None, kernel="lanczos"):
     """Resample along axis=1. a: (N, M) -> (N, round(M*scale)).
 
-    Lanczos-a kernel with a soft anti-ringing limiter; when `highlight` is
-    provided it is a float mask in the OUTPUT domain used to blend toward
-    Lanczos2 at extreme highlights (C8 section 7)."""
+    Lanczos-a or Mitchell-Netravali kernel with a soft anti-ringing limiter;
+    when `highlight` is provided it is a float mask in the OUTPUT domain used
+to blend toward Lanczos2 at extreme highlights (C8 section 7)."""
     if abs(scale - 1.0) < 1e-6:
         return a
     n, m = a.shape
@@ -228,22 +261,18 @@ def _resample_axis(a, scale, support, highlight=None):
     i0 = np.floor(src).astype(np.int64)
     frac = src - i0
     taps = np.arange(-support + 1, support + 1, dtype=np.int64)
+    if kernel == "mitchell":
+        taps = np.arange(-1, 3, dtype=np.int64)
     idx = i0[:, None] + taps[None, :]
     idx = np.clip(idx, 0, m - 1)
-    x = frac[:, None] - taps[None, :]
-    w = np.sinc(x) * np.sinc(x / support)
-    w /= w.sum(axis=1, keepdims=True)
-    w = w.astype(np.float32)
+    w = _kernel_weights(frac, taps, support, kernel)
 
     gathered = a[:, idx]  # (n, out_m, taps)
     out = np.einsum("nok,ok->no", gathered, w)
 
     if highlight is not None and support >= 3:
         # Hybrid: blend with Lanczos2 output inside the highlight mask.
-        x2 = frac[:, None] - taps[None, :]
-        w2 = np.sinc(x2) * np.sinc(x2 / 2.0)
-        w2 /= w2.sum(axis=1, keepdims=True)
-        w2 = w2.astype(np.float32)
+        w2 = _kernel_weights(frac, taps, 2, "lanczos")
         out2 = np.einsum("nok,ok->no", gathered, w2)
         hl = np.clip(highlight, 0.0, 1.0)
         out = (1.0 - hl) * out + hl * out2
@@ -281,23 +310,30 @@ def _resize_linear_axis(a, scale):
     return (1.0 - f)[None, :] * a[:, i0] + f[None, :] * a[:, i1]
 
 
-def _resample2d(a, scale, support, highlight=None):
+def _resample2d(a, scale, support, highlight=None, kernel="lanczos"):
     """Separable resample. `highlight` is a source-domain mask that is
     resized per axis so the hybrid applies in output space."""
     hl_x = None
     if highlight is not None:
         hl_x = _resize_linear_axis(highlight, scale)
-    tmp = _resample_axis(a, scale, support, hl_x)
+    tmp = _resample_axis(a, scale, support, hl_x, kernel)
     tmp = tmp.T
     hl_y = None
     if highlight is not None:
         hl_y = _resize_linear_axis(hl_x.T, scale)
-    out = _resample_axis(tmp, scale, support, hl_y)
+    out = _resample_axis(tmp, scale, support, hl_y, kernel)
     return out.T
 
 
-def _upscale_channel(channel, scale, support, highlight=None):
-    return _resample2d(channel, scale, support, highlight)
+def _upscale_channel(channel, scale, support, highlight=None, kernel="lanczos"):
+    return _resample2d(channel, scale, support, highlight, kernel)
+
+
+def _resize_mask(mask, scale):
+    """Linear resize of a float mask to the output domain."""
+    if abs(scale - 1.0) < 1e-6:
+        return mask
+    return _resize_linear_axis(_resize_linear_axis(mask, scale).T, scale).T
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +348,30 @@ def _deterministic_noise(shape, seed_text, rms):
     arr = np.frombuffer(raw, dtype=np.uint8).astype(np.float32) / 255.0
     arr = arr.reshape(shape)
     return (arr - arr.mean()) * (rms / max(arr.std(), 1e-9))
+
+
+def _lag1(residual, mask):
+    """Max absolute lag-1 autocorrelation of a detrended residual inside a
+    soft mask. Coarse correlated grain (the v2 failure mode) reads 0.5+."""
+    m = np.clip(mask, 0.0, 1.0)
+    mh = m[:, :-1] * m[:, 1:]
+    mv = m[:-1, :] * m[1:, :]
+    num_h = float(np.sum(residual[:, :-1] * residual[:, 1:] * mh))
+    den_h = float(np.sum((residual[:, :-1] ** 2) * mh))
+    num_v = float(np.sum(residual[:-1, :] * residual[1:, :] * mv))
+    den_v = float(np.sum((residual[:-1, :] ** 2) * mv))
+    rho_h = num_h / max(den_h, 1e-12)
+    rho_v = num_v / max(den_v, 1e-12)
+    return max(abs(rho_h), abs(rho_v))
+
+
+def _residual_rms(a, mask):
+    """RMS of the detrended residual inside a soft mask (destination scale)."""
+    r = a - _gauss(a, 0.8)
+    m = np.clip(mask, 0.0, 1.0)
+    if float(m.sum()) < 256.0:
+        m = np.ones_like(m)
+    return float(np.sqrt(np.sum((r * m) ** 2) / max(float(np.sum(m)), 1.0)))
 
 
 # ---------------------------------------------------------------------------
@@ -395,22 +455,22 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
             chroma_cleaned.append(ch - p["mosquito_chroma"] * r_c * weight)
         cb, cr = chroma_cleaned
 
-    # ---- Shared masks (computed once, reused by every stage) --------------
+    # ---- Shared masks + four-band decomposition ----------------------------
     gm = _grad_mag(y)
     strong_edge = gm > 0.07
     edge_band = _dilate(strong_edge.astype(np.float32), 2)
 
     y_sm = _gauss(y, 1.2)
 
-    # Fine band + local variance drive BOTH the noise model and the
-    # structural-flatness mask. Flatness is NOISE-AWARE: "flat" means no
-    # structure ABOVE the noise floor -- a grainy mid-luma wall is flat,
-    # and a variance-only detector (which reads grain as texture) misses
-    # exactly the owner's worst-case region.
-    l0 = _gauss(y, 0.6)
+    # Four-band decomposition (C8 v2): B carries the illumination base, H2
+    # the large-scale structure, H1 the mid band, H0 the fine band. B and H2
+    # are preserved fully; H0/H1 get region-conditioned gains below.
+    l2 = _gauss(y, 2.4)
     l1 = _gauss(y, 1.2)
-    h0 = y - l0
+    l0 = _gauss(y, 0.6)
+    h2 = l1 - l2
     h1 = l0 - l1
+    h0 = y - l0
     var_h0 = _box(h0 * h0, 3) - _box(h0, 3) ** 2
 
     # Per-luminance noise floor (C8 section 3): MAD of the fine band over
@@ -436,11 +496,9 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
     sigma_n = np.maximum(sigma_n, 1e-3)
     sigma_n_img = sigma_n[bin_idx]
 
-    # 8x headroom: after a q92 decode the fine band is dominated by
-    # quantization grain with variance ~2x the MAD-based noise floor, so a
-    # tighter headroom misclassifies grainy walls as textured and leaves the
-    # owner's worst-case region untouched. Structure at >8x noise energy is
-    # real texture and keeps its sharpen.
+    # Noise-aware structural smoothness S: no structure ABOVE the noise
+    # floor. 8x headroom absorbs the q92 quantization grain (variance ~2x
+    # the MAD-based floor) so grainy lit walls classify as smooth.
     flat_float = np.clip(
         (8.0 * sigma_n_img ** 2 - var_h0) / (8.0 * sigma_n_img ** 2 + 1e-12),
         0.0,
@@ -461,25 +519,38 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
 
     chroma_edge = _grad_mag(cb) + _grad_mag(cr) > 0.03
 
-    # ---- Shadow noise regularization (two-band Wiener with hard floors) ---
-    # C8: shrink ONLY the fine band H0 = Y - G_0.6(Y); preserve the mid band
-    # H1 = G_0.6(Y) - G_1.2(Y). Removing both bands is how images become waxy.
-    # Luma shrink weight: shadow-boosted baseline. The Wiener gain itself
-    # separates noise from structure (texture keeps its energy), so no
-    # additional flat gating is needed -- gating was exactly what left the
-    # owner's grainy lit walls untouched.
-    w_shrink = np.clip(
-        p["luma_shrink_base"] + (1.0 - p["luma_shrink_base"]) * shadow, 0.0, 1.0
-    )
-    wiener = np.clip(
-        (var_h0 - (sigma_n_img ** 2)) / (var_h0 + 1e-9),
-        0.0,
-        1.0,
-    ) ** p["shadow_shrink"]
-    g = np.maximum(wiener, p["shadow_luma_floor"])
-    g = 1.0 - w_shrink * (1.0 - g)
-    h0 = h0 * g
-    y = l1 + h1 + h0
+    # ---- Texture confidence T (C8 v2) --------------------------------------
+    # Real material texture has cross-scale support: H1 energy backed by
+    # H2/structural features. Noise has H0/H1 energy without H2 support.
+    gx = np.zeros_like(y)
+    gy = np.zeros_like(y)
+    gx[:, 1:-1] = (y[:, 2:] - y[:, :-2]) * 0.5
+    gy[1:-1, :] = (y[2:, :] - y[:-2, :]) * 0.5
+    gxx = _box(gx * gx, 4)
+    gyy = _box(gy * gy, 4)
+    gxy = _box(gx * gy, 4)
+    anisotropy = np.sqrt((gxx - gyy) ** 2 + 4 * gxy * gxy) / (gxx + gyy + 1e-9)
+    e_h2 = np.sqrt(_box(h2 * h2, 4))
+    e_h1 = np.sqrt(_box(h1 * h1, 4))
+    cross = _box(np.abs(h1) * np.abs(h2), 4) / (e_h1 * e_h2 + 1e-9)
+    e_h2_n = np.clip(e_h2 / (4.0 * sigma_n_img + 1e-9), 0.0, 1.0)
+    tex = np.clip(0.4 * anisotropy + 0.35 * cross + 0.25 * e_h2_n, 0.0, 1.0)
+    tex = _box(tex, 2)
+    tex = np.clip(tex + 0.5 * edge_band, 0.0, 1.0)
+
+    # ---- Region-conditioned H0/H1 suppression (BEFORE enlargement) ---------
+    # C8 v2: the visible defect is the mid band enlarged into correlated
+    # texture. Smooth regions get the preset's retention (sky/walls/cone
+    # interiors); texture confidence raises retention toward 1.0; luminance
+    # keeps a small SNR weight without being its own class.
+    w_region = np.clip(0.3 * shadow + 0.7 * flat_float, 0.0, 1.0)
+    a0 = p["h0_smooth"] + tex * (1.0 - p["h0_smooth"])
+    a1 = p["h1_smooth"] + tex * (1.0 - p["h1_smooth"])
+    g0 = 1.0 - w_region * (1.0 - a0)
+    g1 = 1.0 - w_region * (1.0 - a1)
+    h0 = h0 * g0
+    h1 = h1 * g1
+    y = l2 + h2 + h1 + h0
 
     # Chroma: same idea, stronger floors.
     flat_bool_c = flat_float > 0.5
@@ -495,7 +566,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
         )
         wiener_c = np.clip(
             (var_c - sigma_c ** 2) / (var_c + 1e-9), 0.0, 1.0
-        ) ** p["shadow_shrink"]
+        ) ** 0.7
         g_c = np.maximum(wiener_c, p["shadow_chroma_floor"])
         w_c = np.clip(0.9 * shadow + 1.0 * flat_float, 0.0, 1.0)
         g_c = 1.0 - w_c * (1.0 - g_c)
@@ -530,52 +601,89 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
         chroma_cleaned.append(np.clip(sharp, lo, hi))
     cb, cr = chroma_cleaned
 
-    # ---- Optional single-pass enlargement ----------------------------------
-    sharpen_scale = scale
+    # ---- Optional dual-kernel enlargement (C8 v2) --------------------------
+    # Structure gets Lanczos3, smooth regions get Mitchell, feathered by the
+    # texture-confidence map -- the interpolator itself must not convert
+    # source noise into crisp correlated texture in sky/walls.
+    tex_out = tex
     if scale > 1.0 + 1e-6:
-        y = _upscale_channel(y, scale, 3, highlight=highlight_mask)
+        y3 = _upscale_channel(y, scale, 3, highlight=highlight_mask)
+        ym = _upscale_channel(y, scale, 2, highlight=highlight_mask, kernel="mitchell")
+        tex_out = _resize_mask(tex, scale)
+        y = tex_out * y3 + (1.0 - tex_out) * ym
         cb = _upscale_channel(cb, scale, 2, highlight=None)
         cr = _upscale_channel(cr, scale, 2, highlight=None)
-        flat_float = _resize_linear_axis(
-            _resize_linear_axis(flat_float, scale).T, scale
-        ).T
-        edge_band = _resize_linear_axis(
-            _resize_linear_axis(edge_band, scale).T, scale
-        ).T
-        highlight_edge = _resize_linear_axis(
-            _resize_linear_axis(highlight_edge, scale).T, scale
-        ).T
+        flat_float = _resize_mask(flat_float, scale)
+        edge_band = _resize_mask(edge_band, scale)
+        highlight_edge = _resize_mask(highlight_edge, scale)
+        sigma_n_img = _resize_mask(sigma_n_img, scale)
 
-    # ---- One masked band-limited luma sharpen (output-scale aware) ---------
+    # ---- Destination-scale residual decorrelation (C8 v2) ------------------
+    # Interpolated noise is a spatially correlated field (rho1 ~0.5+) after
+    # the 1.6x resample. Linearly suppressing the band CANNOT change its
+    # autocorrelation (rho is scale-invariant), so subtract the lag-1
+    # 4-neighbour prediction of the fine residual in smooth regions until
+    # rho1 is back under the ceiling (max 3 passes, texture untouched).
+    for _pass in range(3):
+        residual_dst = y - _gauss(y, 0.8)
+        rho = _lag1(residual_dst, flat_float)
+        if rho <= QC_RHO1_MAX:
+            break
+        pred = 0.25 * (
+            np.roll(residual_dst, 1, axis=1)
+            + np.roll(residual_dst, -1, axis=1)
+            + np.roll(residual_dst, 1, axis=0)
+            + np.roll(residual_dst, -1, axis=0)
+        )
+        y = y - 0.5 * flat_float * pred
+
+    # ---- SNR-gated band-limited sharpen (C8 v2) -----------------------------
+    # Sharpen structure, never noise: gain is gated by a local signal-to-
+    # noise test on the sharpening band itself (k ~ 3), on top of the
+    # structure/tex mask and the halo protection.
     f = scale
-    s1 = 0.6 * f
-    s2 = 1.2 * f
+    s1 = 0.7 * f
+    s2 = 1.4 * f
     band = _gauss(y, s1) - _gauss(y, s2)
     halo = _box(highlight_edge, 2)
-    sharpen_mask = np.clip(1.0 - flat_float - halo * 0.85, 0.0, 1.0)
-    k = p["sharpen_k"] * (1.0 - p["halo_k_scale"] * halo) * sharpen_mask
+    struct = np.clip(0.35 + 0.65 * tex_out - flat_float * 0.6 - halo * 0.85, 0.0, 1.0)
+    sigma_band = np.maximum(sigma_n_img, 1e-3) * 0.35
+    snr_gate = np.clip(
+        (np.abs(band) - p["snr_k"] * sigma_band) / (np.abs(band) + 1e-9), 0.0, 1.0
+    )
+
+    def _apply_sharpen(base_y, k_mult):
+        k = p["sharpen_k"] * k_mult * struct * snr_gate * (1.0 - p["halo_k_scale"] * halo)
+        sharp_y = base_y + k * band
+        tol = 1.0 / 255.0
+        lo = _erode(base_y, 2) - tol
+        hi = _dilate(base_y, 2) + tol
+        over = sharp_y - hi
+        under = lo - sharp_y
+        sharp_y = np.where(over > 0, hi + tol * (1.0 - np.exp(-over / tol)), sharp_y)
+        sharp_y = np.where(under > 0, lo - tol * (1.0 - np.exp(-under / tol)), sharp_y)
+        return sharp_y
+
     y_pre = y.copy()
-    y = y + k * band
+    y = _apply_sharpen(y_pre, 1.0)
 
-    # Overshoot limiter (soft, C8 section 12): no excursion beyond the local
-    # pre-sharpen extrema except a ~0.5-1.0/255 tolerance.
-    tol = 1.0 / 255.0
-    y_lo = _erode(y_pre, 2) - tol
-    y_hi = _dilate(y_pre, 2) + tol
-    over = y - y_hi
-    under = y_lo - y
-    y = np.where(over > 0, y_hi + tol * (1.0 - np.exp(-over / tol)), y)
-    y = np.where(under > 0, y_lo - tol * (1.0 - np.exp(-under / tol)), y)
-
-    # ---- QC pass ------------------------------------------------------------
+    # ---- QC pass (fail-soft: halve the sharpen gain once if ringing trips) -
     qc, passed = _run_qc(
         y_before, y, cb_before, cb, cr_before, cr,
         flat_float, edge_band, shadow, standalone, seed_extra, scale,
     )
+    if not passed and qc.get("ringing") is not None and qc.get("ringing") > QC_RINGING_MAX:
+        y = _apply_sharpen(y_pre, 0.5)
+        qc, passed = _run_qc(
+            y_before, y, cb_before, cb, cr_before, cr,
+            flat_float, edge_band, shadow, standalone, seed_extra, scale,
+            sharpen_retry=True,
+        )
 
     # ---- Emergency deterministic dither if banding QC tripped ---------------
-    if not passed and qc.get("banding_worse") and scale > 1.0:
-        noise = _deterministic_noise(y.shape, f"qf-dither:{seed_extra}", 0.2 / 255.0)
+    # Sub-visible (C8: 0.15-0.30 LSB), breaks quantization staircases only.
+    if not passed and qc.get("banding_worse"):
+        noise = _deterministic_noise(y.shape, f"qf-dither:{seed_extra}", 0.3 / 255.0)
         y = y + noise * flat_float
         qc, passed = _run_qc(
             y_before, y, cb_before, cb, cr_before, cr,
@@ -588,13 +696,34 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra):
     return out_u8, qc, passed
 
 
+def _masked_rms(a, mask):
+    """RMS of a band inside a soft mask."""
+    m = np.clip(mask, 0.0, 1.0)
+    if float(m.sum()) < 256.0:
+        m = np.ones_like(m)
+    return float(np.sqrt(np.sum((a * m) ** 2) / max(float(np.sum(m)), 1.0)))
+
+
 def _run_qc(
     y_before, y_after, cb_before, cb_after, cr_before, cr_after,
-    flat_mask, edge_band, shadow, standalone, seed_extra, scale, dithered=False,
+    flat_mask, edge_band, shadow, standalone, seed_extra, scale,
+    dithered=False, sharpen_retry=False,
 ):
-    """C8 section 16 self-QC. Returns (report, passed). All comparisons run
-    at the NATIVE size: an upscaled candidate is brought back down first, so
-    QC measures pixel quality, not enlargement."""
+    """C8 v2 self-QC. Returns (report, passed).
+
+    Destination-scale metrics first (residual autocorrelation, residual RMS,
+    H1/H0 ratio) -- they catch the coarse correlated grain the v1 QC could
+    not see. Pixel-fidelity metrics then run at NATIVE size (an upscaled
+    candidate is brought back down first)."""
+    # Destination-scale noise metrics on the DELIVERED resolution.
+    l0_d = _gauss(y_after, 0.8)
+    l1_d = _gauss(y_after, 1.6)
+    h0_d = y_after - l0_d
+    h1_d = l0_d - l1_d
+    rho1 = _lag1(h0_d, flat_mask)
+    residual_rms = _masked_rms(h0_d, flat_mask)
+    h1h0_ratio = _masked_rms(h1_d, flat_mask) / max(_masked_rms(h0_d, flat_mask), 1e-9)
+
     if y_after.shape != y_before.shape:
         s = y_before.shape[1] / float(y_after.shape[1])
         y_after = _resample2d(y_after, s, 2)
@@ -617,13 +746,14 @@ def _run_qc(
     rms_after = float(np.sqrt(np.mean((hf_after * region) ** 2)))
     noise_floor_ratio = rms_after / max(rms_before, 1e-9)
 
-    # Flatness increase: RELATIVE variance collapse in flat regions (an
-    # absolute floor misfires on legitimately deblocked smooth JPEG areas).
+    # Flatness increase: RELATIVE variance collapse in flat regions. v2
+    # deliberately suppresses smooth regions hard, so only NEAR-TOTAL
+    # collapse (0.08x) is suspicious (waxy plastic surfaces).
     var_hf_before = _box(hf_before * hf_before, 4)
     var_hf_after = _box(hf_after * hf_after, 4)
     flat_bool = flat_mask > 0.5
     if flat_bool.sum() > 256:
-        collapse = (var_hf_after < 0.3 * np.maximum(var_hf_before, 1e-12)) & flat_bool
+        collapse = (var_hf_after < 0.08 * np.maximum(var_hf_before, 1e-12)) & flat_bool
         flat_before = 0.0
         flat_after = float(np.mean(collapse[flat_bool]))
     else:
@@ -640,9 +770,12 @@ def _run_qc(
         float(np.sum(exceed * edge_band)) / max(edge_sum, 256.0)
     )
 
-    # Banding staircase index in flat regions.
-    dy_b = np.abs(y_before[:, 1:] - y_before[:, :-1])
-    dy_a = np.abs(y_after[:, 1:] - y_after[:, :-1])
+    # Banding staircase index in flat regions, measured on the QUANTIZED
+    # (8-bit) result -- staircases form at rounding, not in float.
+    yq_before = np.rint(y_before * 255.0) / 255.0
+    yq_after = np.rint(y_after * 255.0) / 255.0
+    dy_b = np.abs(yq_before[:, 1:] - yq_before[:, :-1])
+    dy_a = np.abs(yq_after[:, 1:] - yq_after[:, :-1])
     flat_band = np.clip(flat_mask[:, 1:] + flat_mask[:, :-1], 0, 1) > 0.5
     if flat_band.sum() > 256:
         s_before = float(
@@ -691,9 +824,15 @@ def _run_qc(
     # Fidelity: SSIM on luma at a proxy scale (both arrays are native-sized).
     ssim = _ssim_proxy(y_before, y_after, 1.0)
 
+    # v2 gate: SSIM hard rail + destination-scale noise quality (fine,
+    # weakly-correlated residual above the anti-plastic floor) + no ringing /
+    # banding / blocking / chroma regressions. noise_floor_ratio stays in the
+    # report for UI continuity but no longer gates: v2 intentionally
+    # suppresses smooth regions far below the old floor.
     passed = (
         ssim >= QC_SSIM_FLOOR
-        and noise_floor_ratio >= QC_NOISE_FLOOR_RATIO
+        and rho1 <= QC_RHO1_MAX
+        and residual_rms >= QC_RESIDUAL_RMS_MIN
         and flatness_delta <= QC_FLATNESS_DELTA
         and ringing <= QC_RINGING_MAX
         and b8_ok
@@ -713,6 +852,10 @@ def _run_qc(
         "chroma_spread_after": round(rc_after, 3),
         "b8_ok": b8_ok,
         "dithered": dithered,
+        "sharpen_retry": sharpen_retry,
+        "rho1": round(rho1, 4),
+        "residual_rms": round(residual_rms * 255.0, 3),
+        "h1h0_ratio": round(h1h0_ratio, 3),
         "passed": passed,
     }, passed
 
