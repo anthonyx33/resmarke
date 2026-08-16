@@ -328,6 +328,39 @@ def handler(job):
                 cleaned_sha = sha256_file(cleaned_path)
                 neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9"}
                 content_repair_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9"}
+            elif is_ds_remint_v8_9_hd(expert_refinement):
+                # Slash Image sequence: the frozen V8.9 remint (wash ->
+                # coherent camera model -> gate -> single q92 encode) and
+                # then Quality Finish over its DELIVERED file (standalone
+                # JPEG path: selective restoration ISP -> single Q95 4:4:4
+                # encode). Both stages run exactly as they do standalone;
+                # the job ships the finished file, or the plain remint file
+                # if the finisher's self-QC fails (quality never costs
+                # acceptance). finalize_output pass-throughs the bytes.
+                v89_settings = dict(expert_refinement)
+                v89_settings["mode"] = "ds-remint-v8.9"
+                engine_report = apply_ds_remint_v8_9(
+                    input_path=input_path,
+                    output_path=cleaned_path,
+                    creator_id=creator_id,
+                    settings=v89_settings,
+                    seed_extra=f"{job_id}:{input_sha}",
+                    detector=make_detector(),
+                )
+                finished_path = tmp / "finished.jpg"
+                finish_report = apply_quality_finish(
+                    input_path=cleaned_path,
+                    output_path=finished_path,
+                    settings=expert_refinement,
+                    seed_extra=f"{job_id}:{input_sha}",
+                    creator_id=creator_id,
+                )
+                if finish_report.get("applied"):
+                    shutil.copyfile(finished_path, cleaned_path)
+                engine_report["quality_finish"] = finish_report
+                cleaned_sha = sha256_file(cleaned_path)
+                neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9_hd"}
+                content_repair_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9_hd"}
             elif is_quality_finish(expert_refinement):
                 # Quality Finish (post-remint step 2) is NON-GENERATIVE and
                 # TERMINAL. Step 1 (any naturalized remint file) is frozen;
@@ -686,6 +719,7 @@ def final_naturalization_config(cfg, expert_refinement):
         or is_ds_remint_v8_3(expert_refinement)
         or is_ds_remint_v8_8(expert_refinement)
         or is_ds_remint_v8_9(expert_refinement)
+        or is_ds_remint_v8_9_hd(expert_refinement)
         or is_quality_finish(expert_refinement)
     ):
         # Max ReMint, CX Remint and DS ReMint V6 all do their own
@@ -700,6 +734,11 @@ def final_naturalization_config(cfg, expert_refinement):
         # restoration as the "looks less like AI" finalization.
         return PHOTO_NATURALIZATION_PROFILES["optimised"]
     return cfg["naturalization"]
+
+
+def is_ds_remint_v8_9_hd(settings):
+    """Slash Image sequence: frozen V8.9 remint -> Quality Finish."""
+    return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.9-hd"
 
 
 def env_int(name):
@@ -750,7 +789,7 @@ def finalize_output(
     # nothing (no seal, no naturalization to apply). Only when the bytes fit
     # the final-size cap, so behaviour stays identical to the old path.
     expert_mode = expert_refinement.get("mode") if isinstance(expert_refinement, dict) else None
-    passthrough_modes = {"max-cx-remint", "ds-remint-v6", "ds-remint-v7", "ds-remint-v8", "ds-remint-v8.1", "ds-remint-v8.2", "ds-remint-v8.3", "ds-remint-v8.8", "ds-remint-v8.9", "quality-finish"}
+    passthrough_modes = {"max-cx-remint", "ds-remint-v6", "ds-remint-v7", "ds-remint-v8", "ds-remint-v8.1", "ds-remint-v8.2", "ds-remint-v8.3", "ds-remint-v8.8", "ds-remint-v8.9", "ds-remint-v8.9-hd", "quality-finish"}
     if (
         not bool(naturalization.get("enabled", True))
         and output_mode not in ("sealed", "sealed-stamped")
