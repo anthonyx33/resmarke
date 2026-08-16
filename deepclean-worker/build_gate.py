@@ -210,6 +210,13 @@ def check_engine_imports():
             raise SystemExit(f"FAIL: ds_remint_v8_8 is missing {attr}")
     print("OK: ds_remint_v8_8 imports cleanly with its public entry points")
 
+    import quality_finish
+
+    for attr in ("apply_quality_finish", "is_quality_finish", "normalize_quality_finish_settings"):
+        if not hasattr(quality_finish, attr):
+            raise SystemExit(f"FAIL: quality_finish is missing {attr}")
+    print("OK: quality_finish imports cleanly with its public entry points")
+
 
 def check_camera_relife_functional():
     """Run the camera re-life stack on a tiny synthetic frame (CPU-safe).
@@ -239,6 +246,47 @@ def check_camera_relife_functional():
     print("OK: camera_relife applied the full balanced stack on a synthetic frame")
 
 
+def check_quality_finish_functional():
+    """Run the Quality Finish selective-restoration ISP on a small synthetic
+    frame with grain + a saturated light edge (CPU-safe)."""
+    import tempfile
+
+    import numpy as np
+    from PIL import Image
+
+    from quality_finish import apply_quality_finish
+
+    height, width = 120, 200
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    frame = np.zeros((height, width, 3), dtype=np.float32)
+    frame[..., 0] = 0.12 + 0.5 * np.clip(xx / width, 0, 1)
+    frame[..., 1] = 0.10 + 0.4 * np.clip(yy / height, 0, 1)
+    cone = np.clip(1.0 - (np.abs(xx - width * 0.5) / (width * 0.3)), 0, 1)
+    frame[..., 2] = 0.15 + 0.6 * cone  # warm light cone
+    rng = np.random.default_rng(88)
+    frame = np.clip(frame + rng.normal(0, 0.02, frame.shape).astype(np.float32), 0, 1)
+    image = Image.fromarray((frame * 255).astype(np.uint8))
+
+    with tempfile.TemporaryDirectory(prefix="qf-build-gate-") as tmpdir:
+        src_path = f"{tmpdir}/input.jpg"
+        out_path = f"{tmpdir}/finished.jpg"
+        image.save(src_path, format="JPEG", quality=92, subsampling=2)
+        report = apply_quality_finish(
+            input_path=src_path,
+            output_path=out_path,
+            settings={"mode": "quality-finish", "quality_finish": {"preset": "standard", "scale": 1.6}},
+            seed_extra="build",
+        )
+        if not report.get("applied"):
+            raise SystemExit(f"FAIL: quality_finish QC gate rejected the synthetic frame: {report.get('qc')}")
+        from PIL import Image as PilImage
+
+        out_img = PilImage.open(out_path)
+        if out_img.size != (int(round(width * 1.6)), int(round(height * 1.6))):
+            raise SystemExit(f"FAIL: quality_finish delivered {out_img.size}, expected 1.6x")
+    print("OK: quality_finish applied standard 1.6x on a synthetic dusk frame")
+
+
 def main():
     print(f"--- build gate (CPU-safe) on python {sys.version.split()[0]} ---")
     check_versions()
@@ -247,6 +295,7 @@ def main():
     check_comfy_kitchen_version()
     check_engine_imports()
     check_camera_relife_functional()
+    check_quality_finish_functional()
     print("OK: all CPU-safe build gates passed")
     return 0
 

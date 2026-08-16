@@ -90,6 +90,11 @@ export type DsRemintV8_8Options = {
   iphoneExif: boolean;
   metadataMode?: "device" | "minimal";
 };
+
+export type QualityFinishOptions = {
+  preset: "conservative" | "standard" | "strong";
+  scale: number | null;
+};
 export type ExpertRefinementMode = "off" | "light" | "balanced" | "optical";
 export type ExpertRefinementTechnique =
   | "pixel_alignment_break"
@@ -150,7 +155,8 @@ export async function createDeepCleanJob(params: {
     | "ds-remint-v8.2"
     | "ds-remint-v8.3"
     | "ds-remint-v8.8"
-    | "ds-remint-v8.9";
+    | "ds-remint-v8.9"
+    | "quality-finish";
   outputMode: DeepCleanOutputMode;
   microTextureJitter?: boolean;
   expertRefinement?: ExpertRefinementSettings;
@@ -162,6 +168,7 @@ export async function createDeepCleanJob(params: {
   dsRemintV83?: DsRemintV8_3Options;
   dsRemintV88?: DsRemintV8_8Options;
   dsRemintV89?: DsRemintV8_8Options;
+  qualityFinish?: QualityFinishOptions;
   outputNameStyle?: "photo-style" | "original" | "custom";
   outputNameCustom?: string;
 }): Promise<DeepCleanJob> {
@@ -259,6 +266,12 @@ export async function createDeepCleanJob(params: {
             strength: params.dsRemintV89.strength,
             iphone_exif: params.dsRemintV89.iphoneExif,
             metadata_mode: params.dsRemintV89.metadataMode
+          }
+        : undefined,
+      quality_finish: params.qualityFinish
+        ? {
+            preset: params.qualityFinish.preset,
+            scale: params.qualityFinish.scale
           }
         : undefined,
       output_name_style: params.outputNameStyle,

@@ -22,7 +22,8 @@ type CreateJobBody = {
     | "max-cx-remint-v3"
     | "max-cx-remint-v4"
     | "max-cx-remint-v5"
-    | "ds-remint-v6";
+    | "ds-remint-v6"
+    | "quality-finish";
   micro_texture_jitter?: boolean;
   expert_refinement?: unknown;
   // CX Remint is the only Max profile with user-facing options (quality-floor
@@ -39,6 +40,10 @@ type CreateJobBody = {
   ds_remint_v8_3?: unknown;
   ds_remint_v8_8?: unknown;
   ds_remint_v8_9?: unknown;
+  // Quality Finish (post-remint step 2): non-generative selective-restoration
+  // ISP over an already-naturalized file. Validated in
+  // qualityFinishExpertRefinement().
+  quality_finish?: unknown;
   output_name_style?: unknown;
   output_name_custom?: unknown;
   output_mode: "stripped" | "sealed" | "sealed-stamped";
@@ -83,7 +88,8 @@ Deno.serve(async (request) => {
         "ds-remint-v8.2",
         "ds-remint-v8.3",
         "ds-remint-v8.8",
-        "ds-remint-v8.9"
+        "ds-remint-v8.9",
+        "quality-finish"
       ].includes(body.profile)
     ) {
       return jsonResponse({ error: "Invalid DeepClean profile." }, 400);
@@ -154,6 +160,8 @@ Deno.serve(async (request) => {
         ? "max"
         : requestedProfile === "ds-remint-v8.9"
         ? "max"
+        : requestedProfile === "quality-finish"
+        ? "max"
         : requestedProfile;
     const requestedOutputMode =
       requestedProfile === "max-mint" ||
@@ -174,7 +182,8 @@ Deno.serve(async (request) => {
       requestedProfile === "ds-remint-v8.2" ||
       requestedProfile === "ds-remint-v8.3" ||
       requestedProfile === "ds-remint-v8.8" ||
-      requestedProfile === "ds-remint-v8.9"
+      requestedProfile === "ds-remint-v8.9" ||
+      requestedProfile === "quality-finish"
         ? "stripped"
         : body.output_mode;
     const expertRefinement =
@@ -216,6 +225,8 @@ Deno.serve(async (request) => {
         ? dsRemintV8_8ExpertRefinement(body.ds_remint_v8_8)
         : requestedProfile === "ds-remint-v8.9"
         ? dsRemintV8_9ExpertRefinement(body.ds_remint_v8_9)
+        : requestedProfile === "quality-finish"
+        ? qualityFinishExpertRefinement(body.quality_finish)
         : normalizeExpertRefinement(body.expert_refinement);
 
     const { error: updateError } = await client
@@ -289,6 +300,8 @@ Deno.serve(async (request) => {
               ? "ds-remint-v8.8"
               : requestedProfile === "ds-remint-v8.9"
               ? "ds-remint-v8.9"
+              : requestedProfile === "quality-finish"
+              ? "quality-finish"
               : null,
           micro_texture_jitter: requestedProfile === "max" && body.micro_texture_jitter === true,
           expert_refinement: expertRefinement
@@ -1160,6 +1173,24 @@ function dsRemintV8_9ExpertRefinement(input: unknown) {
         isRecord(raw) && raw.deep_degrade_scale, 0.5, 0.85, 0.75
       )
     }
+  };
+}
+
+function qualityFinishExpertRefinement(input: unknown) {
+  // Quality Finish is STEP 2 of the two-step architecture: it never touches
+  // the remint stage (frozen). It consumes an already-naturalized file and
+  // applies the selective restoration ISP (compression cleanup, noise floor
+  // preserved, chroma-width repair, optional 1.6x enlargement, masked
+  // mid-band sharpen, single Q95 4:4:4 encode). Non-generative, CPU-only.
+  const raw = isRecord(input) ? input : {};
+  const preset =
+    raw.preset === "conservative" || raw.preset === "strong"
+      ? raw.preset
+      : "standard";
+  const scale = clampNumber(raw.scale, 1.0, 2.0, 1.6);
+  return {
+    mode: "quality-finish",
+    quality_finish: { preset, scale }
   };
 }
 

@@ -118,7 +118,8 @@ type MintDeepCleanProfile =
   | "ds-remint-v8.2"
   | "ds-remint-v8.3"
   | "ds-remint-v8.8"
-  | "ds-remint-v8.9";
+  | "ds-remint-v8.9"
+  | "quality-finish";
 
 function isCxProfile(profile: MintDeepCleanProfile): boolean {
   return (
@@ -383,6 +384,11 @@ export default function MintApp() {
   const [dsV88IphoneExif, setDsV88IphoneExif] = useState(true);
   const [dsV88MetadataMode, setDsV88MetadataMode] =
     useState<"device" | "minimal">("device");
+  // Quality Finish (post-remint step 2) controls.
+  const [qfPreset, setQfPreset] = useState<"conservative" | "standard" | "strong">(
+    "standard"
+  );
+  const [qfScale, setQfScale] = useState<"native" | "1.6" | "2">("1.6");
   // Browser-side reframe (zoom + tilt + shear) applied before upload. No GPU.
   const [cxReframe, setCxReframe] = useState(true);
   const [cxReframePreset, setCxReframePreset] = useState<ReframePreset>("balanced");
@@ -443,7 +449,10 @@ export default function MintApp() {
       // DS ReMint V8.8 Coherent: wash + coherent camera model, single resample.
       "ds-remint-v8.8": 15,
       // DS ReMint V8.9: data-tuned coherent defaults + baseline routing.
-      "ds-remint-v8.9": 15
+      "ds-remint-v8.9": 15,
+      // Quality Finish: non-generative CPU-only restoration over an
+      // already-naturalized file. No GPU wash, priced below the regen tiers.
+      "quality-finish": 6
     };
     const refineAdd: Record<ExpertRefinementMode, number> = {
       off: 0,
@@ -505,6 +514,8 @@ export default function MintApp() {
   const dsV83Active = deepCleanProfile === "ds-remint-v8.3";
   // DS ReMint V8.8/V8.9 derived state: active toggle.
   const dsV88Active = deepCleanProfile === "ds-remint-v8.9";
+  // Quality Finish derived state: active toggle.
+  const qfActive = deepCleanProfile === "quality-finish";
   const dsV6QualityFloorIndex = Math.max(
     0,
     CX_QUALITY_FLOOR_STOPS.findIndex((stop) => stop.value === dsV6QualityFloor)
@@ -1054,6 +1065,13 @@ export default function MintApp() {
                   iphoneExif: dsV88IphoneExif,
                   metadataMode: dsV88MetadataMode
                 }
+              : undefined,
+          qualityFinish:
+            deepCleanProfile === "quality-finish"
+              ? {
+                  preset: qfPreset,
+                  scale: qfScale === "native" ? null : Number(qfScale)
+                }
               : undefined
         });
         createdJob = job;
@@ -1315,6 +1333,17 @@ export default function MintApp() {
       // DS ReMint V8.8/V8.9 Coherent are terminal: wash -> single resample ->
       // coherent camera model (inverse ISP -> optics -> CFA -> MHC ->
       // weak ISP denoise -> forward ISP) -> one encode.
+      setDeepCleanOutputMode("stripped");
+      setExpertRefinementMode("off");
+      setExpertRefinementIntensity(100);
+      setExpertRefinementPreserveLines(true);
+      setExpertRefinementTechniques(cloneExpertPreset("off"));
+      return;
+    }
+    if (profile === "quality-finish") {
+      // Quality Finish is step 2 of the two-step architecture: it polishes an
+      // ALREADY-NATURALIZED file (non-generative, CPU-only). Terminal: the
+      // module writes its own single Q95 4:4:4 JPEG with EXIF preserved.
       setDeepCleanOutputMode("stripped");
       setExpertRefinementMode("off");
       setExpertRefinementIntensity(100);
@@ -3360,7 +3389,135 @@ export default function MintApp() {
                     </div>
                   ) : null}
 
-                  {!dsV6Active && !dsV7Active && !dsV8Active && !dsV82Active && !dsV83Active && !dsV88Active ? (
+                  <label className={`rm-v6-toggle${qfActive ? " is-active" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={qfActive}
+                      disabled={batchRunning}
+                      onChange={(event) =>
+                        chooseDeepCleanProfile(
+                          event.target.checked ? "quality-finish" : "max-cx-remint-v5"
+                        )
+                      }
+                    />
+                    <span className="rm-switch-track" aria-hidden="true">
+                      <span className="rm-switch-thumb" />
+                    </span>
+                    <span className="rm-v6-toggle-text">
+                      <strong>Quality Finish · post-remint HD</strong>
+                      <small>Non-AI selective restoration · grain kept, crispness restored</small>
+                    </span>
+                    <span className="rm-badge">{qfActive ? "Enabled" : "Off"}</span>
+                  </label>
+
+                  {qfActive ? (
+                    <div className="rm-v6-panel">
+                      <div className="rm-v6-banner">
+                        <Sparkles size={15} aria-hidden="true" />
+                        <span>
+                          Step 2 of the two-step flow: polish an already-naturalized
+                          file without re-generating it. Removes compression defects and
+                          excess grain while keeping a measured noise floor, repairs
+                          warm/teal light bleed, optionally enlarges 1.6×, then one masked
+                          sharpen + single Q95 4:4:4 encode. Hard self-QC: if quality
+                          ever drops, your original file ships unchanged.
+                        </span>
+                      </div>
+
+                      <div className="rm-v6-stats" aria-label="Pipeline indicators">
+                        <span className="rm-stat">
+                          <em>Preset</em>
+                          <b>{qfPreset}</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Delivery</em>
+                          <b>{qfScale === "native" ? "native size" : `${qfScale}× HD`}</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Encode</em>
+                          <b>Q95 · 4:4:4 · 1×</b>
+                        </span>
+                        <span className="rm-stat">
+                          <em>Engine</em>
+                          <b>CPU · deterministic</b>
+                        </span>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Restoration strength</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="Quality Finish preset">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={qfPreset === "conservative"}
+                            className={qfPreset === "conservative" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setQfPreset("conservative")}
+                          >
+                            Conservative
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={qfPreset === "standard"}
+                            className={qfPreset === "standard" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setQfPreset("standard")}
+                          >
+                            Standard
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={qfPreset === "strong"}
+                            className={qfPreset === "strong" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setQfPreset("strong")}
+                          >
+                            Strong
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rm-field">
+                        <span className="rm-field-label">Delivery size</span>
+                        <div className="rm-seg" role="radiogroup" aria-label="Quality Finish scale">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={qfScale === "native"}
+                            className={qfScale === "native" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setQfScale("native")}
+                          >
+                            Native
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={qfScale === "1.6"}
+                            className={qfScale === "1.6" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setQfScale("1.6")}
+                          >
+                            1.6× HD (~2000px)
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={qfScale === "2"}
+                            className={qfScale === "2" ? "is-active" : ""}
+                            disabled={batchRunning}
+                            onClick={() => setQfScale("2")}
+                          >
+                            2× Max
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!dsV6Active && !dsV7Active && !dsV8Active && !dsV82Active && !dsV83Active && !dsV88Active && !qfActive ? (
                   <div className="rm-field-grid">
                     <label className="rm-field">
                       <span className="rm-field-label">Profile</span>
@@ -3390,6 +3547,7 @@ export default function MintApp() {
                         <option value="ds-remint-v8.3">DS ReMint V8.3 Wash Lab (new)</option>
                         <option value="ds-remint-v8.8">DS ReMint V8.8 Coherent</option>
                         <option value="ds-remint-v8.9">DS ReMint V8.9 Coherent Pro (new)</option>
+                        <option value="quality-finish">Quality Finish · post-remint HD (new)</option>
                       </select>
                     </label>
                     <label className="rm-field">

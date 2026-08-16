@@ -31,6 +31,7 @@ from photo_naturalization import (
     apply_photo_naturalization,
 )
 from neural_texture import apply_neural_texture_lab, is_neural_texture_lab
+from quality_finish import apply_quality_finish, is_quality_finish
 
 # The cleaning engine is ComfyUI running the Remarkee Max workflow, started
 # as a localhost service by start.sh (see comfyui_client.py). The workflow
@@ -327,6 +328,28 @@ def handler(job):
                 cleaned_sha = sha256_file(cleaned_path)
                 neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9"}
                 content_repair_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9"}
+            elif is_quality_finish(expert_refinement):
+                # Quality Finish (post-remint step 2) is NON-GENERATIVE and
+                # TERMINAL. Step 1 (any naturalized remint file) is frozen;
+                # this stage is a selective restoration ISP over the ALREADY-
+                # DELIVERED JPEG: compression-defect cleanup, two-band shadow
+                # noise shrinkage with a hard residual noise floor, saturated-
+                # edge chroma-width repair, optional 1.6x Lanczos enlargement,
+                # one masked band-limited sharpen, single Q95 4:4:4 encode with
+                # EXIF preserved. Hard self-QC (SSIM, noise floor, flatness,
+                # ringing, banding, block grid, chroma spread): on any failure
+                # the module ships the INPUT bytes unchanged (quality never
+                # costs acceptance). finalize_output pass-throughs the bytes.
+                engine_report = apply_quality_finish(
+                    input_path=input_path,
+                    output_path=cleaned_path,
+                    settings=expert_refinement,
+                    seed_extra=f"{job_id}:{input_sha}",
+                    creator_id=creator_id,
+                )
+                cleaned_sha = sha256_file(cleaned_path)
+                neural_texture_report = {"enabled": False, "reason": "not_applicable_to_quality_finish"}
+                content_repair_report = {"enabled": False, "reason": "not_applicable_to_quality_finish"}
             else:
                 engine_report = run_deepclean(
                     input_path=input_path,
@@ -663,6 +686,7 @@ def final_naturalization_config(cfg, expert_refinement):
         or is_ds_remint_v8_3(expert_refinement)
         or is_ds_remint_v8_8(expert_refinement)
         or is_ds_remint_v8_9(expert_refinement)
+        or is_quality_finish(expert_refinement)
     ):
         # Max ReMint, CX Remint and DS ReMint V6 all do their own
         # acquisition-noise / camera re-acquisition in-module; a finalize
@@ -726,7 +750,7 @@ def finalize_output(
     # nothing (no seal, no naturalization to apply). Only when the bytes fit
     # the final-size cap, so behaviour stays identical to the old path.
     expert_mode = expert_refinement.get("mode") if isinstance(expert_refinement, dict) else None
-    passthrough_modes = {"max-cx-remint", "ds-remint-v6", "ds-remint-v7", "ds-remint-v8", "ds-remint-v8.1", "ds-remint-v8.2", "ds-remint-v8.3", "ds-remint-v8.8", "ds-remint-v8.9"}
+    passthrough_modes = {"max-cx-remint", "ds-remint-v6", "ds-remint-v7", "ds-remint-v8", "ds-remint-v8.1", "ds-remint-v8.2", "ds-remint-v8.3", "ds-remint-v8.8", "ds-remint-v8.9", "quality-finish"}
     if (
         not bool(naturalization.get("enabled", True))
         and output_mode not in ("sealed", "sealed-stamped")

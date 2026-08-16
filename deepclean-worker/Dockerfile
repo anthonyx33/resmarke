@@ -133,6 +133,7 @@ COPY max_optimised_remint.py /app/max_optimised_remint.py
 COPY max_remint.py /app/max_remint.py
 COPY neural_texture.py /app/neural_texture.py
 COPY photo_naturalization.py /app/photo_naturalization.py
+COPY quality_finish.py /app/quality_finish.py
 COPY worker.py /app/worker.py
 COPY zimage_wash.py /app/zimage_wash.py
 COPY workflows /app/workflows
