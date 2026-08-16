@@ -3,18 +3,21 @@
 ## The task, in a vacuum
 
 You previously designed the quality finisher and its second iteration. We
-implemented both. The second iteration succeeded directionally: the coarse
-correlated grain in smooth regions is largely gone, and the measured
-metrics moved into your target bands (lag-1 autocorrelation from ~0.7 to
-~0.5, H1/H0 ratio from ~1.5-1.7 to ~1.0, residual RMS ~0.4 LSB at the
-2000px delivery).
+implemented both in full. Iteration two succeeded: the coarse correlated
+grain in smooth regions is largely gone and the measured metrics moved
+into your target bands (lag-1 autocorrelation ~0.7 -> ~0.5, H1/H0 ratio
+~1.5-1.7 -> ~1.0, residual RMS ~0.4 LSB at the 2000px delivery).
 
-One complaint remains, and it is now the only complaint: large flat colour
-regions — most prominently the sky, secondarily rendered walls — still
-look pixelated and visibly banded on the enlarged delivery. The reviewer
-inspects at 100% zoom on a 2000px file and sees faint staircase contours
-and residual coarse structure in what should read as a clean premium
-photographic gradient.
+The acceptance side of the overall pipeline is now consistent across four
+distinct content classes at high confidence, so it is settled and out of
+scope for this round.
+
+Exactly one visual defect remains, and the reviewer inspects it at 100%
+zoom on the 2000px delivery: large flat colour regions — most prominently
+the sky, secondarily rendered walls — look pixelated and faintly banded.
+Faint staircase contours and residual coarse structure in what should read
+as a clean, premium photographic gradient. This round has one goal: make
+those gradients premium without breaking anything else.
 
 ## What we implemented from your last design (all of it)
 
@@ -38,54 +41,48 @@ photographic gradient.
 ## Measured outcome after iteration two
 
 - Grain metrics: improved into target bands (above).
-- The reviewer's grain complaint: substantially reduced.
-- NEW dominant complaint: banding / contouring / residual pixelation in
-  large smooth gradients, especially the sky. This appeared as the grain
+- Reviewer's grain complaint: substantially reduced.
+- NEW dominant complaint, stated plainly: pixelation / faint banding in
+  large flat gradients, especially the sky. It appeared as the grain
   receded.
 
 Our working hypothesis (to be challenged): suppressing the sky's noise
-removed the dither that was masking 8-bit quantization staircases; the
-remaining defect is now quantization contouring plus whatever residual
-structure survives the final JPEG encode. The emergency dither (0.3 LSB)
-is likely too weak, and may be partially erased by the final encode
-itself.
+removed the dither that was masking 8-bit quantization staircases. The
+remaining defect is quantization contouring plus whatever residual
+structure survives the final JPEG encode, and the 0.3 LSB emergency
+dither is too weak and may be partially erased by that encode.
 
 ## Attached visual evidence (descriptions)
 
-The attachments show the finished 2000px deliverables of dusk exterior
-scenes at 100% zoom, focused on:
+The attachments show finished 2000px deliverables at 100% zoom, focused on:
 
-1. Twilight sky: a smooth blue luminance gradient showing faint horizontal
-   staircase bands plus low-amplitude residual block structure.
-2. Rendered white wall under warm light: subtle contour lines in the light
+1. Twilight sky in wide exterior scenes: a smooth blue gradient showing
+   faint horizontal staircase bands plus low-amplitude residual block
+   structure. The most objectionable region in every image.
+2. Sky backgrounds in close-up garden shots: same defect, smaller area.
+3. Rendered white wall under warm light: subtle contour lines in the light
    falloff gradient.
-3. For reference, the same regions in the naturalized input before
-   finishing: grainier, but with no visible staircase contouring.
+4. Reference: the same regions in the naturalized input before finishing —
+   grainier, but with no visible staircase contouring.
 
 ## The open questions
 
-1. Banding vs grain: is the remaining defect quantization contouring
-   (8-bit staircase) or residual correlated noise? What cheap metrics
-   separate them (gradient histogram runs, per-line variance, local
-   monotonicity), and what are the target values for a premium sky?
-2. Dither strategy: what amplitude, spectrum (blue-noise vs white), and
-   region policy (always-on in smooth gradients vs emergency) produces an
-   invisible-to-clean staircase breaker that reads photographic? Does
-   0.4-0.7 LSB survive a Q95 4:4:4 encode, or must the dither be designed
-   with the encoder's quantization step in mind?
-3. Should the sky be suppressed LESS, not more, now that grain has
-   receded? At what point does smooth-region suppression start creating
-   the staircase it is meant to hide?
-4. Chroma gradients: the twilight blue sky bands in chroma as well as
-   luma. Should chroma receive its own gradient-fidelity treatment, and
-   is 4:4:4 sufficient at 8-bit?
-5. Is a dedicated "gradient fidelity" stage warranted between
-   suppression and the final encode — e.g., local linear re-fitting of
-   smooth gradients plus sub-LSB error diffusion — and where exactly does
-   it sit?
-6. What are we missing entirely? What single change most improves a large
-   flat sky from "acceptable" to "premium" while keeping the surface
-   photographic?
+1. Is the remaining defect quantization contouring (8-bit staircase) or
+   residual correlated noise? What are the two cheapest metrics that
+   separate them, and what are their target values for a premium sky?
+2. Dither strategy: amplitude, spectrum (blue-noise vs white), and region
+   policy (always-on in smooth gradients vs emergency-only). What design
+   survives a Q95 4:4:4 encode and remains sub-visible at 100%?
+3. Should smooth-region suppression be CAPPED, not raised, now that grain
+   has receded? At what point does suppression create the staircase it
+   was meant to hide?
+4. Chroma: the twilight blue sky bands in chroma too. Does it need its own
+   gradient treatment, or does luma dither plus 4:4:4 suffice?
+5. Is a dedicated final "gradient fidelity" stage warranted (local linear
+   re-fitting of smooth gradients + sub-LSB error diffusion), and where
+   exactly does it sit relative to the single final encode?
+6. What single, minimal, safe change most improves a large flat sky from
+   acceptable to premium while keeping the surface photographic?
 
 ## Constraints (unchanged)
 
@@ -104,3 +101,4 @@ implies and the minimal experiment set to validate them.
 
 Any product, business, or context discussion. Pure technical system and
 design recommendations only, building on your previous finisher designs.
+
