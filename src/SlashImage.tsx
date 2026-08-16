@@ -97,6 +97,7 @@ export default function SlashImage() {
   // Finish options.
   const [finishPreset, setFinishPreset] = useState<"conservative" | "standard" | "strong">("standard");
   const [finishScale, setFinishScale] = useState<"native" | "1.6" | "2">("1.6");
+  const [finishMode, setFinishMode] = useState<"adaptive" | "template">("adaptive");
   // Output naming.
   const [nameStyle, setNameStyle] = useState<"photo-style" | "original" | "custom">("photo-style");
   const [nameCustom, setNameCustom] = useState("");
@@ -213,7 +214,7 @@ export default function SlashImage() {
     if (mode === "sequence") {
       return {
         profile: "ds-remint-v8.9-hd" as const,
-        dsRemintV89Hd: { remint: remintOptions, finish: finishOptions },
+        dsRemintV89Hd: { remint: remintOptions, finish: finishOptions, finishMode },
         ...naming
       };
     }
@@ -628,6 +629,30 @@ export default function SlashImage() {
                         ))}
                       </div>
                     </div>
+                    {mode === "sequence" ? (
+                      <div className="slash-field">
+                        <label className="slash-label">Finish routing</label>
+                        <div className="slash-seg">
+                          {(["adaptive", "template"] as const).map((f) => (
+                            <button
+                              key={f}
+                              type="button"
+                              className={finishMode === f ? "is-active" : ""}
+                              disabled={running}
+                              onClick={() => setFinishMode(f)}
+                            >
+                              {f === "adaptive" ? "Adaptive (gate-picked)" : "Template"}
+                            </button>
+                          ))}
+                        </div>
+                        {finishMode === "adaptive" ? (
+                          <small className="slash-hint">
+                            Builds Strong + Standard, probes both against the source
+                            detector, ships the strongest preset that clears.
+                          </small>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </>
                 )}
 

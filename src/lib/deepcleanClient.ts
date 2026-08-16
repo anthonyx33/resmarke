@@ -99,6 +99,7 @@ export type QualityFinishOptions = {
 export type DsRemintV8_9HdOptions = {
   remint: DsRemintV8_8Options;
   finish: QualityFinishOptions;
+  finishMode?: "adaptive" | "template";
 };
 export type ExpertRefinementMode = "off" | "light" | "balanced" | "optical";
 export type ExpertRefinementTechnique =
@@ -292,7 +293,8 @@ export async function createDeepCleanJob(params: {
             },
             quality_finish: {
               preset: params.dsRemintV89Hd.finish.preset,
-              scale: params.dsRemintV89Hd.finish.scale
+              scale: params.dsRemintV89Hd.finish.scale,
+              finish_mode: params.dsRemintV89Hd.finishMode
             }
           }
         : undefined,

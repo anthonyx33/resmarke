@@ -757,7 +757,13 @@ def normalize_quality_finish_settings(settings):
         scale = None
     if scale is not None and not (0.9 <= scale <= 2.0):
         scale = 1.6
-    return {"mode": MODE, "quality_finish": {"preset": preset, "scale": scale}}
+    # finish_mode only matters to the sequence branch (worker.py); carried
+    # through here so reports stay self-describing.
+    finish_mode = str(sub.get("finish_mode", "adaptive")) if isinstance(sub, dict) else "adaptive"
+    return {
+        "mode": MODE,
+        "quality_finish": {"preset": preset, "scale": scale, "finish_mode": finish_mode},
+    }
 
 
 def is_quality_finish(settings):

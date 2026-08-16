@@ -1210,6 +1210,10 @@ function dsRemintV8_9HdExpertRefinement(input: unknown) {
   // plus the Quality Finish settings into one worker mode. Both stages run
   // exactly as they do standalone; the worker ships the finished file (or
   // the plain remint file when the finisher self-QC fails).
+  // finish_mode adaptive (default): the worker builds strong+standard
+  // finish candidates and picks per image via the source-aware detector
+  // gate (live data: finish preset is a per-image lever, strong flipped
+  // one image to 0.1% and another to 99%).
   const raw = isRecord(input) ? input : {};
   const v89 = dsRemintV8_9ExpertRefinement(raw.ds_remint_v8_9);
   const qfRaw = isRecord(raw.quality_finish) ? raw.quality_finish : {};
@@ -1221,7 +1225,9 @@ function dsRemintV8_9HdExpertRefinement(input: unknown) {
         qfRaw.preset === "conservative" || qfRaw.preset === "strong"
           ? qfRaw.preset
           : "standard",
-      scale: clampNumber(qfRaw.scale, 1.0, 2.0, 1.6)
+      scale: clampNumber(qfRaw.scale, 1.0, 2.0, 1.6),
+      finish_mode:
+        qfRaw.finish_mode === "template" ? "template" : "adaptive"
     }
   };
 }

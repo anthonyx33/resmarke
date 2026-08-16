@@ -253,6 +253,7 @@
 .slash-btn-ghost { background: var(--sl-panel-2); color: var(--sl-text); border: 1px solid var(--sl-line); }
 .slash-btn-sm { padding: 7px 13px; font-size: 12px; border-radius: 8px; }
 .slash-notice { margin: 0; font-size: 13px; color: var(--sl-accent-2); }
+.slash-hint { display: block; margin-top: 5px; font-size: 11px; line-height: 1.45; color: var(--sl-dim); }
 .slash-icon-btn {
   display: inline-grid;
   place-items: center;
