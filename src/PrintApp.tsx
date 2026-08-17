@@ -30,6 +30,7 @@ import {
   Zap
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import "./print.css";
 import { config, hasSupabaseConfig } from "./lib/config";
 import {
   grantLocalPrivacyCredits,
@@ -272,7 +273,7 @@ function initialTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-export default function MintApp() {
+export default function PrintApp() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const queueSequenceRef = useRef(0);
   const imageQueueRef = useRef<ImageQueueItem[]>([]);
@@ -582,7 +583,7 @@ export default function MintApp() {
   }, [theme]);
 
   useEffect(() => {
-    document.title = "Re-Mint It — Your images, reborn clean.";
+    document.title = "/PRINT — Your images, reborn clean.";
   }, []);
 
   useEffect(() => {
@@ -927,7 +928,7 @@ export default function MintApp() {
       return;
     }
     if (hasSupabaseConfig && !userId) {
-      setDeepCleanStatus("Sign in before starting the Re-Mint Max queue.");
+      setDeepCleanStatus("Sign in before starting the PRINT Max queue.");
       return;
     }
     const requiredCredits = itemsToProcess.length * maxCost;
@@ -1121,7 +1122,7 @@ export default function MintApp() {
         completedThisRun += 1;
       } catch (nextError) {
         const message =
-          nextError instanceof Error ? nextError.message : "Re-Mint Max could not process this image.";
+          nextError instanceof Error ? nextError.message : "PRINT Max could not process this image.";
         if (createdJob) {
           await cancelDeepCleanJob(createdJob.id).catch(() => undefined);
         }
@@ -1473,21 +1474,21 @@ export default function MintApp() {
             <Leaf size={18} aria-hidden="true" />
           </span>
           <span className="rm-brand-word">
-            Re<span className="rm-brand-dash">‑</span>Mint<span className="rm-brand-it"> It</span>
+            P<span className="rm-brand-dash">‑</span>RINT
           </span>
         </a>
 
         {!file ? (
           <nav className="rm-nav-links" aria-label="Sections">
             <a href="#how">How it works</a>
-            <a href="#max">Re-Mint Max</a>
+            <a href="#max">PRINT Max</a>
             <a href="#pricing">Pricing</a>
             <a href="#faq">FAQ</a>
           </nav>
         ) : null}
 
         <div className="rm-nav-right">
-          <span className="rm-credits" title="Your Re-Mint credit balance">
+          <span className="rm-credits" title="Your PRINT credit balance">
             <Wallet size={15} aria-hidden="true" />
             <strong>{credits.privacyCredits}</strong>
             <span>credits</span>
@@ -1606,7 +1607,7 @@ export default function MintApp() {
                   <strong>{credits.privacyCredits}</strong>
                 </div>
                 <div className="rm-account-row">
-                  <span>Re-Mint Max</span>
+                  <span>PRINT Max</span>
                   <strong>{credits.deepCleanCredits}</strong>
                 </div>
                 {isAdminUi ? <span className="rm-admin-chip">Developer admin</span> : null}
@@ -1632,7 +1633,7 @@ export default function MintApp() {
       <main className="rm-main">
         {!file ? (
           <>
-            <section className="rm-hero">
+            <section className="rm-hero" id="hero">
               <span className="rm-pill">
                 <span className="rm-dot" /> Private by design · Runs in your browser
               </span>
@@ -1643,7 +1644,7 @@ export default function MintApp() {
               </h1>
               <p className="rm-hero-sub">
                 Drop up to 20 images, arrange the exact processing order, and run a professional
-                Re-Mint Max batch with individual or one-click ZIP downloads.
+                PRINT Max batch with individual or one-click ZIP downloads.
               </p>
 
               <Dropzone
@@ -1685,7 +1686,7 @@ export default function MintApp() {
                 <Step
                   n={2}
                   icon={<Sparkles size={18} aria-hidden="true" />}
-                  title="Re-Mint it"
+                  title="PRINT it"
                   body="Strip metadata, lift visible AI marks, and seal it with your custom creator seal."
                 />
                 <Step
@@ -1702,7 +1703,7 @@ export default function MintApp() {
                 <div className="rm-spotlight-glow" aria-hidden="true" />
                 <div className="rm-spotlight-body">
                   <span className="rm-pill rm-pill-max">
-                    <Cpu size={12} aria-hidden="true" /> Re-Mint Max · Beta
+                    <Cpu size={12} aria-hidden="true" /> PRINT Max · Beta
                   </span>
                   <h3>
                     When a browser isn’t enough,
@@ -1710,7 +1711,7 @@ export default function MintApp() {
                     <span className="rm-grad">bring in the GPU.</span>
                   </h3>
                   <p>
-                    For stubborn, deeply embedded watermarks, Re-Mint Max runs an optional cloud GPU
+                    For stubborn, deeply embedded marks, PRINT Max runs an optional cloud GPU
                     pass with advanced profile choices far beyond what local processing can do. You
                     only pay after a job completes successfully.
                   </p>
@@ -1750,7 +1751,7 @@ export default function MintApp() {
                   name="Free"
                   price="$0"
                   period="forever"
-                  features={["3 Re-Mint exports", "Local, private processing", "Creator Seal"]}
+                  features={["3 PRINT exports", "Local, private processing", "Creator Seal"]}
                   cta="Start free"
                   onClick={openPicker}
                 />
@@ -1775,13 +1776,13 @@ export default function MintApp() {
                   name="Pro+"
                   price="$29.99"
                   period="month"
-                  features={["500 exports / month", "Re-Mint Max credits", "Everything in Pro"]}
+                  features={["500 exports / month", "PRINT Max credits", "Everything in Pro"]}
                   cta="Choose Pro+"
                   onClick={openPicker}
                 />
               </div>
               <p className="rm-fineprint">
-                Card payments via Airwallex are launching soon — start re-minting free today, no
+                Card payments via Airwallex are launching soon — start printing free today, no
                 account required.
               </p>
             </section>
@@ -1791,10 +1792,10 @@ export default function MintApp() {
               <div className="rm-faq">
                 <Faq
                   q="Are my images uploaded anywhere?"
-                  a="No. Re-Mint runs entirely in your browser — your images never leave your device. Re-Mint Max is a separate, optional cloud feature you explicitly opt into."
+                  a="No. PRINT runs entirely in your browser — your images never leave your device. PRINT Max is a separate, optional cloud feature you explicitly opt into."
                 />
                 <Faq
-                  q="What exactly does Re-Mint It remove?"
+                  q="What exactly does PRINT clean?"
                   a="All EXIF and metadata (GPS, device, software tags), via a clean pixel re-encode — plus optional removal of visible AI corner marks."
                 />
                 <Faq
@@ -1805,14 +1806,14 @@ export default function MintApp() {
                   q="Which formats and sizes can I export?"
                   a="JPG, PNG, or WebP — at your original dimensions, a square, or any custom width and height you set."
                 />
-                <Faq q="What can I use it on?" a="Use Re-Mint It only on images you own or control." />
+                <Faq q="What can I use it on?" a="Use PRINT only on images you own or control." />
               </div>
             </section>
 
             <section className="rm-section">
               <div className="rm-cta">
-                <h2>Re-mint one image — or twenty</h2>
-                <p>Build the queue now, then choose local or Re-Mint Max processing.</p>
+                <h2>Print one image — or twenty</h2>
+                <p>Build the queue now, then choose local or PRINT Max processing.</p>
                 <button className="rm-btn rm-btn-primary rm-btn-lg" type="button" onClick={openPicker}>
                   <Upload size={18} aria-hidden="true" /> Add images
                 </button>
@@ -1820,7 +1821,7 @@ export default function MintApp() {
             </section>
           </>
         ) : (
-          <section className="rm-studio">
+          <section className="rm-studio" id="studio">
             <div className="rm-studio-top">
               <div className="rm-file">
                 <span className="rm-file-name">{file.name}</span>
@@ -1878,12 +1879,12 @@ export default function MintApp() {
                 >
                   <img
                     src={stageResultUrl && stageView === "clean" ? stageResultUrl : previewUrl}
-                    alt={stageResultUrl && stageView === "clean" ? "Re-Minted result" : "Original image"}
+                    alt={stageResultUrl && stageView === "clean" ? "Printed result" : "Original image"}
                   />
                   {state === "processing" || activeBatchBusy ? (
                     <div className="rm-stage-veil">
                       <Loader2 className="rm-spin" size={28} aria-hidden="true" />
-                      <span>{activeBatchBusy ? "Processing on the GPU…" : "Re-minting…"}</span>
+                      <span>{activeBatchBusy ? "Processing on the GPU…" : "Printing…"}</span>
                     </div>
                   ) : null}
                   {stageResultUrl ? (
@@ -1900,7 +1901,7 @@ export default function MintApp() {
                         type="button"
                         onClick={() => setStageView("clean")}
                       >
-                        Re-Minted
+                        Printed
                       </button>
                     </div>
                   ) : null}
@@ -1908,7 +1909,7 @@ export default function MintApp() {
 
                 {!stageResultUrl && state !== "processing" && !activeBatchBusy ? (
                   <p className="rm-stage-hint">
-                    <Scan size={14} aria-hidden="true" /> Your re-minted image will appear here
+                    <Scan size={14} aria-hidden="true" /> Your printed image will appear here
                   </p>
                 ) : null}
 
@@ -1932,7 +1933,7 @@ export default function MintApp() {
                       <Sparkles size={18} aria-hidden="true" />
                     </span>
                     <div className="rm-card-headtext">
-                      <div className="rm-card-title">Instant Re-Mint</div>
+                      <div className="rm-card-title">Instant Print</div>
                       <div className="rm-card-sub">
                         <Lock size={11} aria-hidden="true" /> On-device · Private
                       </div>
@@ -1954,11 +1955,11 @@ export default function MintApp() {
                   >
                     {state === "processing" ? (
                       <>
-                        <Loader2 className="rm-spin" size={18} aria-hidden="true" /> Re-minting…
+                        <Loader2 className="rm-spin" size={18} aria-hidden="true" /> Printing…
                       </>
                     ) : (
                       <>
-                        <Sparkles size={18} aria-hidden="true" /> {resultBlob ? "Re-Mint again" : "Re-Mint image"}
+                        <Sparkles size={18} aria-hidden="true" /> {resultBlob ? "Print again" : "Print image"}
                       </>
                     )}
                   </button>
@@ -2145,7 +2146,7 @@ export default function MintApp() {
                     </span>
                     <div className="rm-card-headtext">
                       <div className="rm-card-title">
-                        Re-Mint Max <span className="rm-badge">GPU</span>
+                        PRINT Max <span className="rm-badge">GPU</span>
                       </div>
                       <div className="rm-card-sub">
                         <Cpu size={11} aria-hidden="true" /> Cloud GPU processing · Beta
@@ -3998,18 +3999,18 @@ export default function MintApp() {
                   <p className="rm-status">
                     {hasSupabaseConfig
                       ? deepCleanStatus || "Connected. Queue a job to run it on the GPU worker."
-                      : "Set Supabase env vars to enable Re-Mint Max."}
+                      : "Set Supabase env vars to enable PRINT Max."}
                   </p>
 
                   {deepCleanJob && ["processing", "completed", "failed"].includes(deepCleanJob.status) ? (
                     <div className="rm-jobresult">
                       <div className="rm-jobframe">
                         {deepCleanJob.outputUrl ? (
-                          <img src={deepCleanJob.outputUrl} alt="Re-Mint Max result preview" />
+                          <img src={deepCleanJob.outputUrl} alt="PRINT Max result preview" />
                         ) : deepCleanJob.status === "failed" ? (
                           <div className="rm-jobempty">
                             <ImageOff size={24} aria-hidden="true" />
-                            <span>{deepCleanJob.failureReason || "Re-Mint Max failed."}</span>
+                            <span>{deepCleanJob.failureReason || "PRINT Max failed."}</span>
                           </div>
                         ) : (
                           <div className="rm-jobempty">
@@ -4057,7 +4058,7 @@ export default function MintApp() {
                         </>
                       ) : deepCleanJob.status === "failed" ? (
                         <p className="rm-error">
-                          {deepCleanJob.failureReason || "Re-Mint Max failed; your credit was released."}
+                          {deepCleanJob.failureReason || "PRINT Max failed; your credit was released."}
                         </p>
                       ) : (
                         <p className="rm-status">Hang tight — processing on the GPU…</p>
@@ -4202,7 +4203,7 @@ export default function MintApp() {
             Use only on images you own or control. The Creator Seal is a creator mark, not proof of
             provenance.
           </span>
-          <span className="rm-footer-copy">© {new Date().getFullYear()} Re-Mint It</span>
+          <span className="rm-footer-copy">© {new Date().getFullYear()} PRINT</span>
         </div>
       </footer>
     </div>
