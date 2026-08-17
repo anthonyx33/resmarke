@@ -11,9 +11,10 @@ import "./slash.css";
 // page and also remains available at "/mint". Slash Image (the new
 // V8.9 + Quality Finish pipeline) lives at "/slash" and "/slash-image".
 // "/cmint" is the V8.9 + Quality Finish console — lazy-loaded (with its own
-// stylesheet) so it never weighs on the home-page bundle. "/print" is the
-// fully remastered edition of the Re-Mint page — a separate lazy chunk with
-// its own stylesheet, leaving "/mint" as the legacy original.
+// stylesheet) so it never weighs on the home-page bundle. "/print" is a
+// duplicate of the legacy /mint page — the same UI rebranded PRINT with a
+// mintier palette, a separate lazy chunk with its own stylesheet, leaving
+// "/mint" as the legacy original.
 const CmintApp = lazy(() => import("./CmintApp"));
 const PrintApp = lazy(() => import("./PrintApp"));
 

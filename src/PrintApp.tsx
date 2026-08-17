@@ -29,8 +29,8 @@ import {
   Wallet,
   Zap
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "./print.css";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { config, hasSupabaseConfig } from "./lib/config";
 import {
   grantLocalPrivacyCredits,
@@ -539,7 +539,7 @@ export default function PrintApp() {
       ? Math.min(dsV6InputLong, dsV6DeliveryTargetNum)
       : dsV6DeliveryTargetNum;
 
-  // Re-Mint can run locally in demo mode. Sign-in upgrades to Supabase credits.
+  // PRINT can run locally in demo mode. Sign-in upgrades to Supabase credits.
   const pendingBatchItems = imageQueue.filter((item) => item.status !== "completed");
   const completedBatchItems = imageQueue.filter(
     (item) => item.status === "completed" && item.job?.outputUrl
@@ -1474,7 +1474,7 @@ export default function PrintApp() {
             <Leaf size={18} aria-hidden="true" />
           </span>
           <span className="rm-brand-word">
-            P<span className="rm-brand-dash">‑</span>RINT
+            Print<span className="rm-brand-it"> It</span>
           </span>
         </a>
 
@@ -1633,7 +1633,7 @@ export default function PrintApp() {
       <main className="rm-main">
         {!file ? (
           <>
-            <section className="rm-hero" id="hero">
+            <section className="rm-hero">
               <span className="rm-pill">
                 <span className="rm-dot" /> Private by design · Runs in your browser
               </span>
@@ -1675,7 +1675,7 @@ export default function PrintApp() {
             </section>
 
             <section className="rm-section" id="how">
-              <SectionHead eyebrow="How it works" title="Three steps to a fresh mint" />
+              <SectionHead eyebrow="How it works" title="Three steps to a fresh print" />
               <div className="rm-steps">
                 <Step
                   n={1}
@@ -1686,7 +1686,7 @@ export default function PrintApp() {
                 <Step
                   n={2}
                   icon={<Sparkles size={18} aria-hidden="true" />}
-                  title="PRINT it"
+                  title="Print it"
                   body="Strip metadata, lift visible AI marks, and seal it with your custom creator seal."
                 />
                 <Step
@@ -1711,7 +1711,7 @@ export default function PrintApp() {
                     <span className="rm-grad">bring in the GPU.</span>
                   </h3>
                   <p>
-                    For stubborn, deeply embedded marks, PRINT Max runs an optional cloud GPU
+                    For stubborn, deeply embedded watermarks, PRINT Max runs an optional cloud GPU
                     pass with advanced profile choices far beyond what local processing can do. You
                     only pay after a job completes successfully.
                   </p>
@@ -1795,7 +1795,7 @@ export default function PrintApp() {
                   a="No. PRINT runs entirely in your browser — your images never leave your device. PRINT Max is a separate, optional cloud feature you explicitly opt into."
                 />
                 <Faq
-                  q="What exactly does PRINT clean?"
+                  q="What exactly does PRINT remove?"
                   a="All EXIF and metadata (GPS, device, software tags), via a clean pixel re-encode — plus optional removal of visible AI corner marks."
                 />
                 <Faq
@@ -1821,7 +1821,7 @@ export default function PrintApp() {
             </section>
           </>
         ) : (
-          <section className="rm-studio" id="studio">
+          <section className="rm-studio">
             <div className="rm-studio-top">
               <div className="rm-file">
                 <span className="rm-file-name">{file.name}</span>
@@ -3532,7 +3532,7 @@ export default function PrintApp() {
                         <option value="standard-plus">Standard+</option>
                         <option value="strong">Strong</option>
                         <option value="max">Max (Expert)</option>
-                        <option value="max-mint">Max Mint</option>
+                        <option value="max-mint">Max Print</option>
                         <option value="max-remint">Max ReMint</option>
                         <option value="max-optimised-remint">Max Optimised ReMint</option>
                         <option value="max-cx-remint">CX Remint (non-generative)</option>
@@ -4196,7 +4196,7 @@ export default function PrintApp() {
               <Leaf size={15} aria-hidden="true" />
             </span>
             <span className="rm-brand-word">
-              Re<span className="rm-brand-dash">‑</span>Mint<span className="rm-brand-it"> It</span>
+              Print<span className="rm-brand-it"> It</span>
             </span>
           </a>
           <span className="rm-footer-note">
