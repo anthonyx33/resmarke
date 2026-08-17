@@ -15,6 +15,7 @@ import {
   Maximize2,
   Moon,
   Play,
+  RefreshCw,
   Scan,
   SlidersHorizontal,
   Sparkles,
@@ -80,15 +81,16 @@ type Strength = "light" | "balanced" | "deep";
 type MetadataMode = "device" | "minimal";
 type NameStyle = "photo-style" | "original" | "custom";
 type QfPreset = "conservative" | "standard" | "strong";
+type FinishRouting = "adaptive" | "template";
 
 const MAX_QUEUE = 20;
 const MAX_BYTES = 25 * 1024 * 1024;
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
 
 /* Credit cost model — mirrors the existing Re-Mint Max pricing:
-   V8.9 = 15 (+2 when the detector-gated adaptive engine runs),
-   Quality Finish = 6 (CPU-only, no GPU wash). The sequence is a
-   single job that performs both stages, so it bills the sum. */
+   V8.9 = 15 (+2 when the adaptive engine runs its extra passes),
+   Quality Finish = 6 (CPU-only). The sequence is a single job that
+   performs both stages, so it bills the sum. */
 const COST_REMINT = 15;
 const COST_FINISH = 6;
 const COST_ADAPTIVE = 2;
@@ -107,17 +109,21 @@ const WASH_LABEL: Record<WashModel, string> = {
 };
 
 const STRENGTH_HINT: Record<Strength, string> = {
-  light:
-    "Faintest optics, minimal noise, ~10% cleanup — for frames that already grade well.",
-  balanced:
-    "The recommended coherent model — paired inverse/forward CCM, MHC demosaic, SNR-coupled denoise, multiscale cleanup.",
-  deep: "Legacy rescue: degrade 75% → low-res pass → restore. Only when Balanced cannot clear; it costs visible quality."
+  light: "The lightest pass. Best for frames that already grade well and need very little work.",
+  balanced: "The recommended coherent model. The balanced default for everyday production work.",
+  deep: "The heaviest pass. Use only when Balanced is not enough — it costs visible quality."
 };
 
 const QF_HINT: Record<QfPreset, string> = {
-  conservative: "Lightest touch. Maximum fidelity to the naturalized frame, minimal cleanup.",
-  standard: "The recommended finisher — compression cleanup, shadow-grain shrink, chroma repair, masked sharpen.",
-  strong: "Hardest cleanup and sharpening. Watch the self-QC ringing and flatness readouts."
+  conservative: "Lightest touch. Maximum fidelity to the incoming frame, minimal cleanup.",
+  standard: "The recommended finisher. The balanced default for everyday delivery.",
+  strong: "The strongest cleanup and sharpening. Watch the self-QC readouts below."
+};
+
+const WASH_HINT: Record<WashModel, string> = {
+  qwen: "The proven live-test default.",
+  zimage: "An alternative model family. Verify results on your own material before relying on it.",
+  "qwen+zimage": "Both models blended 50/50 for a mixed character."
 };
 
 function initialTheme(): Theme {
@@ -162,6 +168,13 @@ export default function CmintApp() {
   // Stage 2 — Quality Finish.
   const [qfPreset, setQfPreset] = useState<QfPreset>("standard");
   const [qfScale, setQfScale] = useState(1.6);
+  const [finishMode, setFinishMode] = useState<FinishRouting>("adaptive");
+  // Pro tuning — multipliers over the preset's calibrated gains. 1.00 = preset
+  // default; the worker clamps every value to its own accepted range.
+  const [tuneDither, setTuneDither] = useState(1);
+  const [tuneSmooth, setTuneSmooth] = useState(1);
+  const [tuneSharpen, setTuneSharpen] = useState(1);
+  const tuned = tuneDither !== 1 || tuneSmooth !== 1 || tuneSharpen !== 1;
 
   // Account
   const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
@@ -442,8 +455,57 @@ export default function CmintApp() {
     return {
       preset: qfPreset,
       // `null` is the native-size path the finisher already understands.
-      scale: qfScale <= 1.001 ? null : Number(qfScale.toFixed(2))
+      scale: qfScale <= 1.001 ? null : Number(qfScale.toFixed(2)),
+      overrides: { dither: tuneDither, smoothness: tuneSmooth, sharpen: tuneSharpen }
     };
+  }
+
+  /* Single-item processor. Both the batch run and the per-item Re-run go
+     through this, so a re-run is byte-for-byte the same request path with
+     whatever settings are on screen at the moment it is pressed. */
+  async function processItem(item: QueueItem, position: number, total: number) {
+    let created: DeepCleanJob | null = null;
+    setActiveId(item.id);
+    patchItem(item.id, { status: "preparing", error: undefined, job: undefined });
+    setStatus(`Preparing ${position} of ${total} · ${item.file.name}`);
+
+    try {
+      const job = await createDeepCleanJob({
+        file: item.file,
+        creatorId: userEmail || "creator@example.com",
+        profile: PROFILE_FOR[mode],
+        outputMode: "stripped",
+        dsRemintV89: mode === "remint" ? remintOptions() : undefined,
+        qualityFinish: mode === "finish" ? finishOptions() : undefined,
+        dsRemintV89Hd:
+          mode === "sequence"
+            ? { remint: remintOptions(), finish: finishOptions(), finishMode }
+            : undefined,
+        outputNameStyle: runsRemint ? nameStyle : undefined,
+        outputNameCustom: runsRemint ? nameCustom : undefined
+      });
+      created = job;
+      patchItem(item.id, { status: "uploading", job });
+
+      setStatus(`Uploading ${position} of ${total} privately…`);
+      await uploadDeepCleanInput(job, item.file);
+
+      patchItem(item.id, { status: "queued", job });
+      setStatus(`Dispatching ${position} of ${total}…`);
+      await dispatchDeepCleanJob(job.id);
+      await spendCredits(unitCost);
+
+      patchItem(item.id, { status: "processing", job });
+      const done = await waitForJob(job.id, item.id, position, total);
+      patchItem(item.id, { status: "completed", job: done, error: undefined });
+    } catch (nextError) {
+      const message =
+        nextError instanceof Error ? nextError.message : "This image could not be processed.";
+      if (created) await cancelDeepCleanJob(created.id).catch(() => undefined);
+      patchItem(item.id, { status: "failed", job: created ?? undefined, error: message });
+      setStatus(`${item.file.name}: ${message}`);
+      throw nextError;
+    }
   }
 
   async function runQueue() {
@@ -454,54 +516,16 @@ export default function CmintApp() {
       return setStatus(`Not enough credits — this queue needs ${items.length * unitCost}.`);
     }
 
-    const profile = PROFILE_FOR[mode];
     setRunning(true);
     setNotice("");
     let ok = 0;
     let failed = 0;
 
     for (const [index, item] of items.entries()) {
-      let created: DeepCleanJob | null = null;
-      setActiveId(item.id);
-      patchItem(item.id, { status: "preparing", error: undefined, job: undefined });
-      setStatus(`Preparing ${index + 1} of ${items.length} · ${item.file.name}`);
-
       try {
-        const job = await createDeepCleanJob({
-          file: item.file,
-          creatorId: userEmail || "creator@example.com",
-          profile,
-          outputMode: "stripped",
-          dsRemintV89: mode === "remint" ? remintOptions() : undefined,
-          qualityFinish: mode === "finish" ? finishOptions() : undefined,
-          dsRemintV89Hd:
-            mode === "sequence"
-              ? { remint: remintOptions(), finish: finishOptions() }
-              : undefined,
-          outputNameStyle: runsRemint ? nameStyle : undefined,
-          outputNameCustom: runsRemint ? nameCustom : undefined
-        });
-        created = job;
-        patchItem(item.id, { status: "uploading", job });
-
-        setStatus(`Uploading ${index + 1} of ${items.length} privately…`);
-        await uploadDeepCleanInput(job, item.file);
-
-        patchItem(item.id, { status: "queued", job });
-        setStatus(`Dispatching ${index + 1} of ${items.length}…`);
-        await dispatchDeepCleanJob(job.id);
-        await spendCredits(unitCost);
-
-        patchItem(item.id, { status: "processing", job });
-        const done = await waitForJob(job.id, item.id, index + 1, items.length);
-        patchItem(item.id, { status: "completed", job: done, error: undefined });
+        await processItem(item, index + 1, items.length);
         ok += 1;
-      } catch (nextError) {
-        const message =
-          nextError instanceof Error ? nextError.message : "This image could not be processed.";
-        if (created) await cancelDeepCleanJob(created.id).catch(() => undefined);
-        patchItem(item.id, { status: "failed", job: created ?? undefined, error: message });
-        setStatus(`${item.file.name}: ${message}`);
+      } catch {
         failed += 1;
       }
     }
@@ -513,6 +537,29 @@ export default function CmintApp() {
         ? `Finished · ${ok} completed · ${failed} failed. Failed images can be retried.`
         : `Complete · all ${ok} ${ok === 1 ? "image is" : "images are"} ready.`
     );
+  }
+
+  /* Re-run a completed image with the settings currently on screen. The file
+     is already in the browser, so nothing is re-uploaded by the user — but it
+     is a brand-new job and bills a fresh unit cost. */
+  async function rerunItem(item: QueueItem) {
+    if (running || zipBusy) return;
+    if (hasSupabaseConfig && !userId) return setStatus("Sign in before running the queue.");
+    if (credits.privacyCredits < unitCost) {
+      return setStatus(`Not enough credits — a re-run needs ${unitCost}.`);
+    }
+
+    setRunning(true);
+    setNotice("");
+    try {
+      await processItem(item, 1, 1);
+      setStatus(`Re-ran ${item.file.name} with the current settings.`);
+    } catch {
+      /* processItem already recorded the failure on the item and in status. */
+    } finally {
+      setRunning(false);
+      if (userId) await refreshCredits(userId);
+    }
   }
 
   async function waitForJob(
@@ -879,22 +926,36 @@ export default function CmintApp() {
                       </span>
                       <span className="cm-qactions">
                         {item.status === "completed" ? (
-                          <button
-                            className="cm-qact"
-                            type="button"
-                            title="Download"
-                            disabled={downloadingId === item.id}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void downloadItem(item);
-                            }}
-                          >
-                            {downloadingId === item.id ? (
-                              <Loader2 className="cm-spin" size={14} />
-                            ) : (
-                              <Download size={14} />
-                            )}
-                          </button>
+                          <>
+                            <button
+                              className="cm-qact"
+                              type="button"
+                              title={`Re-run this image with the current settings (${unitCost} credits)`}
+                              disabled={running || zipBusy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void rerunItem(item);
+                              }}
+                            >
+                              <RefreshCw size={14} />
+                            </button>
+                            <button
+                              className="cm-qact"
+                              type="button"
+                              title="Download"
+                              disabled={downloadingId === item.id}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void downloadItem(item);
+                              }}
+                            >
+                              {downloadingId === item.id ? (
+                                <Loader2 className="cm-spin" size={14} />
+                              ) : (
+                                <Download size={14} />
+                              )}
+                            </button>
+                          </>
                         ) : null}
                         <button
                           className="cm-qact is-danger"
@@ -1050,15 +1111,15 @@ export default function CmintApp() {
                     active={mode === "sequence"}
                     disabled={running}
                     title="Sequence · V8.9 → Finish"
-                    detail="One job: the frozen coherent remint, then the HD finisher over its delivered file."
+                    detail="One job, both stages: the coherent pass, then the HD finisher over its delivered file."
                     cost={COST_REMINT + (engineMode === "adaptive" ? COST_ADAPTIVE : 0) + COST_FINISH}
                     onClick={() => setMode("sequence")}
                   />
                   <ModeCard
                     active={mode === "remint"}
                     disabled={running}
-                    title="Re-Mint only · V8.9"
-                    detail="Coherent Pro alone. Delivers the naturalized q92 file at ≤1250px."
+                    title="Coherent pass only · V8.9"
+                    detail="Stage one alone. Delivers the processed file at up to 1250px."
                     cost={COST_REMINT + (engineMode === "adaptive" ? COST_ADAPTIVE : 0)}
                     onClick={() => setMode("remint")}
                   />
@@ -1066,7 +1127,7 @@ export default function CmintApp() {
                     active={mode === "finish"}
                     disabled={running}
                     title="Finish only · Quality Finish"
-                    detail="Standalone pass over an already-naturalized JPEG. CPU-only, non-generative."
+                    detail="Standalone finishing pass over a JPEG you already have. CPU-only, non-generative."
                     cost={COST_FINISH}
                     onClick={() => setMode("finish")}
                   />
@@ -1076,8 +1137,8 @@ export default function CmintApp() {
                   <div className="cm-note">
                     <Info size={13} aria-hidden="true" />
                     <span>
-                      Feed this an already re-minted file. Running it on a raw AI frame polishes the
-                      pixels but does nothing for detector risk.
+                      This is the finishing stage on its own. It polishes the pixels of whatever you
+                      give it; it does not run the stage-one pass.
                     </span>
                   </div>
                 ) : null}
@@ -1089,7 +1150,7 @@ export default function CmintApp() {
                       <span className="cm-card-num">1</span>
                       <span className="cm-card-title">
                         <b>DS ReMint V8.9 · Coherent Pro</b>
-                        <span>Data-tuned coherent model · baseline routing</span>
+                        <span>Data-tuned coherent model · the proven live-test default</span>
                       </span>
                       <span className="cm-tag is-on">GPU</span>
                     </div>
@@ -1101,7 +1162,7 @@ export default function CmintApp() {
                         <Stat label="Resample" value="1× · ≤1250px" />
                         <Stat
                           label="Engine"
-                          value={engineMode === "adaptive" ? "≤3 gated" : "1 pass"}
+                          value={engineMode === "adaptive" ? "up to 3 passes" : "1 pass"}
                         />
                       </div>
 
@@ -1151,8 +1212,8 @@ export default function CmintApp() {
                         </div>
                         <p className="cm-hint">
                           {engineMode === "adaptive"
-                            ? `Strengths run lightest-first, each probed on the delivered bytes; the least destructive pass that clears ships. +${COST_ADAPTIVE} credits.`
-                            : "One deterministic pass at the chosen strength. No detector calls."}
+                            ? `Tries the lightest settings first and ships the least destructive result that meets the quality bar. +${COST_ADAPTIVE} credits.`
+                            : `One deterministic pass at the chosen strength.`}
                         </p>
                       </div>
                     </div>
@@ -1181,13 +1242,7 @@ export default function CmintApp() {
                               </button>
                             ))}
                           </div>
-                          <p className="cm-hint">
-                            {washModel === "qwen"
-                              ? "The proven SynthID breaker and the V8.9 live-test default."
-                              : washModel === "zimage"
-                                ? "Low-attribution family (~4–6% on graders). Re-verify SynthID removal before trusting it."
-                                : "Both washes blended 50/50 — splits the source-attribution vote across families."}
-                          </p>
+                          <p className="cm-hint">{WASH_HINT[washModel]}</p>
                         </div>
 
                         <div className="cm-field">
@@ -1257,13 +1312,30 @@ export default function CmintApp() {
 
                     <div className="cm-card-body">
                       <div className="cm-stats">
-                        <Stat label="Preset" value={qfPreset} />
+                        <Stat label="Preset" value={qfReport?.preset ?? qfPreset} />
                         <Stat
                           label="Delivery"
-                          value={qfScale <= 1.001 ? "native size" : `${qfScale.toFixed(2)}× HD`}
+                          value={
+                            qfReport
+                              ? qfReport.scale
+                                ? `${qfReport.scale.toFixed(2)}× HD`
+                                : "native size"
+                              : qfScale <= 1.001
+                                ? "native size"
+                                : `${qfScale.toFixed(2)}× HD`
+                          }
                         />
-                        <Stat label="Encode" value="Q95 · 4:4:4 · 1×" />
-                        <Stat label="Self-QC" value="ships input on fail" />
+                        <Stat label="Encode" value={encodeLabel(qfReport)} />
+                        <Stat
+                          label="Self-QC"
+                          value={
+                            qfReport
+                              ? qfReport.applied
+                                ? "passed"
+                                : "input shipped"
+                              : "ships input on fail"
+                          }
+                        />
                       </div>
 
                       <div className="cm-field">
@@ -1308,6 +1380,82 @@ export default function CmintApp() {
                           ))}
                         </div>
                       </div>
+
+                      {/* Pro tuning — multipliers over the preset's calibrated gains. */}
+                      <div className="cm-field">
+                        <span className="cm-label">
+                          Pro tuning
+                          {tuned ? (
+                            <button
+                              className="cm-reset"
+                              type="button"
+                              disabled={running}
+                              onClick={() => {
+                                setTuneDither(1);
+                                setTuneSmooth(1);
+                                setTuneSharpen(1);
+                              }}
+                            >
+                              Reset to preset
+                            </button>
+                          ) : null}
+                        </span>
+                        <TuneRow
+                          name="Gradient dither"
+                          min={0}
+                          max={1.5}
+                          value={tuneDither}
+                          disabled={running}
+                          onChange={setTuneDither}
+                        />
+                        <TuneRow
+                          name="Smoothing"
+                          min={0.5}
+                          max={1.5}
+                          value={tuneSmooth}
+                          disabled={running}
+                          onChange={setTuneSmooth}
+                        />
+                        <TuneRow
+                          name="Sharpening"
+                          min={0}
+                          max={1.5}
+                          value={tuneSharpen}
+                          disabled={running}
+                          onChange={setTuneSharpen}
+                        />
+                        <p className="cm-hint">
+                          1.00 = preset default. Each slider is a multiplier over the preset's
+                          calibrated gain, so leave them at 1.00 unless a specific image asks for
+                          more or less.
+                        </p>
+                      </div>
+
+                      {mode === "sequence" ? (
+                        <div className="cm-field">
+                          <span className="cm-label">Finish routing</span>
+                          <div className="cm-seg cm-seg-2" role="radiogroup" aria-label="Finish routing">
+                            {(["adaptive", "template"] as FinishRouting[]).map((value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={finishMode === value}
+                                className={finishMode === value ? "is-active" : ""}
+                                disabled={running}
+                                onClick={() => setFinishMode(value)}
+                              >
+                                {value === "adaptive" ? "Adaptive" : "Template"}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="cm-hint">
+                            {finishMode === "adaptive"
+                              ? "Builds more than one finish candidate and ships the strongest one that meets the quality bar."
+                              : "Runs exactly the preset selected above, with no candidate selection."}
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
 
                     <details className="cm-disc">
@@ -1378,14 +1526,49 @@ export default function CmintApp() {
                             <Stat
                               label="Delivered"
                               value={
-                                qfReport.outputWidth
-                                  ? `${qfReport.outputWidth}×${qfReport.outputHeight}`
-                                  : "—"
+                                qfReport.delivery?.width
+                                  ? `${qfReport.delivery.width}×${qfReport.delivery.height}`
+                                  : qfReport.outputWidth
+                                    ? `${qfReport.outputWidth}×${qfReport.outputHeight}`
+                                    : "—"
                               }
+                            />
+                            <Stat label="Encode" value={encodeLabel(qfReport)} />
+                            <Stat
+                              label="Preset run"
+                              value={`${qfReport.preset ?? "—"} · ${
+                                qfReport.scale ? `${qfReport.scale.toFixed(2)}×` : "native"
+                              }`}
                             />
                           </>
                         ) : null}
                       </div>
+
+                      {qfReport?.overrides && hasOverrides(qfReport.overrides) ? (
+                        <div className="cm-stats">
+                          <Stat
+                            label="Dither"
+                            value={multiplier(qfReport.overrides.dither)}
+                          />
+                          <Stat
+                            label="Smoothing"
+                            value={multiplier(qfReport.overrides.smoothness)}
+                          />
+                          <Stat
+                            label="Sharpening"
+                            value={multiplier(qfReport.overrides.sharpen)}
+                          />
+                          {qfReport.qc?.gradient_ladder_attempts !== undefined ||
+                          qfReport.qc?.gradient_alpha !== undefined ? (
+                            <Stat
+                              label="Gradient ladder"
+                              value={`${qfReport.qc?.gradient_ladder_attempts ?? 1}× · α${(
+                                qfReport.qc?.gradient_alpha ?? 1
+                              ).toFixed(2)}`}
+                            />
+                          ) : null}
+                        </div>
+                      ) : null}
 
                       {rating !== null ? (
                         <div
@@ -1393,7 +1576,7 @@ export default function CmintApp() {
                             rating <= 29 ? "low" : rating <= 58 ? "mid" : "high"
                           }`}
                         >
-                          AI-flag risk {rating}/88
+                          Quality index {rating}/88
                         </div>
                       ) : null}
 
@@ -1406,12 +1589,52 @@ export default function CmintApp() {
                           <QcRow label="H1/H0 ratio" value={qfReport.qc.h1h0_ratio} />
                           <QcRow label="Ringing" value={qfReport.qc.ringing} />
                           <QcRow label="Flatness Δ" value={qfReport.qc.flatness_delta} />
+                          <QcRow
+                            label="Staircase index (JPEG)"
+                            value={qfReport.qc.staircase_index_jpeg}
+                          />
+                          {qfReport.qc.banding_origin ? (
+                            <div className="cm-qc-row">
+                              <span>Banding origin</span>
+                              <b>{BANDING_ORIGIN_LABEL[qfReport.qc.banding_origin] ?? qfReport.qc.banding_origin}</b>
+                            </div>
+                          ) : null}
+                          {qfReport.delivery ? (
+                            <div className="cm-qc-row">
+                              <span>Delivery check</span>
+                              <b>
+                                {qfReport.delivery.width}×{qfReport.delivery.height}
+                                {qfReport.delivery.sampling ? ` · ${qfReport.delivery.sampling}` : ""}
+                              </b>
+                            </div>
+                          ) : null}
                           <div className="cm-qc-row">
                             <span>Self-QC</span>
                             <b style={{ color: qfReport.applied ? "var(--cm-ok)" : "var(--cm-warn)" }}>
                               {qfReport.applied ? "passed" : "rejected — input shipped"}
                             </b>
                           </div>
+                        </div>
+                      ) : null}
+
+                      {qfReport?.qc?.gradient_rois?.length ? (
+                        <div className="cm-rois">
+                          <div className="cm-rois-head">
+                            <span>Tile</span>
+                            <span>Cover</span>
+                            <span>ρ₁</span>
+                            <span>RMS</span>
+                            <span>Band</span>
+                          </div>
+                          {qfReport.qc.gradient_rois.slice(0, 6).map((roi) => (
+                            <div className="cm-rois-row" key={roi.tile}>
+                              <span>{roi.tile}</span>
+                              <b>{fixed(roi.coverage, 2)}</b>
+                              <b>{fixed(roi.rho1, 3)}</b>
+                              <b>{fixed(roi.residual_rms, 2)}</b>
+                              <b>{fixed(roi.banding, 2)}</b>
+                            </div>
+                          ))}
                         </div>
                       ) : null}
 
@@ -1427,6 +1650,16 @@ export default function CmintApp() {
                           <Download size={15} aria-hidden="true" />
                         )}
                         Download this image
+                      </button>
+
+                      <button
+                        className="cm-btn cm-btn-block"
+                        type="button"
+                        disabled={running || zipBusy}
+                        onClick={() => void rerunItem(active)}
+                      >
+                        <RefreshCw size={15} aria-hidden="true" />
+                        Re-run with current settings ({unitCost} cr)
                       </button>
                     </div>
                   </div>
@@ -1613,6 +1846,40 @@ function ModeCard({
   );
 }
 
+function TuneRow({
+  name,
+  min,
+  max,
+  value,
+  disabled,
+  onChange
+}: {
+  name: string;
+  min: number;
+  max: number;
+  value: number;
+  disabled: boolean;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="cm-tune">
+      <span className="cm-tune-name">{name}</span>
+      <input
+        className="cm-range"
+        type="range"
+        aria-label={name}
+        min={min}
+        max={max}
+        step={0.05}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      <span className={`cm-tune-val${value !== 1 ? " is-tuned" : ""}`}>{value.toFixed(2)}×</span>
+    </div>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: ReactNode }) {
   return (
     <span className="cm-stat">
@@ -1633,13 +1900,63 @@ function QcRow({ label, value }: { label: string; value: number | undefined }) {
 }
 
 /* ============================================================
+   Report formatting
+   ============================================================ */
+
+const BANDING_ORIGIN_LABEL: Record<string, string> = {
+  pre_existing_float: "pre-existing (source)",
+  quantization: "quantization",
+  jpeg: "JPEG encode",
+  none: "none"
+};
+
+function encodeLabel(report: QfView | null): string {
+  const quality = report?.encode?.quality;
+  const subsampling = report?.encode?.subsampling;
+  if (quality === undefined && !subsampling) return "set by preset";
+  return [quality !== undefined ? `Q${quality}` : null, subsampling]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function hasOverrides(overrides: NonNullable<QfView["overrides"]>): boolean {
+  return (
+    overrides.dither !== undefined ||
+    overrides.smoothness !== undefined ||
+    overrides.sharpen !== undefined
+  );
+}
+
+function multiplier(value: number | undefined): string {
+  return value === undefined ? "—" : `${value.toFixed(2)}×`;
+}
+
+function fixed(value: number | undefined, digits: number): string {
+  return value === undefined ? "—" : value.toFixed(digits);
+}
+
+/* ============================================================
    Report readers
    ============================================================ */
 
+type GradientRoi = {
+  tile: string;
+  coverage?: number;
+  rho1?: number;
+  residual_rms?: number;
+  banding?: number;
+};
+
 type QfView = {
   applied: boolean;
+  preset?: string;
+  scale?: number | null;
   outputWidth?: number;
   outputHeight?: number;
+  /** The multipliers the worker actually ran with, after its own clamping. */
+  overrides?: { dither?: number; smoothness?: number; sharpen?: number };
+  encode?: { quality?: number; subsampling?: string };
+  delivery?: { width?: number; height?: number; sampling?: string };
   qc?: {
     ssim?: number;
     noise_floor_ratio?: number;
@@ -1648,27 +1965,59 @@ type QfView = {
     h1h0_ratio?: number;
     ringing?: number;
     flatness_delta?: number;
+    banding_origin?: string;
+    staircase_index_jpeg?: number;
+    gradient_alpha?: number;
+    gradient_ladder_attempts?: number;
+    gradient_rois?: GradientRoi[];
   };
 };
 
 function readQfReport(engine: Record<string, unknown> | undefined): QfView | null {
   if (!engine) return null;
   // The sequence nests the finisher report under `quality_finish`; a
-  // standalone finish puts it at the engine root. Probe both rather than
+  // standalone finish puts it at the engine root. Check both rather than
   // trusting the currently-selected mode — the job may have run under a
-  // different one.
+  // different one. The nested slot is always the finisher's, so accept it
+  // even in its short "no candidate applied" form, which carries no `mode`.
   const nested = engine.quality_finish;
-  const raw = isQfShape(nested)
-    ? (nested as Record<string, unknown>)
+  const raw = isRecord(nested)
+    ? nested
     : isQfShape(engine)
       ? engine
       : undefined;
   if (!raw) return null;
-  const qc = raw.qc as Record<string, unknown> | undefined;
+  const qc = isRecord(raw.qc) ? raw.qc : undefined;
+  const overrides = isRecord(raw.overrides) ? raw.overrides : undefined;
+  const encode = isRecord(raw.encode) ? raw.encode : undefined;
+  const delivery = isRecord(raw.delivery_check) ? raw.delivery_check : undefined;
   return {
     applied: raw.applied === true,
+    preset: typeof raw.preset === "string" ? raw.preset : undefined,
+    scale: raw.scale === null ? null : numberOr(raw.scale),
     outputWidth: numberOr(raw.output_width),
     outputHeight: numberOr(raw.output_height),
+    overrides: overrides
+      ? {
+          dither: numberOr(overrides.dither),
+          smoothness: numberOr(overrides.smoothness),
+          sharpen: numberOr(overrides.sharpen)
+        }
+      : undefined,
+    encode: encode
+      ? {
+          quality: numberOr(encode.quality),
+          subsampling:
+            typeof encode.subsampling === "string" ? encode.subsampling : undefined
+        }
+      : undefined,
+    delivery: delivery
+      ? {
+          width: numberOr(delivery.width),
+          height: numberOr(delivery.height),
+          sampling: typeof delivery.sampling === "string" ? delivery.sampling : undefined
+        }
+      : undefined,
     qc: qc
       ? {
           ssim: numberOr(qc.ssim),
@@ -1677,18 +2026,36 @@ function readQfReport(engine: Record<string, unknown> | undefined): QfView | nul
           residual_rms: numberOr(qc.residual_rms),
           h1h0_ratio: numberOr(qc.h1h0_ratio),
           ringing: numberOr(qc.ringing),
-          flatness_delta: numberOr(qc.flatness_delta)
+          flatness_delta: numberOr(qc.flatness_delta),
+          banding_origin:
+            typeof qc.banding_origin === "string" ? qc.banding_origin : undefined,
+          staircase_index_jpeg: numberOr(qc.staircase_index_jpeg),
+          gradient_alpha: numberOr(qc.gradient_alpha),
+          gradient_ladder_attempts: numberOr(qc.gradient_ladder_attempts),
+          gradient_rois: readRois(qc.gradient_rois)
         }
       : undefined
   };
 }
 
+function readRois(value: unknown): GradientRoi[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const rois = value.filter(isRecord).map((roi) => ({
+    tile: typeof roi.tile === "string" ? roi.tile : "—",
+    coverage: numberOr(roi.coverage),
+    rho1: numberOr(roi.rho1),
+    residual_rms: numberOr(roi.residual_rms),
+    banding: numberOr(roi.banding)
+  }));
+  return rois.length ? rois : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function isQfShape(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as Record<string, unknown>).mode === "quality-finish"
-  );
+  return isRecord(value) && value.mode === "quality-finish";
 }
 
 function numberOr(value: unknown): number | undefined {

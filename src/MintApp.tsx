@@ -1632,7 +1632,7 @@ export default function MintApp() {
       <main className="rm-main">
         {!file ? (
           <>
-            <section className="rm-hero">
+            <section className="rm-hero" id="hero">
               <span className="rm-pill">
                 <span className="rm-dot" /> Private by design · Runs in your browser
               </span>
@@ -1820,7 +1820,7 @@ export default function MintApp() {
             </section>
           </>
         ) : (
-          <section className="rm-studio">
+          <section className="rm-studio" id="studio">
             <div className="rm-studio-top">
               <div className="rm-file">
                 <span className="rm-file-name">{file.name}</span>

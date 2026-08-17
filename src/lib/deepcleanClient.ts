@@ -289,7 +289,8 @@ export async function createDeepCleanJob(params: {
       quality_finish: params.qualityFinish
         ? {
             preset: params.qualityFinish.preset,
-            scale: params.qualityFinish.scale
+            scale: params.qualityFinish.scale,
+            overrides: params.qualityFinish.overrides
           }
         : undefined,
       ds_remint_v8_9_hd: params.dsRemintV89Hd
@@ -304,7 +305,8 @@ export async function createDeepCleanJob(params: {
             quality_finish: {
               preset: params.dsRemintV89Hd.finish.preset,
               scale: params.dsRemintV89Hd.finish.scale,
-              finish_mode: params.dsRemintV89Hd.finishMode
+              finish_mode: params.dsRemintV89Hd.finishMode,
+              overrides: params.dsRemintV89Hd.finish.overrides
             }
           }
         : undefined,
