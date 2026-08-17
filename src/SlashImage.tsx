@@ -60,7 +60,7 @@ const MODE_META: Record<
     title: "V8.9 → Quality Finish",
     blurb: "The full two-step flow: break the carrier, then restore the photograph.",
     badge: "Recommended",
-    steps: ["Wash · Qwen", "Coherent camera", "Gate", "Selective restoration", "Q95 4:4:4"]
+    steps: ["Wash · Qwen", "Coherent camera", "Gate", "Selective restoration", "Q97 4:4:4"]
   },
   remint: {
     title: "V8.9 Coherent Pro",
@@ -72,7 +72,7 @@ const MODE_META: Record<
     title: "Quality Finish",
     blurb: "Polish an already-reminted file. Non-generative, deterministic.",
     badge: "Step 2",
-    steps: ["JPEG cleanup", "Noise floor kept", "Chroma repair", "1.6× HD", "Q95 4:4:4"]
+    steps: ["JPEG cleanup", "Noise floor kept", "Chroma repair", "1.6× HD", "Q97 4:4:4"]
   }
 };
 
@@ -98,6 +98,10 @@ export default function SlashImage() {
   const [finishPreset, setFinishPreset] = useState<"conservative" | "standard" | "strong">("standard");
   const [finishScale, setFinishScale] = useState<"native" | "1.6" | "2">("1.6");
   const [finishMode, setFinishMode] = useState<"adaptive" | "template">("adaptive");
+  // Pro tuning (finish overrides): 1.00 = preset default, clamped server-side.
+  const [tuneDither, setTuneDither] = useState(1);
+  const [tuneSmooth, setTuneSmooth] = useState(1);
+  const [tuneSharpen, setTuneSharpen] = useState(1);
   // Output naming.
   const [nameStyle, setNameStyle] = useState<"photo-style" | "original" | "custom">("photo-style");
   const [nameCustom, setNameCustom] = useState("");
@@ -198,7 +202,8 @@ export default function SlashImage() {
   function buildJobOptions() {
     const finishOptions = {
       preset: finishPreset,
-      scale: finishScale === "native" ? null : Number(finishScale)
+      scale: finishScale === "native" ? null : Number(finishScale),
+      overrides: { dither: tuneDither, smoothness: tuneSmooth, sharpen: tuneSharpen }
     };
     const remintOptions = {
       engineMode,
@@ -224,6 +229,66 @@ export default function SlashImage() {
     return { profile: "quality-finish" as const, qualityFinish: finishOptions };
   }
 
+  async function processItem(item: QueueItem) {
+    let job: DeepCleanJob | undefined;
+    try {
+      setQueue((q) =>
+        q.map((x) => (x.id === item.id ? { ...x, status: "preparing", error: undefined } : x))
+      );
+      setStatusLine(`Preparing ${item.file.name}…`);
+      const options = buildJobOptions();
+      job = await createDeepCleanJob({
+        file: item.file,
+        creatorId: userId,
+        profile: options.profile,
+        outputMode: "stripped",
+        dsRemintV89: "dsRemintV89" in options ? options.dsRemintV89 : undefined,
+        qualityFinish: "qualityFinish" in options ? options.qualityFinish : undefined,
+        dsRemintV89Hd: "dsRemintV89Hd" in options ? options.dsRemintV89Hd : undefined,
+        outputNameStyle: "outputNameStyle" in options ? options.outputNameStyle : undefined,
+        outputNameCustom: "outputNameCustom" in options ? options.outputNameCustom : undefined
+      });
+
+      setQueue((q) =>
+        q.map((x) => (x.id === item.id ? { ...x, status: "uploading", job } : x))
+      );
+      setStatusLine(`Uploading ${item.file.name} privately…`);
+      await uploadDeepCleanInput(job, item.file);
+
+      setQueue((q) =>
+        q.map((x) => (x.id === item.id ? { ...x, status: "queued" } : x))
+      );
+      setStatusLine(`Sending ${item.file.name} to the GPU…`);
+      await dispatchDeepCleanJob(job.id);
+      await spendCredits(COST[mode]);
+
+      setQueue((q) =>
+        q.map((x) => (x.id === item.id ? { ...x, status: "processing", job } : x))
+      );
+
+      const completedJob = await pollJob(job.id);
+      const report = summarizeReport(completedJob.report, mode);
+      setQueue((q) =>
+        q.map((x) =>
+          x.id === item.id
+            ? { ...x, status: "completed", job: completedJob, outputUrl: completedJob.outputUrl, report }
+            : x
+        )
+      );
+      if (userId) void refreshCredits(userId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "This image could not be processed.";
+      if (job) await cancelDeepCleanJob(job.id).catch(() => undefined);
+      setQueue((q) =>
+        q.map((x) =>
+          x.id === item.id ? { ...x, status: "failed", error: message, job } : x
+        )
+      );
+      setStatusLine(`${item.file.name}: ${message}`);
+      throw err;
+    }
+  }
+
   async function runQueue() {
     if (!supabase || !userId) return;
     if (queue.length === 0 || running) return;
@@ -236,63 +301,11 @@ export default function SlashImage() {
         completed += 1;
         continue;
       }
-      let job: DeepCleanJob | undefined;
       try {
-        setQueue((q) =>
-          q.map((x) => (x.id === item.id ? { ...x, status: "preparing" } : x))
-        );
-        setStatusLine(`Preparing ${item.file.name}…`);
-        const options = buildJobOptions();
-        job = await createDeepCleanJob({
-          file: item.file,
-          creatorId: userId,
-          profile: options.profile,
-          outputMode: "stripped",
-          dsRemintV89: "dsRemintV89" in options ? options.dsRemintV89 : undefined,
-          qualityFinish: "qualityFinish" in options ? options.qualityFinish : undefined,
-          dsRemintV89Hd: "dsRemintV89Hd" in options ? options.dsRemintV89Hd : undefined,
-          outputNameStyle: "outputNameStyle" in options ? options.outputNameStyle : undefined,
-          outputNameCustom: "outputNameCustom" in options ? options.outputNameCustom : undefined
-        });
-
-        setQueue((q) =>
-          q.map((x) => (x.id === item.id ? { ...x, status: "uploading", job } : x))
-        );
-        setStatusLine(`Uploading ${item.file.name} privately…`);
-        await uploadDeepCleanInput(job, item.file);
-
-        setQueue((q) =>
-          q.map((x) => (x.id === item.id ? { ...x, status: "queued" } : x))
-        );
-        setStatusLine(`Sending ${item.file.name} to the GPU…`);
-        await dispatchDeepCleanJob(job.id);
-        await spendCredits(COST[mode]);
-
-        setQueue((q) =>
-          q.map((x) => (x.id === item.id ? { ...x, status: "processing", job } : x))
-        );
-
-        const completedJob = await pollJob(job.id);
-        const report = summarizeReport(completedJob.report, mode);
-        setQueue((q) =>
-          q.map((x) =>
-            x.id === item.id
-              ? { ...x, status: "completed", job: completedJob, outputUrl: completedJob.outputUrl, report }
-              : x
-          )
-        );
+        await processItem(item);
         completed += 1;
-        if (userId) void refreshCredits(userId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "This image could not be processed.";
-        if (job) await cancelDeepCleanJob(job.id).catch(() => undefined);
-        setQueue((q) =>
-          q.map((x) =>
-            x.id === item.id ? { ...x, status: "failed", error: message, job } : x
-          )
-        );
+      } catch {
         failed += 1;
-        setStatusLine(`${item.file.name}: ${message}`);
       }
     }
 
@@ -302,6 +315,20 @@ export default function SlashImage() {
         ? `Done · ${completed} completed · ${failed} failed`
         : `Done · all ${completed} ${completed === 1 ? "image is" : "images are"} ready`
     );
+  }
+
+  async function regenerateItem(item: QueueItem) {
+    if (running) return;
+    setRunning(true);
+    setStatusLine(`Re-running ${item.file.name} with current settings…`);
+    try {
+      await processItem(item);
+      setStatusLine(`Re-ran ${item.file.name} · ready.`);
+    } catch {
+      setStatusLine(`Re-run of ${item.file.name} failed.`);
+    } finally {
+      setRunning(false);
+    }
   }
 
   async function pollJob(jobId: string): Promise<DeepCleanJob> {
@@ -629,6 +656,77 @@ export default function SlashImage() {
                         ))}
                       </div>
                     </div>
+                    <div className="slash-field">
+                      <div className="slash-tune-head">
+                        <label className="slash-label">Pro tuning</label>
+                        {(tuneDither !== 1 || tuneSmooth !== 1 || tuneSharpen !== 1) && (
+                          <button
+                            type="button"
+                            className="slash-override-reset"
+                            disabled={running}
+                            onClick={() => {
+                              setTuneDither(1);
+                              setTuneSmooth(1);
+                              setTuneSharpen(1);
+                            }}
+                          >
+                            Reset to preset
+                          </button>
+                        )}
+                      </div>
+                      <div className="slash-range-row">
+                        <span className="slash-range-name">Gradient dither</span>
+                        <input
+                          className="slash-range"
+                          type="range"
+                          min={0}
+                          max={1.5}
+                          step={0.05}
+                          value={tuneDither}
+                          disabled={running}
+                          onChange={(e) => setTuneDither(Number(e.target.value))}
+                        />
+                        <span className={`slash-range-val${tuneDither !== 1 ? " is-tuned" : ""}`}>
+                          {tuneDither.toFixed(2)}×
+                        </span>
+                      </div>
+                      <div className="slash-range-row">
+                        <span className="slash-range-name">Smoothing</span>
+                        <input
+                          className="slash-range"
+                          type="range"
+                          min={0.5}
+                          max={1.5}
+                          step={0.05}
+                          value={tuneSmooth}
+                          disabled={running}
+                          onChange={(e) => setTuneSmooth(Number(e.target.value))}
+                        />
+                        <span className={`slash-range-val${tuneSmooth !== 1 ? " is-tuned" : ""}`}>
+                          {tuneSmooth.toFixed(2)}×
+                        </span>
+                      </div>
+                      <div className="slash-range-row">
+                        <span className="slash-range-name">Sharpening</span>
+                        <input
+                          className="slash-range"
+                          type="range"
+                          min={0}
+                          max={1.5}
+                          step={0.05}
+                          value={tuneSharpen}
+                          disabled={running}
+                          onChange={(e) => setTuneSharpen(Number(e.target.value))}
+                        />
+                        <span className={`slash-range-val${tuneSharpen !== 1 ? " is-tuned" : ""}`}>
+                          {tuneSharpen.toFixed(2)}×
+                        </span>
+                      </div>
+                      <small className="slash-hint">
+                        1.00 = preset default. Dither breaks sky banding; smoothing cleans
+                        sky/walls; sharpening restores texture detail.
+                      </small>
+                    </div>
                     {mode === "sequence" ? (
                       <div className="slash-field">
                         <label className="slash-label">Finish routing</label>
@@ -825,6 +923,15 @@ export default function SlashImage() {
                           Save
                         </button>
                       ) : null}
+                      {item.status === "completed" && !running ? (
+                        <button
+                          className="slash-icon-btn"
+                          title="Re-run with current settings"
+                          onClick={() => void regenerateItem(item)}
+                        >
+                          <RefreshCw size={15} />
+                        </button>
+                      ) : null}
                       {!running && item.status !== "processing" ? (
                         <button
                           className="slash-icon-btn"
@@ -866,7 +973,15 @@ function summarizeReport(report: Record<string, unknown> | undefined, mode: Mode
   const qf = (engine.quality_finish ?? {}) as Record<string, unknown>;
   const qc = (qf.qc ?? {}) as Record<string, unknown>;
   if (qf && qf.applied === true) {
-    return `Finished · ${qf.preset ?? "standard"} · ${qf.scale ?? "native"}× · SSIM ${qc.ssim ?? "?"}`;
+    const bits = [
+      `Finished · ${qf.preset ?? "standard"} · ${qf.scale ?? "native"}×`,
+      `SSIM ${qc.ssim ?? "?"}`
+    ];
+    const origin = typeof qc.banding_origin === "string" ? qc.banding_origin : "";
+    if (origin && origin !== "none") bits.push(origin);
+    const alpha = typeof qc.gradient_alpha === "number" && qc.gradient_alpha < 1 ? `α${qc.gradient_alpha}` : "";
+    if (alpha) bits.push(alpha);
+    return bits.join(" · ");
   }
   if (qf && qf.applied === false) {
     return "Reminted · finish QC tripped · original shipped";

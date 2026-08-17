@@ -1199,9 +1199,15 @@ function qualityFinishExpertRefinement(input: unknown) {
       ? raw.preset
       : "standard";
   const scale = clampNumber(raw.scale, 1.0, 2.0, 1.6);
+  const ovRaw = isRecord(raw.overrides) ? raw.overrides : {};
+  const overrides = {
+    dither: clampNumber(ovRaw.dither, 0, 1.5, 1),
+    smoothness: clampNumber(ovRaw.smoothness, 0.5, 1.5, 1),
+    sharpen: clampNumber(ovRaw.sharpen, 0, 1.5, 1)
+  };
   return {
     mode: "quality-finish",
-    quality_finish: { preset, scale }
+    quality_finish: { preset, scale, overrides }
   };
 }
 
@@ -1217,6 +1223,7 @@ function dsRemintV8_9HdExpertRefinement(input: unknown) {
   const raw = isRecord(input) ? input : {};
   const v89 = dsRemintV8_9ExpertRefinement(raw.ds_remint_v8_9);
   const qfRaw = isRecord(raw.quality_finish) ? raw.quality_finish : {};
+  const qfOvRaw = isRecord(qfRaw.overrides) ? qfRaw.overrides : {};
   return {
     mode: "ds-remint-v8.9-hd",
     ds_remint_v8_9: isRecord(v89.ds_remint_v8_9) ? v89.ds_remint_v8_9 : {},
@@ -1227,7 +1234,12 @@ function dsRemintV8_9HdExpertRefinement(input: unknown) {
           : "standard",
       scale: clampNumber(qfRaw.scale, 1.0, 2.0, 1.6),
       finish_mode:
-        qfRaw.finish_mode === "template" ? "template" : "adaptive"
+        qfRaw.finish_mode === "template" ? "template" : "adaptive",
+      overrides: {
+        dither: clampNumber(qfOvRaw.dither, 0, 1.5, 1),
+        smoothness: clampNumber(qfOvRaw.smoothness, 0.5, 1.5, 1),
+        sharpen: clampNumber(qfOvRaw.sharpen, 0, 1.5, 1)
+      }
     }
   };
 }

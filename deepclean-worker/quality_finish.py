@@ -392,11 +392,28 @@ def _residual_rms(a, mask):
 # Main stage
 # ---------------------------------------------------------------------------
 
-def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_float=False):
+def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_float=False,
+                gradient_alpha=1.0, overrides=None):
     """rgb: uint8 HxWx3. Returns (out, qc_report, passed); `out` is uint8
     unless return_float=True (pre-quantization float RGB, for experiments).
-    dither=False leaves the gradient dither stage out (variant generation)."""
-    p = PRESETS[preset]
+    dither=False leaves the gradient dither stage out (variant generation).
+    gradient_alpha blends the smooth-gradient branch down (fail-soft ladder);
+    overrides carries the user's clamped pro-tuning multipliers."""
+    p = dict(PRESETS[preset])
+    # Pro tuning overrides (clamped by normalize_quality_finish_settings):
+    # dither/sharpen scale the preset amplitudes; smoothness scales the
+    # sky/wall SUPPRESSION depth (1 = preset, <1 keeps more, >1 suppresses
+    # harder).
+    ov = overrides if isinstance(overrides, dict) else {}
+    if isinstance(ov.get("dither"), (int, float)):
+        p["dither_luma"] *= float(ov["dither"])
+        p["dither_chroma"] *= float(ov["dither"])
+    if isinstance(ov.get("sharpen"), (int, float)):
+        p["sharpen_k"] *= float(ov["sharpen"])
+    if isinstance(ov.get("smoothness"), (int, float)):
+        sm = float(ov["smoothness"])
+        for _k in ("h0_smooth", "h1_smooth"):
+            p[_k] = min(1.0, max(0.05, 1.0 - (1.0 - p[_k]) * sm))
     h, w = rgb.shape[:2]
 
     # Clamp enlargement to the single-encode delivery ceiling.
@@ -566,8 +583,8 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     w_region = np.clip(0.3 * shadow + 0.7 * flat_float, 0.0, 1.0)
     a0 = p["h0_smooth"] + tex * (1.0 - p["h0_smooth"])
     a1 = p["h1_smooth"] + tex * (1.0 - p["h1_smooth"])
-    g0 = 1.0 - w_region * (1.0 - a0)
-    g1 = 1.0 - w_region * (1.0 - a1)
+    g0 = 1.0 - gradient_alpha * w_region * (1.0 - a0)
+    g1 = 1.0 - gradient_alpha * w_region * (1.0 - a1)
     h0 = h0 * g0
     h1 = h1 * g1
     y = l2 + h2 + h1 + h0
@@ -579,7 +596,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     staircase_reconstructed = False
     if _staircase_index(y, grad_mask_native) > 2.0:
         recon = _guided_filter(y, y, 8, 1e-3)
-        y = y + 0.6 * grad_mask_native * (recon - y)
+        y = y + 0.6 * gradient_alpha * grad_mask_native * (recon - y)
         staircase_reconstructed = True
 
     # Chroma: same idea, stronger floors.
@@ -609,7 +626,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     same_col = np.concatenate([same_col, same_col[:, -1:]], axis=1)
     same_frac = _box1d(same_col, 6)
     banding_region = np.clip(flat_float * np.clip((same_frac - 0.55) / 0.3, 0, 1), 0, 1)
-    y = y + 0.25 * banding_region * (_gauss(y, 0.8) - y)
+    y = y + 0.25 * gradient_alpha * banding_region * (_gauss(y, 0.8) - y)
 
     # ---- Saturated-edge chroma-width repair -------------------------------
     guided_cb = _guided_filter(cb, y, 2, 1e-3)
@@ -634,8 +651,8 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     # Chroma gradient decontouring (C8 v3): stronger low-frequency chroma
     # smoothing in smooth-gradient regions only -- twilight skies band in
     # Cb/Cr, and luma dither cannot fix a chroma staircase.
-    cb = cb + 0.6 * grad_mask_native * (_guided_filter(cb, y, 4, 2e-3) - cb)
-    cr = cr + 0.6 * grad_mask_native * (_guided_filter(cr, y, 4, 2e-3) - cr)
+    cb = cb + 0.6 * gradient_alpha * grad_mask_native * (_guided_filter(cb, y, 4, 2e-3) - cb)
+    cr = cr + 0.6 * gradient_alpha * grad_mask_native * (_guided_filter(cr, y, 4, 2e-3) - cr)
 
     # ---- Optional dual-kernel enlargement (C8 v2) --------------------------
     # Structure gets Lanczos3, smooth regions get Mitchell, feathered by the
@@ -671,7 +688,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
             + np.roll(residual_dst, 1, axis=0)
             + np.roll(residual_dst, -1, axis=0)
         )
-        y = y - 0.7 * flat_float * pred
+        y = y - 0.7 * gradient_alpha * flat_float * pred
 
     # ---- SNR-gated band-limited sharpen (C8 v2) -----------------------------
     # Sharpen structure, never noise: gain is gated by a local signal-to-
@@ -725,9 +742,9 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
         dith_y = _tiled_noise(y.shape, 64, f"qf-dither-y:{seed_extra}")
         dith_cb = _tiled_noise(cb.shape, 64, f"qf-dither-cb:{seed_extra}")
         dith_cr = _tiled_noise(cr.shape, 64, f"qf-dither-cr:{seed_extra}")
-        y = y + grad_mask_out * dith_y * p["dither_luma"]
-        cb = cb + grad_mask_out * dith_cb * p["dither_chroma"]
-        cr = cr + grad_mask_out * dith_cr * p["dither_chroma"]
+        y = y + gradient_alpha * grad_mask_out * dith_y * p["dither_luma"]
+        cb = cb + gradient_alpha * grad_mask_out * dith_cb * p["dither_chroma"]
+        cr = cr + gradient_alpha * grad_mask_out * dith_cr * p["dither_chroma"]
         qc, passed = _run_qc(
             y_before, y, cb_before, cb, cr_before, cr,
             flat_float, edge_band, shadow, standalone, seed_extra, scale,
@@ -766,6 +783,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     qc["step_fraction_8bit"] = round(frac_8bit, 5)
     qc["step_fraction_jpeg"] = round(frac_jpeg, 5)
     qc["staircase_reconstructed"] = staircase_reconstructed
+    qc["gradient_alpha"] = round(gradient_alpha, 3)
 
     out = out_rgb if return_float else out_u8
     return out, qc, passed
@@ -872,6 +890,47 @@ def _run_qc(
     rho1 = _lag1(h0_d, flat_mask)
     residual_rms = _masked_rms(h0_d, flat_mask)
     h1h0_ratio = _masked_rms(h1_d, flat_mask) / max(_masked_rms(h0_d, flat_mask), 1e-9)
+
+    # Per-ROI gradient QC (C8 v4): a 3x3 tile grid over the destination-scale
+    # flat mask so reports show WHERE the sky measures clean or rough, not
+    # just the global average. Report-only; the global gate is unchanged.
+    roi_list = []
+    try:
+        if float(np.mean(flat_mask > 0.5)) >= 0.01:
+            hm, wm = flat_mask.shape
+            for ty in range(3):
+                for tx in range(3):
+                    y0, y1 = ty * hm // 3, (ty + 1) * hm // 3
+                    x0, x1 = tx * wm // 3, (tx + 1) * wm // 3
+                    tile = (flat_mask[y0:y1, x0:x1] > 0.5).astype(np.float32)
+                    if float(tile.sum()) < 256:
+                        continue
+                    h0_t = h0_d[y0:y1, x0:x1]
+                    yq_t = np.rint(y_after[y0:y1, x0:x1] * 255.0) / 255.0
+                    dy_t = np.abs(yq_t[:, 1:] - yq_t[:, :-1])
+                    tband = np.clip(tile[:, 1:] + tile[:, :-1], 0, 1) > 0.5
+                    s_t = 0.0
+                    if float(tband.sum()) > 256:
+                        s_t = float(
+                            np.mean(dy_t[tband] <= 1.0 / 510.0)
+                            / max(
+                                float(np.mean((dy_t[tband] > 1.0 / 510.0) & (dy_t[tband] < 4.0 / 255.0))),
+                                1e-6,
+                            )
+                        )
+                    roi_list.append(
+                        {
+                            "tile": f"{tx},{ty}",
+                            "coverage": round(float(np.mean(tile)), 3),
+                            "rho1": round(_lag1(h0_t, tile), 3),
+                            "residual_rms": round(_masked_rms(h0_t, tile) * 255.0, 3),
+                            "banding": round(s_t, 3),
+                        }
+                    )
+        roi_list.sort(key=lambda r: -r["coverage"])
+        roi_list = roi_list[:6]
+    except Exception:
+        roi_list = []
 
     if y_after.shape != y_before.shape:
         s = y_before.shape[1] / float(y_after.shape[1])
@@ -1005,6 +1064,7 @@ def _run_qc(
         "rho1": round(rho1, 4),
         "residual_rms": round(residual_rms * 255.0, 3),
         "h1h0_ratio": round(h1h0_ratio, 3),
+        "gradient_rois": roi_list,
         "passed": passed,
     }, passed
 
@@ -1052,10 +1112,34 @@ def normalize_quality_finish_settings(settings):
     # finish_mode only matters to the sequence branch (worker.py); carried
     # through here so reports stay self-describing.
     finish_mode = str(sub.get("finish_mode", "adaptive")) if isinstance(sub, dict) else "adaptive"
+    # User overrides (Slash UI "Pro tuning"): multipliers over the preset's
+    # own calibrated gains, clamped so no combination leaves the envelope.
+    ov_raw = sub.get("overrides") if isinstance(sub, dict) else None
+    overrides = {
+        "dither": _clamp_override(ov_raw, "dither", 0.0, 1.5, 1.0),
+        "smoothness": _clamp_override(ov_raw, "smoothness", 0.5, 1.5, 1.0),
+        "sharpen": _clamp_override(ov_raw, "sharpen", 0.0, 1.5, 1.0),
+    }
     return {
         "mode": MODE,
-        "quality_finish": {"preset": preset, "scale": scale, "finish_mode": finish_mode},
+        "quality_finish": {
+            "preset": preset,
+            "scale": scale,
+            "finish_mode": finish_mode,
+            "overrides": overrides,
+        },
     }
+
+
+def _clamp_override(ov, key, lo, hi, default):
+    """Clamp a user override to the calibrated envelope (NaN/type-safe)."""
+    try:
+        v = float(ov.get(key)) if isinstance(ov, dict) else None
+    except (TypeError, ValueError):
+        v = None
+    if v is None or v != v:
+        return default
+    return min(hi, max(lo, v))
 
 
 def is_quality_finish(settings):
@@ -1070,9 +1154,11 @@ def apply_quality_finish(
     seed_extra="",
     creator_id="",
 ):
-    """Run the finisher. Writes the final single JPEG (Q95 4:4:4) to
+    """Run the finisher. Writes the final single JPEG (Q97 4:4:4) to
     `output_path`. On QC failure the ORIGINAL bytes are shipped unchanged and
-    `applied` is False (quality never costs acceptance)."""
+    `applied` is False (quality never costs acceptance) -- except gradient-
+    axis failures, which first retry with the gradient branch blended down
+    (fail-soft alpha ladder, alpha 0.75 -> 0.5 -> 0.25 -> 0)."""
     started = time.time()
     settings = normalize_quality_finish_settings(settings)
     sub = settings["quality_finish"]
@@ -1097,7 +1183,41 @@ def apply_quality_finish(
             exif = None
 
     rgb = np.asarray(src.convert("RGB")).astype(np.uint8)
-    out_u8, qc, passed = _finish_rgb(rgb, preset, scale, standalone, seed_extra)
+    overrides = sub.get("overrides") if isinstance(sub.get("overrides"), dict) else None
+    out_u8, qc, passed = _finish_rgb(
+        rgb, preset, scale, standalone, seed_extra, overrides=overrides
+    )
+    ladder_attempts = 1
+    # Fail-soft alpha ladder (C8 v4): when QC fails on a GRADIENT-axis
+    # metric (rho1 / flatness collapse / banding), retry with the gradient
+    # branch blended down: alpha = 0.75 -> 0.5 -> 0.25 -> 0. Texture-region
+    # processing stays at full strength; only the smooth-gradient treatment
+    # backs off. Non-gradient failures (SSIM, ringing, chroma, block grid)
+    # fall through to the original-bytes path unchanged.
+    gradient_axis = (
+        float(qc.get("rho1", 0.0)) > QC_RHO1_MAX
+        or float(qc.get("flatness_delta", 0.0)) > QC_FLATNESS_DELTA
+        or bool(qc.get("banding_worse"))
+    )
+    alpha = 1.0
+    while not passed and gradient_axis and alpha > 0.05:
+        alpha = round(alpha - 0.25, 2)
+        ladder_attempts += 1
+        out_u8, qc, passed = _finish_rgb(
+            rgb,
+            preset,
+            scale,
+            standalone,
+            seed_extra,
+            gradient_alpha=alpha,
+            overrides=overrides,
+        )
+        gradient_axis = (
+            float(qc.get("rho1", 0.0)) > QC_RHO1_MAX
+            or float(qc.get("flatness_delta", 0.0)) > QC_FLATNESS_DELTA
+            or bool(qc.get("banding_worse"))
+        )
+    qc["gradient_ladder_attempts"] = ladder_attempts
 
     runtime_ms = int((time.time() - started) * 1000)
     if passed:
@@ -1136,6 +1256,9 @@ def apply_quality_finish(
         "runtime_ms": runtime_ms,
         "qc": qc,
         "delivery_check": delivery_check,
+        "overrides": {k: round(float(v), 3) for k, v in sub.get("overrides", {}).items()}
+        if isinstance(sub.get("overrides"), dict)
+        else {},
         "encode": {
             "quality": FINAL_JPEG_QUALITY,
             "subsampling": "4:4:4",

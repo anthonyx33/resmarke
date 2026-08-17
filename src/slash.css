@@ -254,6 +254,21 @@
 .slash-btn-sm { padding: 7px 13px; font-size: 12px; border-radius: 8px; }
 .slash-notice { margin: 0; font-size: 13px; color: var(--sl-accent-2); }
 .slash-hint { display: block; margin-top: 5px; font-size: 11px; line-height: 1.45; color: var(--sl-dim); }
+.slash-tune-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.slash-override-reset {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 11px; color: var(--sl-accent);
+}
+.slash-override-reset:disabled { opacity: 0.4; cursor: default; }
+.slash-range-row { display: flex; align-items: center; gap: 8px; }
+.slash-range-name { flex: 0 0 86px; font-size: 12px; color: var(--sl-dim); }
+.slash-range { flex: 1; accent-color: var(--sl-accent); height: 4px; cursor: pointer; }
+.slash-range:disabled { opacity: 0.4; cursor: default; }
+.slash-range-val {
+  flex: 0 0 42px; text-align: right; font-size: 11px; color: var(--sl-dim);
+  font-variant-numeric: tabular-nums;
+}
+.slash-range-val.is-tuned { color: var(--sl-accent); font-weight: 600; }
 .slash-icon-btn {
   display: inline-grid;
   place-items: center;

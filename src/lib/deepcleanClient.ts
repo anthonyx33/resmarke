@@ -91,9 +91,19 @@ export type DsRemintV8_8Options = {
   metadataMode?: "device" | "minimal";
 };
 
+export type QualityFinishOverrides = {
+  /** Multiplier on the preset's gradient dither amplitude (0 = off, 1.5 max). */
+  dither?: number;
+  /** Multiplier on the preset's sky/wall suppression depth (0.5..1.5). */
+  smoothness?: number;
+  /** Multiplier on the preset's texture sharpening (0 = off, 1.5 max). */
+  sharpen?: number;
+};
+
 export type QualityFinishOptions = {
   preset: "conservative" | "standard" | "strong";
   scale: number | null;
+  overrides?: QualityFinishOverrides;
 };
 
 export type DsRemintV8_9HdOptions = {
