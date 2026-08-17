@@ -109,21 +109,21 @@ const WASH_LABEL: Record<WashModel, string> = {
 };
 
 const STRENGTH_HINT: Record<Strength, string> = {
-  light: "The lightest pass. Best for frames that already grade well and need very little work.",
-  balanced: "The recommended coherent model. The balanced default for everyday production work.",
-  deep: "The heaviest pass. Use only when Balanced is not enough — it costs visible quality."
+  light: "The lightest pass — for frames that already look right.",
+  balanced: "The recommended pass for everyday production work.",
+  deep: "The strongest pass — only when Balanced isn't enough."
 };
 
 const QF_HINT: Record<QfPreset, string> = {
-  conservative: "Lightest touch. Maximum fidelity to the incoming frame, minimal cleanup.",
-  standard: "The recommended finisher. The balanced default for everyday delivery.",
-  strong: "The strongest cleanup and sharpening. Watch the self-QC readouts below."
+  conservative: "Lightest touch. Closest to the original file.",
+  standard: "The recommended finish for everyday delivery.",
+  strong: "Strongest cleanup and sharpening — watch the self-QC readouts."
 };
 
 const WASH_HINT: Record<WashModel, string> = {
-  qwen: "The proven live-test default.",
-  zimage: "An alternative model family. Verify results on your own material before relying on it.",
-  "qwen+zimage": "Both models blended 50/50 for a mixed character."
+  qwen: "The proven default.",
+  zimage: "An alternative family. Verify on your own material first.",
+  "qwen+zimage": "Both models blended 50/50."
 };
 
 function initialTheme(): Theme {
@@ -697,7 +697,7 @@ export default function CmintApp() {
           <div className="cm-chain" aria-label="Active pipeline">
             <span className={`cm-chain-node${runsRemint ? " is-on" : ""}`}>
               {runsRemint ? <Check size={11} aria-hidden="true" /> : null}
-              V8.9 Coherent Pro
+              Remint
             </span>
             <span className="cm-chain-arrow" aria-hidden="true">
               <ArrowRight size={12} />
@@ -1110,24 +1110,24 @@ export default function CmintApp() {
                   <ModeCard
                     active={mode === "sequence"}
                     disabled={running}
-                    title="Sequence · V8.9 → Finish"
-                    detail="One job, both stages: the coherent pass, then the HD finisher over its delivered file."
+                    title="Full Quality Remint"
+                    detail="The complete flow. Remint, then the HD finish — one job, end to end."
                     cost={COST_REMINT + (engineMode === "adaptive" ? COST_ADAPTIVE : 0) + COST_FINISH}
                     onClick={() => setMode("sequence")}
                   />
                   <ModeCard
                     active={mode === "remint"}
                     disabled={running}
-                    title="Coherent pass only · V8.9"
-                    detail="Stage one alone. Delivers the processed file at up to 1250px."
+                    title="Remint"
+                    detail="The core pass alone. A clean, naturalized file up to 1250px."
                     cost={COST_REMINT + (engineMode === "adaptive" ? COST_ADAPTIVE : 0)}
                     onClick={() => setMode("remint")}
                   />
                   <ModeCard
                     active={mode === "finish"}
                     disabled={running}
-                    title="Finish only · Quality Finish"
-                    detail="Standalone finishing pass over a JPEG you already have. CPU-only, non-generative."
+                    title="Quality Finish"
+                    detail="Polish a file you already have. Detail restored, grain kept — CPU only."
                     cost={COST_FINISH}
                     onClick={() => setMode("finish")}
                   />
@@ -1137,8 +1137,8 @@ export default function CmintApp() {
                   <div className="cm-note">
                     <Info size={13} aria-hidden="true" />
                     <span>
-                      This is the finishing stage on its own. It polishes the pixels of whatever you
-                      give it; it does not run the stage-one pass.
+                      Quality Finish alone — it polishes whatever you give it and never runs the
+                      remint stage.
                     </span>
                   </div>
                 ) : null}
@@ -1149,8 +1149,8 @@ export default function CmintApp() {
                     <div className="cm-card-head">
                       <span className="cm-card-num">1</span>
                       <span className="cm-card-title">
-                        <b>DS ReMint V8.9 · Coherent Pro</b>
-                        <span>Data-tuned coherent model · the proven live-test default</span>
+                        <b>Remint · V8.9</b>
+                        <span>The coherent camera pass — GPU</span>
                       </span>
                       <span className="cm-tag is-on">GPU</span>
                     </div>
@@ -1304,8 +1304,8 @@ export default function CmintApp() {
                     <div className="cm-card-head">
                       <span className="cm-card-num is-two">{runsRemint ? "2" : "1"}</span>
                       <span className="cm-card-title">
-                        <b>Quality Finish · post-remint HD</b>
-                        <span>Non-AI selective restoration · grain kept, crispness restored</span>
+                        <b>Quality Finish</b>
+                        <span>Non-AI restoration · grain kept, crispness restored</span>
                       </span>
                       <span className="cm-tag is-two">CPU</span>
                     </div>
