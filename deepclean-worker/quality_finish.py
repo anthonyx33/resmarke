@@ -74,6 +74,8 @@ PRESETS = {
         "halo_k_scale": 0.20,
         "dither_luma": 0.30 / 255.0,
         "dither_chroma": 0.12 / 255.0,
+        "decorr_max_passes": 6,
+        "decorr_gain": 0.7,
     },
     "standard": {
         "deblock_amt": 0.22,
@@ -89,6 +91,8 @@ PRESETS = {
         "halo_k_scale": 0.28,
         "dither_luma": 0.35 / 255.0,
         "dither_chroma": 0.15 / 255.0,
+        "decorr_max_passes": 6,
+        "decorr_gain": 0.7,
     },
     "strong": {
         "deblock_amt": 0.38,
@@ -104,6 +108,31 @@ PRESETS = {
         "halo_k_scale": 0.30,
         "dither_luma": 0.40 / 255.0,
         "dither_chroma": 0.20 / 255.0,
+        "decorr_max_passes": 6,
+        "decorr_gain": 0.7,
+    },
+    # Fidelity HD (C8 v4): for the pre-JPEG stage-1 handoff at delivery
+    # resolution. Texture retention rides the tex map toward 1.0; smooth
+    # regions keep a light suppression floor; decorrelation is capped at
+    # 2 passes (six spatial predictions is a detail killer); sharpen stays
+    # below 0.6x standard. No upscale is expected (stage 1 already sits at
+    # the delivery lattice), and no JPEG-deblock path runs (buffer handoff).
+    "fidelity": {
+        "deblock_amt": 0.05,
+        "mosquito_luma": 0.04,
+        "mosquito_chroma": 0.10,
+        "h0_smooth": 0.60,
+        "h1_smooth": 0.65,
+        "shadow_chroma_floor": 0.70,
+        "chroma_guided": 0.55,
+        "chroma_gain": 0.06,
+        "sharpen_k": 0.05,
+        "snr_k": 3.0,
+        "halo_k_scale": 0.22,
+        "dither_luma": 0.30 / 255.0,
+        "dither_chroma": 0.12 / 255.0,
+        "decorr_max_passes": 2,
+        "decorr_gain": 0.6,
     },
 }
 
@@ -116,6 +145,13 @@ QC_RHO1_MAX = 0.40                  # lag-1 autocorrelation ceiling, smooth regi
 QC_FLATNESS_DELTA = 0.08
 QC_RINGING_MAX = 0.06
 QC_BANDING_TOLERANCE = 0.08
+
+# Fidelity reference gate (C8 v4): the finisher may hold the ORIGINAL source
+# as its fidelity target. Texture-detail transfer is the "360p" detector —
+# detail-band energy in the output vs the source. Below the floor the finish
+# is rejected and the stage-1 buffer ships instead.
+REF_TDR_FLOOR = 0.60
+REF_TDR_WARN = 0.75
 
 # Final encode policy (C8 v3): Q97 preserves low-amplitude gradient variation
 # and deliberate dither disproportionately better in large smooth skies.
@@ -677,7 +713,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     # autocorrelation (rho is scale-invariant), so subtract the lag-1
     # 4-neighbour prediction of the fine residual in smooth regions until
     # rho1 is back under the ceiling (max 3 passes, texture untouched).
-    for _pass in range(6):
+    for _pass in range(int(p.get("decorr_max_passes", 6))):
         residual_dst = y - _gauss(y, 0.8)
         rho = _lag1(residual_dst, flat_float)
         if rho <= QC_RHO1_MAX:
@@ -688,7 +724,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
             + np.roll(residual_dst, 1, axis=0)
             + np.roll(residual_dst, -1, axis=0)
         )
-        y = y - 0.7 * gradient_alpha * flat_float * pred
+        y = y - float(p.get("decorr_gain", 0.7)) * gradient_alpha * flat_float * pred
 
     # ---- SNR-gated band-limited sharpen (C8 v2) -----------------------------
     # Sharpen structure, never noise: gain is gated by a local signal-to-
@@ -1092,6 +1128,60 @@ def _ssim_proxy(a, b, scale):
     return float(np.mean(num / den))
 
 
+def _reference_metrics(out_u8, reference):
+    """Fidelity metrics against the ORIGINAL source (C8 v4). The source is
+    resampled ONCE to the delivery lattice with Lanczos3, then compared to
+    the finished output: two-scale SSIM, texture-detail transfer ratio
+    (detail band ~0.08-0.35 cyc/px — the "360p" detector), and an edge
+    acutance ratio (a first-order edge-width proxy). Never raises."""
+    try:
+        if isinstance(reference, (str, Path)):
+            ref_u8 = np.asarray(Image.open(reference).convert("RGB")).astype(np.uint8)
+        else:
+            arr = np.asarray(reference)
+            if arr.ndim == 3 and arr.shape[2] >= 3:
+                ref_u8 = arr[..., :3].astype(np.uint8)
+            else:
+                ref_u8 = np.stack([arr.astype(np.uint8)] * 3, axis=-1)
+        ref = ref_u8.astype(np.float32) / 255.0
+        out = out_u8.astype(np.float32) / 255.0
+        oh, ow = out_u8.shape[:2]
+        if ref.shape[1] != ow or ref.shape[0] != oh:
+            ref_resized = Image.fromarray(ref_u8, mode="RGB").resize(
+                (ow, oh), Image.Resampling.LANCZOS
+            )
+            ref = np.asarray(ref_resized).astype(np.float32) / 255.0
+        y_out = 0.299 * out[..., 0] + 0.587 * out[..., 1] + 0.114 * out[..., 2]
+        y_ref = 0.299 * ref[..., 0] + 0.587 * ref[..., 1] + 0.114 * ref[..., 2]
+        ms_ssim = 0.5 * _ssim_proxy(y_ref, y_out, 1.0)
+        half_out = _resample2d(y_out, 0.5, 2)
+        half_ref = _resample2d(y_ref, 0.5, 2)
+        ms_ssim += 0.5 * _ssim_proxy(half_ref, half_out, 1.0)
+        d_out = _gauss(y_out, 1.0) - _gauss(y_out, 3.0)
+        d_ref = _gauss(y_ref, 1.0) - _gauss(y_ref, 3.0)
+        e_out = float(np.mean(d_out * d_out))
+        e_ref = float(np.mean(d_ref * d_ref))
+        tdr = min(2.0, e_out / max(e_ref, 1e-9))
+        g_out = _grad_mag(y_out)
+        g_ref = _grad_mag(y_ref)
+        edge = _dilate((g_ref > 0.04).astype(np.float32), 2)
+        if float(edge.sum()) > 512:
+            ar = float(
+                np.mean(g_out[edge > 0.5]) / max(float(np.mean(g_ref[edge > 0.5])), 1e-9)
+            )
+        else:
+            ar = 1.0
+        width_ratio = min(2.0, 1.0 / max(ar, 0.05))
+        return {
+            "ms_ssim": round(ms_ssim, 4),
+            "texture_detail_transfer": round(tdr, 3),
+            "edge_acutance_ratio": round(ar, 3),
+            "edge_width_ratio_est": round(width_ratio, 3),
+        }
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -1153,6 +1243,7 @@ def apply_quality_finish(
     settings=None,
     seed_extra="",
     creator_id="",
+    reference=None,
 ):
     """Run the finisher. Writes the final single JPEG (Q97 4:4:4) to
     `output_path`. On QC failure the ORIGINAL bytes are shipped unchanged and
@@ -1182,7 +1273,11 @@ def apply_quality_finish(
         except Exception:
             exif = None
 
-    rgb = np.asarray(src.convert("RGB")).astype(np.uint8)
+    rgb = (
+        np.asarray(src).astype(np.uint8)
+        if isinstance(src, np.ndarray)
+        else np.asarray(src.convert("RGB")).astype(np.uint8)
+    )
     overrides = sub.get("overrides") if isinstance(sub.get("overrides"), dict) else None
     out_u8, qc, passed = _finish_rgb(
         rgb, preset, scale, standalone, seed_extra, overrides=overrides
@@ -1218,6 +1313,21 @@ def apply_quality_finish(
             or bool(qc.get("banding_worse"))
         )
     qc["gradient_ladder_attempts"] = ladder_attempts
+
+    # Fidelity reference (C8 v4): when the ORIGINAL source is available,
+    # measure the output against it (not against the stage-1 intermediate).
+    # texture_detail_transfer < 0.75 warns; < 0.60 rejects the finish and
+    # ships the input bytes (the stage-1 buffer in chained mode).
+    if reference is not None:
+        ref_metrics = _reference_metrics(out_u8, reference)
+        if ref_metrics is not None:
+            qc["reference"] = ref_metrics
+            tdr = ref_metrics["texture_detail_transfer"]
+            if tdr < REF_TDR_WARN:
+                qc["reference_warn"] = "texture_detail_transfer_below_0.75"
+            if tdr < REF_TDR_FLOOR:
+                passed = False
+                qc["reference_fail"] = "texture_detail_transfer_below_0.60"
 
     runtime_ms = int((time.time() - started) * 1000)
     if passed:

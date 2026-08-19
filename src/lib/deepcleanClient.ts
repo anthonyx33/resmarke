@@ -101,7 +101,7 @@ export type QualityFinishOverrides = {
 };
 
 export type QualityFinishOptions = {
-  preset: "conservative" | "standard" | "strong";
+  preset: "conservative" | "standard" | "strong" | "fidelity";
   scale: number | null;
   overrides?: QualityFinishOverrides;
 };

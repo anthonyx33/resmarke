@@ -348,93 +348,148 @@ def handler(job):
                 v89_settings = dict(expert_refinement)
                 v89_settings["mode"] = "ds-remint-v8.9"
                 detector = make_detector()
-                engine_report = apply_ds_remint_v8_9(
-                    input_path=input_path,
-                    output_path=cleaned_path,
-                    creator_id=creator_id,
-                    settings=v89_settings,
-                    seed_extra=f"{job_id}:{input_sha}",
-                    detector=detector,
-                )
-                remint_cfg = normalize_ds_remint_v8_8_settings(v89_settings)
-                ai_t = float(remint_cfg.get("ai_threshold", 0.45))
-                src_t = float(remint_cfg.get("source_threshold", 0.30))
-
                 finish_base = (
                     expert_refinement.get("quality_finish")
                     if isinstance(expert_refinement.get("quality_finish"), dict)
                     else {}
                 )
-                adaptive = (
-                    str(finish_base.get("finish_mode", "adaptive")) == "adaptive"
-                    and detector is not None
-                )
-                presets = (
-                    ["strong", "standard"]
-                    if adaptive
-                    else [str(finish_base.get("preset", "standard"))]
-                )
-                seen = set()
-                candidates = []
-                for preset in presets:
-                    if preset in seen or preset not in ("conservative", "standard", "strong"):
-                        continue
-                    seen.add(preset)
-                    cand_settings = dict(expert_refinement)
-                    cand_settings["quality_finish"] = {**finish_base, "preset": preset}
-                    cand_path = tmp / f"finished-{preset}.jpg"
+                # Fidelity HD (C8 v4): stage one runs at the DELIVERY
+                # resolution (never 1250 -> up again), encodes nothing in
+                # the chain, and hands its pre-JPEG buffer to the finisher.
+                # The original source becomes the finisher's fidelity
+                # reference (texture-detail transfer gate).
+                fidelity = str(finish_base.get("preset", "standard")) == "fidelity"
+                if fidelity:
+                    with Image.open(input_path) as _src_img:
+                        src_edge = max(_src_img.size)
+                    sub_v89 = dict(
+                        v89_settings.get("ds_remint_v8_9")
+                        if isinstance(v89_settings.get("ds_remint_v8_9"), dict)
+                        else {}
+                    )
+                    sub_v89["output_target"] = min(src_edge, 2000)
+                    sub_v89["jpeg_quality"] = 97
+                    sub_v89["jpeg_subsampling"] = "4:4:4"
+                    sub_v89["strength"] = "light"
+                    sub_v89["engine_mode"] = "adaptive"
+                    v89_settings["ds_remint_v8_9"] = sub_v89
+                    engine_report = apply_ds_remint_v8_9(
+                        input_path=input_path,
+                        output_path=cleaned_path,
+                        creator_id=creator_id,
+                        settings=v89_settings,
+                        seed_extra=f"{job_id}:{input_sha}",
+                        detector=detector,
+                        return_buffer=True,
+                    )
+                else:
+                    engine_report = apply_ds_remint_v8_9(
+                        input_path=input_path,
+                        output_path=cleaned_path,
+                        creator_id=creator_id,
+                        settings=v89_settings,
+                        seed_extra=f"{job_id}:{input_sha}",
+                        detector=detector,
+                    )
+                pre_encode_rgb = engine_report.pop("_pre_encode_rgb", None) if isinstance(engine_report, dict) else None
+                remint_cfg = normalize_ds_remint_v8_8_settings(v89_settings)
+                ai_t = float(remint_cfg.get("ai_threshold", 0.45))
+                src_t = float(remint_cfg.get("source_threshold", 0.30))
+
+                if fidelity and pre_encode_rgb is not None:
+                    # Pre-JPEG handoff: finisher sees the stage-1 buffer
+                    # directly (no intermediate JPEG history to repair) and
+                    # skips enlargement when stage one already sits on the
+                    # delivery lattice.
+                    fin_settings = dict(expert_refinement)
+                    qf = dict(finish_base)
+                    if max(pre_encode_rgb.shape[:2]) >= 1900:
+                        qf["scale"] = None
+                    fin_settings["quality_finish"] = qf
                     rep = apply_quality_finish(
-                        input_path=cleaned_path,
-                        output_path=cand_path,
-                        settings=cand_settings,
+                        image=pre_encode_rgb,
+                        output_path=cleaned_path,
+                        settings=fin_settings,
                         seed_extra=f"{job_id}:{input_sha}",
                         creator_id=creator_id,
+                        reference=input_path,
                     )
-                    if not rep.get("applied"):
-                        continue
-                    ai, flux = _finish_probe(detector, cand_path)
-                    candidates.append(
-                        {"preset": preset, "path": cand_path, "report": rep, "ai": ai, "flux": flux}
+                    engine_report["quality_finish"] = rep
+                    engine_report["finish_adaptive"] = {
+                        "enabled": False,
+                        "mode": "fidelity_pre_jpeg_handoff",
+                    }
+                else:
+                    adaptive = (
+                        str(finish_base.get("finish_mode", "adaptive")) == "adaptive"
+                        and detector is not None
                     )
+                    presets = (
+                        ["strong", "standard"]
+                        if adaptive
+                        else [str(finish_base.get("preset", "standard"))]
+                    )
+                    seen = set()
+                    candidates = []
+                    for preset in presets:
+                        if preset in seen or preset not in ("conservative", "standard", "strong"):
+                            continue
+                        seen.add(preset)
+                        cand_settings = dict(expert_refinement)
+                        cand_settings["quality_finish"] = {**finish_base, "preset": preset}
+                        cand_path = tmp / f"finished-{preset}.jpg"
+                        rep = apply_quality_finish(
+                            input_path=cleaned_path,
+                            output_path=cand_path,
+                            settings=cand_settings,
+                            seed_extra=f"{job_id}:{input_sha}",
+                            creator_id=creator_id,
+                        )
+                        if not rep.get("applied"):
+                            continue
+                        ai, flux = _finish_probe(detector, cand_path)
+                        candidates.append(
+                            {"preset": preset, "path": cand_path, "report": rep, "ai": ai, "flux": flux}
+                        )
 
-                chosen = None
-                if candidates:
-                    cleared = [
-                        c
-                        for c in candidates
-                        if c["ai"] is not None
-                        and c["flux"] is not None
-                        and c["ai"] <= ai_t
-                        and c["flux"] <= src_t
-                    ]
-                    if cleared:
-                        chosen = cleared[0]  # strong wins when it clears
-                    else:
-                        scored = [c for c in candidates if c["ai"] is not None]
-                        if scored:
-                            chosen = min(scored, key=lambda c: (c["ai"], c["flux"]))
+                    chosen = None
+                    if candidates:
+                        cleared = [
+                            c
+                            for c in candidates
+                            if c["ai"] is not None
+                            and c["flux"] is not None
+                            and c["ai"] <= ai_t
+                            and c["flux"] <= src_t
+                        ]
+                        if cleared:
+                            chosen = cleared[0]  # strong wins when it clears
                         else:
-                            chosen = candidates[0]
-                if chosen is not None:
-                    shutil.copyfile(chosen["path"], cleaned_path)
-                engine_report["quality_finish"] = (
-                    chosen["report"] if chosen else {"applied": False, "reason": "no_finish_candidate_applied"}
-                )
-                engine_report["finish_adaptive"] = {
-                    "enabled": adaptive,
-                    "ai_threshold": ai_t,
-                    "source_threshold": src_t,
-                    "candidates": [
-                        {
-                            "preset": c["preset"],
-                            "applied": c["report"].get("applied"),
-                            "ai_probability": c["ai"],
-                            "flux_family": c["flux"],
-                        }
-                        for c in candidates
-                    ],
-                    "chosen": chosen["preset"] if chosen else None,
-                }
+                            scored = [c for c in candidates if c["ai"] is not None]
+                            if scored:
+                                chosen = min(scored, key=lambda c: (c["ai"], c["flux"]))
+                            else:
+                                chosen = candidates[0]
+                    if chosen is not None:
+                        shutil.copyfile(chosen["path"], cleaned_path)
+                    engine_report["quality_finish"] = (
+                        chosen["report"] if chosen else {"applied": False, "reason": "no_finish_candidate_applied"}
+                    )
+                    engine_report["finish_adaptive"] = {
+                        "enabled": adaptive,
+                        "ai_threshold": ai_t,
+                        "source_threshold": src_t,
+                        "candidates": [
+                            {
+                                "preset": c["preset"],
+                                "applied": c["report"].get("applied"),
+                                "ai_probability": c["ai"],
+                                "flux_family": c["flux"],
+                            }
+                            for c in candidates
+                        ],
+                        "chosen": chosen["preset"] if chosen else None,
+                    }
                 cleaned_sha = sha256_file(cleaned_path)
                 neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9_hd"}
                 content_repair_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9_hd"}

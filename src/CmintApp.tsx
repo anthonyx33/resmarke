@@ -80,7 +80,7 @@ type WashModel = "qwen" | "zimage" | "qwen+zimage";
 type Strength = "light" | "balanced" | "deep";
 type MetadataMode = "device" | "minimal";
 type NameStyle = "photo-style" | "original" | "custom";
-type QfPreset = "conservative" | "standard" | "strong";
+type QfPreset = "conservative" | "standard" | "strong" | "fidelity";
 type FinishRouting = "adaptive" | "template";
 
 const MAX_QUEUE = 20;
@@ -117,7 +117,8 @@ const STRENGTH_HINT: Record<Strength, string> = {
 const QF_HINT: Record<QfPreset, string> = {
   conservative: "Lightest touch. Closest to the original file.",
   standard: "The recommended finish for everyday delivery.",
-  strong: "Strongest cleanup and sharpening — watch the self-QC readouts."
+  strong: "Strongest cleanup and sharpening — watch the self-QC readouts.",
+  fidelity: "Maximum fidelity. Runs at delivery resolution with the lightest grain — for professionals."
 };
 
 const WASH_HINT: Record<WashModel, string> = {
@@ -1341,7 +1342,7 @@ export default function CmintApp() {
                       <div className="cm-field">
                         <span className="cm-label">Restoration strength</span>
                         <div className="cm-seg cm-seg-2" role="radiogroup" aria-label="Finish preset">
-                          {(["conservative", "standard", "strong"] as QfPreset[]).map((value) => (
+                          {(["conservative", "standard", "strong", "fidelity"] as QfPreset[]).map((value) => (
                             <button
                               key={value}
                               type="button"
@@ -1351,7 +1352,7 @@ export default function CmintApp() {
                               disabled={running}
                               onClick={() => setQfPreset(value)}
                             >
-                              {value[0].toUpperCase() + value.slice(1)}
+                              {value === "fidelity" ? "Fidelity HD" : value[0].toUpperCase() + value.slice(1)}
                             </button>
                           ))}
                         </div>

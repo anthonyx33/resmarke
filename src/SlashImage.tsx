@@ -95,7 +95,7 @@ export default function SlashImage() {
   const [iphoneExif, setIphoneExif] = useState(true);
   const [metadataMode, setMetadataMode] = useState<"device" | "minimal">("device");
   // Finish options.
-  const [finishPreset, setFinishPreset] = useState<"conservative" | "standard" | "strong">("standard");
+  const [finishPreset, setFinishPreset] = useState<"conservative" | "standard" | "strong" | "fidelity">("standard");
   const [finishScale, setFinishScale] = useState<"native" | "1.6" | "2">("1.6");
   const [finishMode, setFinishMode] = useState<"adaptive" | "template">("adaptive");
   // Pro tuning (finish overrides): 1.00 = preset default, clamped server-side.
@@ -627,7 +627,7 @@ export default function SlashImage() {
                     <div className="slash-field">
                       <label className="slash-label">Restoration preset</label>
                       <div className="slash-seg">
-                        {(["conservative", "standard", "strong"] as const).map((p) => (
+                        {(["conservative", "standard", "strong", "fidelity"] as const).map((p) => (
                           <button
                             key={p}
                             type="button"
@@ -635,7 +635,7 @@ export default function SlashImage() {
                             disabled={running}
                             onClick={() => setFinishPreset(p)}
                           >
-                            {p}
+                            {p === "fidelity" ? "Fidelity HD" : p}
                           </button>
                         ))}
                       </div>

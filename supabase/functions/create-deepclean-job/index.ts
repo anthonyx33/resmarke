@@ -1195,7 +1195,7 @@ function qualityFinishExpertRefinement(input: unknown) {
   // mid-band sharpen, single Q95 4:4:4 encode). Non-generative, CPU-only.
   const raw = isRecord(input) ? input : {};
   const preset =
-    raw.preset === "conservative" || raw.preset === "strong"
+    raw.preset === "conservative" || raw.preset === "strong" || raw.preset === "fidelity"
       ? raw.preset
       : "standard";
   const scale = clampNumber(raw.scale, 1.0, 2.0, 1.6);
@@ -1229,7 +1229,7 @@ function dsRemintV8_9HdExpertRefinement(input: unknown) {
     ds_remint_v8_9: isRecord(v89.ds_remint_v8_9) ? v89.ds_remint_v8_9 : {},
     quality_finish: {
       preset:
-        qfRaw.preset === "conservative" || qfRaw.preset === "strong"
+        qfRaw.preset === "conservative" || qfRaw.preset === "strong" || qfRaw.preset === "fidelity"
           ? qfRaw.preset
           : "standard",
       scale: clampNumber(qfRaw.scale, 1.0, 2.0, 1.6),

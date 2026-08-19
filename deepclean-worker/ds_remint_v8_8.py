@@ -79,7 +79,7 @@ def is_ds_remint_v8_9(settings):
     return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.9"
 
 
-def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None):
+def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False):
     """DS ReMint V8.9: the V8.8 coherent pipeline with data-driven defaults
     (Qwen wash, balanced default, deep degrade 0.75) and baseline-aware
     ladder routing."""
@@ -90,6 +90,7 @@ def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, see
         settings=settings,
         seed_extra=seed_extra,
         detector=detector,
+        return_buffer=return_buffer,
     )
 
 
@@ -165,9 +166,12 @@ def normalize_ds_remint_v8_8_settings(settings):
     return cfg
 
 
-def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None):
+def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False):
     """Full DS ReMint V8.8 pipeline. Writes the final camera-like JPEG (with
-    coherent EXIF when enabled) to output_path and returns a report."""
+    coherent EXIF when enabled) to output_path and returns a report.
+    return_buffer=True additionally attaches the PRE-ENCODE RGB array as
+    report["_pre_encode_rgb"] so a chained stage can consume the high-
+    precision buffer instead of decoding the intermediate JPEG (C8 v4)."""
     cfg = normalize_ds_remint_v8_8_settings(settings)
     report = {
         "enabled": bool(cfg["enabled"]),
@@ -322,6 +326,11 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
         original_ref = original.resize(final_image.size, Image.Resampling.LANCZOS)
         final_image = _histogram_match(final_image, original_ref, cfg["color_restore_strength"])
         report["layers"]["final_tone_lock"] = {"strength": cfg["color_restore_strength"]}
+
+    if return_buffer:
+        # C8 v4 pre-JPEG handoff: the chained finisher consumes this buffer
+        # directly so zero JPEG generations sit between the two stages.
+        report["_pre_encode_rgb"] = np.asarray(final_image)
 
     # --- one encode (delivered bytes) ----------------------------------------
     exif_report = {"enabled": False}
