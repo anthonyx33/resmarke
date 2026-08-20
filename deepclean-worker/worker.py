@@ -353,58 +353,40 @@ def handler(job):
                     if isinstance(expert_refinement.get("quality_finish"), dict)
                     else {}
                 )
-                # Fidelity HD (C8 v4): stage one runs at the DELIVERY
-                # resolution (never 1250 -> up again), encodes nothing in
-                # the chain, and hands its pre-JPEG buffer to the finisher.
-                # The original source becomes the finisher's fidelity
-                # reference (texture-detail transfer gate).
+                # Fidelity HD (C8 v4, middle-ground revision): stage one
+                # runs with its PROVEN v3.1 configuration untouched (same
+                # ladder, same strength, same delivered bytes) and
+                # additionally hands its pre-encode RGB buffer to the
+                # finisher -- the only quality change is that the finisher
+                # never decodes a q92/4:2:0 intermediate and keeps more
+                # texture. The finished file is then probed with the same
+                # source-aware gate as the v3.1 adaptive path: if it does
+                # not clear, the gated stage-1 bytes ship instead.
                 fidelity = str(finish_base.get("preset", "standard")) == "fidelity"
-                if fidelity:
-                    with Image.open(input_path) as _src_img:
-                        src_edge = max(_src_img.size)
-                    sub_v89 = dict(
-                        v89_settings.get("ds_remint_v8_9")
-                        if isinstance(v89_settings.get("ds_remint_v8_9"), dict)
-                        else {}
-                    )
-                    sub_v89["output_target"] = min(src_edge, 2000)
-                    sub_v89["jpeg_quality"] = 97
-                    sub_v89["jpeg_subsampling"] = "4:4:4"
-                    sub_v89["strength"] = "light"
-                    sub_v89["engine_mode"] = "adaptive"
-                    v89_settings["ds_remint_v8_9"] = sub_v89
-                    engine_report = apply_ds_remint_v8_9(
-                        input_path=input_path,
-                        output_path=cleaned_path,
-                        creator_id=creator_id,
-                        settings=v89_settings,
-                        seed_extra=f"{job_id}:{input_sha}",
-                        detector=detector,
-                        return_buffer=True,
-                    )
-                else:
-                    engine_report = apply_ds_remint_v8_9(
-                        input_path=input_path,
-                        output_path=cleaned_path,
-                        creator_id=creator_id,
-                        settings=v89_settings,
-                        seed_extra=f"{job_id}:{input_sha}",
-                        detector=detector,
-                    )
+                engine_report = apply_ds_remint_v8_9(
+                    input_path=input_path,
+                    output_path=cleaned_path,
+                    creator_id=creator_id,
+                    settings=v89_settings,
+                    seed_extra=f"{job_id}:{input_sha}",
+                    detector=detector,
+                    return_buffer=fidelity,
+                )
                 pre_encode_rgb = engine_report.pop("_pre_encode_rgb", None) if isinstance(engine_report, dict) else None
+                stage1_path = tmp / "stage1-delivered.jpg"
+                shutil.copyfile(cleaned_path, stage1_path)
                 remint_cfg = normalize_ds_remint_v8_8_settings(v89_settings)
                 ai_t = float(remint_cfg.get("ai_threshold", 0.45))
                 src_t = float(remint_cfg.get("source_threshold", 0.30))
 
                 if fidelity and pre_encode_rgb is not None:
                     # Pre-JPEG handoff: finisher sees the stage-1 buffer
-                    # directly (no intermediate JPEG history to repair) and
-                    # skips enlargement when stage one already sits on the
-                    # delivery lattice.
+                    # directly (no intermediate JPEG history to repair).
+                    # Enlargement is the user's setting, clamped by the
+                    # finisher as usual (stage 1 stays at its proven
+                    # delivery size, so nothing about its bytes changed).
                     fin_settings = dict(expert_refinement)
                     qf = dict(finish_base)
-                    if max(pre_encode_rgb.shape[:2]) >= 1900:
-                        qf["scale"] = None
                     fin_settings["quality_finish"] = qf
                     rep = apply_quality_finish(
                         image=pre_encode_rgb,
@@ -414,10 +396,32 @@ def handler(job):
                         creator_id=creator_id,
                         reference=input_path,
                     )
+                    # Same detector gate as the v3.1 adaptive path: the
+                    # DELIVERED file must clear. Probe infra errors never
+                    # disqualify (v3.1 policy); a non-clearing finished file
+                    # falls back to the gated stage-1 bytes.
+                    ai_f, flux_f = _finish_probe(detector, cleaned_path)
+                    probe_error = ai_f is None and flux_f is None
+                    cleared_f = (
+                        probe_error
+                        or (ai_f is not None and flux_f is not None and ai_f <= ai_t and flux_f <= src_t)
+                    )
+                    if not cleared_f:
+                        shutil.copyfile(stage1_path, cleaned_path)
+                        rep["applied"] = False
+                        rep["reason"] = "detector_gate_not_cleared_stage1_shipped"
+                    rep["detector_probe"] = {
+                        "ai_probability": ai_f,
+                        "flux_family": flux_f,
+                        "cleared": cleared_f,
+                        "probe_error": probe_error,
+                    }
                     engine_report["quality_finish"] = rep
                     engine_report["finish_adaptive"] = {
                         "enabled": False,
-                        "mode": "fidelity_pre_jpeg_handoff",
+                        "mode": "fidelity_pre_jpeg_handoff_gated",
+                        "ai_threshold": ai_t,
+                        "source_threshold": src_t,
                     }
                 else:
                     adaptive = (
