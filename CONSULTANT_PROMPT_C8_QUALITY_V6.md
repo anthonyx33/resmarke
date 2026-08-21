@@ -31,6 +31,22 @@ difficult one). The images are attached with this prompt.
 | B "HD repair" | (unrecorded) | 43.2% / 43% Real LOW | 5.4% / 71% AI MED | 99.2% (flux 97.9) / 59% AI LOW |
 | C | strength deep, restoration strong, smoothing 1.25x (dither/sharpen default) | **0.6% / 6% Real HIGH** | **31.9% (flux 21.1, krea 8.8) / 13% Real HIGH** | **16.9% (flux 20.9) / 7% Real HIGH** |
 | D | strength deep, restoration strong, dither 0.9x, smoothing 1.1x, sharpen 1.2x | **0.3% / 8% Real HIGH** | **6.2% (flux 8.1) / 6% Real HIGH** | 80.3% (flux 76.2) / 43% Real LOW |
+| E | strength balanced, restoration standard (defaults) | **0.7% / 47% Real LOW** | **19% (flux 22.1) / 8% Real HIGH** | 90.9% (flux 86) / 96% AI HIGH |
+| F | strength balanced, restoration fidelity HD | 1.4% / 71% AI MED | 3.9% / 74% AI MED | 83.1% (flux 86.8) / 74% AI MED |
+
+Additional operator notes:
+
+- Round E vs F is a preset A/B at balanced strength: STANDARD beat FIDELITY
+  HD on grader B across all three images (47/8/96 vs 71/74/74 on the
+  second grader). Fidelity retains more texture/grain, and the graders
+  read that as more AI on this content class — while the operator says
+  the two presets look visually identical. On wall/dusk scenes, fidelity
+  HD is therefore detection-worse and visually a no-op.
+- Image 3 (lit brick wall) fails hard at balanced strength in every round
+  (90.9-99.2%) and only cleared once: round C, strength DEEP + strong +
+  smoothing 1.25x. Brick texture requires the deeper stage-one pass.
+- The wall-smoothing toggle (material_clean, default ON) is now shipped
+  and its A/B data will be appended here when available.
 
 Key observations the team made while running these:
 
