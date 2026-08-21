@@ -80,17 +80,23 @@ phones capture this grainy anymore."
 
 ## The open questions
 
-1. **The operator's shrink-then-enhance idea**: the original is ~2000px;
-   should the pipeline shrink to 1250-1440px and then "enhance" back up?
-   We believe this is backwards (the 1250px stage-1 bottleneck was the
-   V4 diagnosis), but answer it on the record with the dB reasoning —
-   and state whether ANY shrink-first scheme can ever beat processing at
-   the delivery lattice.
+1. **The delivery lattice is mobile, not 2000px.** The operator clarified:
+   the product posts to Instagram/Facebook where most viewers are on
+   phones, so the FINAL output should be ~1250-1440px, not 2000px. Today
+   the pipeline does 1250 -> finisher upscale -> 2000, and the platform
+   downscales again (two resamples after the good pixels). Should the
+   pipeline instead process DIRECTLY at the delivery lattice
+   (min(source, 1440), finisher upscale OFF)? Quantify the quality win of
+   removing the double resample, confirm whether grain generated at 1440
+   reads finer than grain enlarged from 1250, and design the smallest
+   detection-safe experiment to prove 1250 -> 1440 stage-one delivery
+   does not regress the graders (the 2000px jump broke detection; the
+   operator will not accept that again).
 2. **The grain model is the core ask.** Current grain reads "old phone".
    Modern-phone noise is finer, lower-amplitude, and spectrally different.
    What measurable grain budget (luma amplitude in LSB, chroma amplitude,
    spatial scale in px, rho1/rho2, H1/H0) produces the "new phone" look
-   at a 2000px delivery — and which stage should own each component
+   at a 1250-1440px delivery — and which stage should own each component
    (stage-1 injection vs finisher dither vs finisher suppression floors)?
 3. **Rendered walls with hue variation are the hardest region.** Sky is
    fixed by the existing gradient branch; painted/rendered walls with
