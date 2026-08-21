@@ -153,6 +153,19 @@ QC_BANDING_TOLERANCE = 0.08
 REF_TDR_FLOOR = 0.60
 REF_TDR_WARN = 0.75
 
+# Mobile Clean material branch (C8 v5): rendered walls etc. are large
+# smooth-material surfaces whose residual should read almost invisible at
+# mobile scale, while coherent material structure is preserved. The branch
+# auto-triggers on coverage + severity; no user knob.
+WALL_COVERAGE_MIN = 0.06
+WALL_RMS_TRIGGER = 0.48 / 255.0
+WALL_CNF_TRIGGER = 0.30
+WALL_RMS_BRIGHT = 0.32 / 255.0
+WALL_RMS_DARK = 0.55 / 255.0
+WALL_CHROMA_RMS = 0.08 / 255.0
+WALL_DITHER_Y = 0.15 / 255.0
+WALL_DITHER_C = 0.05 / 255.0
+
 # Final encode policy (C8 v3): Q97 preserves low-amplitude gradient variation
 # and deliberate dither disproportionately better in large smooth skies.
 FINAL_JPEG_QUALITY = 97
@@ -690,6 +703,44 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     cb = cb + 0.6 * gradient_alpha * grad_mask_native * (_guided_filter(cb, y, 4, 2e-3) - cb)
     cr = cr + 0.6 * gradient_alpha * grad_mask_native * (_guided_filter(cr, y, 4, 2e-3) - cr)
 
+    # ---- Mobile Clean material branch (C8 v5) ------------------------------
+    # Rendered walls: preserve coherent structure + low-frequency colour,
+    # aggressively shrink the UNSTRUCTURED residual (the old-phone grain),
+    # and shrink chroma speckle hard. Auto-triggers on coverage + severity.
+    material = _material_smooth_confidence(y, cb, cr, flat_float, tex, edge_band)
+    p_struct = _cross_scale_persistence(y)
+    material_native = material
+    wall_applied = False
+    wall_rms_before = 0.0
+    wall_cnf_before = 0.0
+    if float(np.mean(material > 0.5)) >= WALL_COVERAGE_MIN:
+        wall_rms_before = _masked_rms(y - _gauss(y, 0.7), material)
+        wall_cnf_before = _cnf(y, material)
+        if wall_rms_before > WALL_RMS_TRIGGER or wall_cnf_before > WALL_CNF_TRIGGER:
+            wall_applied = True
+            base_y = _guided_filter(y, y, 8, 1e-3)
+            base_cb = _guided_filter(cb, y, 12, 1e-3)
+            base_cr = _guided_filter(cr, y, 12, 1e-3)
+            resid = y - base_y
+            resid_struct = p_struct * resid
+            resid_noise = (1.0 - p_struct) * resid
+            rms_n = _masked_rms(resid_noise, material)
+            bright = (y > 0.5).astype(np.float32)
+            target = bright * WALL_RMS_BRIGHT + (1.0 - bright) * WALL_RMS_DARK
+            target_field = _box(target, 8)
+            gain = np.clip(target_field / max(rms_n, 1e-4), 0.0, 1.0)
+            y = base_y + resid_struct + resid_noise * (material * gain + (1.0 - material))
+
+            def _clean_material_chroma(ch, base_c):
+                r = ch - base_c
+                rn = (1.0 - p_struct) * r
+                rms_c = _masked_rms(rn, material)
+                gain_c = np.clip(WALL_CHROMA_RMS / max(rms_c, 1e-4), 0.0, 1.0)
+                return base_c + p_struct * r + rn * (material * gain_c + (1.0 - material))
+
+            cb = _clean_material_chroma(cb, base_cb)
+            cr = _clean_material_chroma(cr, base_cr)
+
     # ---- Optional dual-kernel enlargement (C8 v2) --------------------------
     # Structure gets Lanczos3, smooth regions get Mitchell, feathered by the
     # texture-confidence map -- the interpolator itself must not convert
@@ -706,6 +757,8 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
         edge_band = _resize_mask(edge_band, scale)
         highlight_edge = _resize_mask(highlight_edge, scale)
         sigma_n_img = _resize_mask(sigma_n_img, scale)
+        material = _resize_mask(material, scale)
+        p_struct = _resize_mask(p_struct, scale)
 
     # ---- Destination-scale residual decorrelation (C8 v2) ------------------
     # Interpolated noise is a spatially correlated field (rho1 ~0.5+) after
@@ -736,6 +789,10 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     band = _gauss(y, s1) - _gauss(y, s2)
     halo = _box(highlight_edge, 2)
     struct = np.clip(0.35 + 0.65 * tex_out - flat_float * 0.6 - halo * 0.85, 0.0, 1.0)
+    if wall_applied:
+        # C8 v5: sharpen coherent structure only, never the cleaned wall
+        # residual; cap the gain on smooth material.
+        struct = struct * np.clip(1.0 - 0.6 * material * (1.0 - p_struct), 0.0, 1.0)
     sigma_band = np.maximum(sigma_n_img, 1e-3) * 0.35
     snr_gate = np.clip(
         (np.abs(band) - p["snr_k"] * sigma_band) / (np.abs(band) + 1e-9), 0.0, 1.0
@@ -775,12 +832,23 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     # Nothing image-altering follows except quantization and JPEG encoding.
     if dither:
         grad_mask_out = np.clip(flat_float * (1.0 - 0.5 * tex_out), 0.0, 1.0)
+        # C8 v5: split wall and sky dither. Walls get a low baseline
+        # (0.15 Y / 0.05 C LSB) so dither never reads as grain; the sky's
+        # proven gradient dither is untouched.
+        amp_y = (
+            grad_mask_out * p["dither_luma"] * np.clip(1.0 - material, 0.0, 1.0)
+            + material * WALL_DITHER_Y
+        )
+        amp_c = (
+            grad_mask_out * p["dither_chroma"] * np.clip(1.0 - material, 0.0, 1.0)
+            + material * WALL_DITHER_C
+        )
         dith_y = _tiled_noise(y.shape, 64, f"qf-dither-y:{seed_extra}")
         dith_cb = _tiled_noise(cb.shape, 64, f"qf-dither-cb:{seed_extra}")
         dith_cr = _tiled_noise(cr.shape, 64, f"qf-dither-cr:{seed_extra}")
-        y = y + gradient_alpha * grad_mask_out * dith_y * p["dither_luma"]
-        cb = cb + gradient_alpha * grad_mask_out * dith_cb * p["dither_chroma"]
-        cr = cr + gradient_alpha * grad_mask_out * dith_cr * p["dither_chroma"]
+        y = y + gradient_alpha * amp_y * dith_y
+        cb = cb + gradient_alpha * amp_c * dith_cb
+        cr = cr + gradient_alpha * amp_c * dith_cr
         qc, passed = _run_qc(
             y_before, y, cb_before, cb, cr_before, cr,
             flat_float, edge_band, shadow, standalone, seed_extra, scale,
@@ -820,6 +888,29 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     qc["step_fraction_jpeg"] = round(frac_jpeg, 5)
     qc["staircase_reconstructed"] = staircase_reconstructed
     qc["gradient_alpha"] = round(gradient_alpha, 3)
+
+    # ---- Material-branch QC (C8 v5) ----------------------------------------
+    # Report the wall metrics that matter (RMS, CNF, correlation length,
+    # rho1, H1/H0) so the old-phone grain is measurable per image.
+    material_diag = material if material.shape == y.shape else material_native
+    if material_diag.shape != y.shape:
+        material_diag = _resize_mask(material_diag, y.shape[1] / float(material_diag.shape[1]))
+    wall_res = y - _gauss(y, 0.7)
+    qc["material_wall"] = {
+        "coverage": round(float(np.mean(material_diag > 0.5)), 3),
+        "applied": wall_applied,
+        "rms_before": round(wall_rms_before * 255.0, 3),
+        "cnf_before": round(wall_cnf_before, 3),
+        "rms_after": round(_masked_rms(wall_res, material_diag) * 255.0, 3),
+        "cnf_after": round(_cnf(y, material_diag), 3),
+        "correlation_length_px": _correlation_length(wall_res, material_diag),
+        "rho1": round(_lag1(wall_res, material_diag), 3),
+        "h1h0": round(
+            _masked_rms(_gauss(y, 0.7) - _gauss(y, 1.6), material_diag)
+            / max(_masked_rms(wall_res, material_diag), 1e-9),
+            3,
+        ),
+    }
 
     out = out_rgb if return_float else out_u8
     return out, qc, passed
@@ -897,6 +988,89 @@ def _jpeg_delivery_info(path):
         length = int.from_bytes(data[i + 2:i + 4], "big")
         i += 2 + length
     return None
+
+
+def _cross_scale_persistence(y):
+    """C8 v5 cross-scale persistence: coherent surface structure survives
+    multiple Gaussian scales with agreement; noise/speckle does not.
+    Returns P_structure in [0,1] (1 = keep as structure, 0 = noise)."""
+    eps = 1e-6
+    g1 = _grad_mag(_gauss(y, 0.7))
+    g2 = _grad_mag(_gauss(y, 1.4))
+    g3 = _grad_mag(_gauss(y, 2.4))
+    p = np.minimum(g1, 1.6 * g2) / (g1 + eps)
+    agree = np.minimum(g2, 1.2 * g3) / (g2 + eps)
+    return _box(np.clip(p * np.clip(agree, 0.0, 1.0), 0.0, 1.0), 2)
+
+
+def _material_smooth_confidence(y, cb, cr, flat_float, tex, edge_band):
+    """C8 v5 smooth-material confidence: large architectural surfaces with
+    coherent low-frequency illumination/chroma variation but almost no
+    legitimate incoherent high/mid-frequency energy. Rendered walls = high;
+    brick/foliage/masonry = low."""
+    g_y = _grad_mag(y)
+    g_c = _grad_mag(cb) + _grad_mag(cr)
+    low_edge = (g_y < 0.02).astype(np.float32)
+    # Structured-energy criterion: the H2 band DETRENDED of its own local
+    # mean, so a wall's illumination ramp does not count as structure.
+    h2_band = _gauss(y, 1.2) - _gauss(y, 2.4)
+    h2_local = h2_band - _box(h2_band, 8)
+    low_h2 = (_box(h2_local * h2_local, 4) < 0.004 ** 2).astype(np.float32)
+    low_hf_chroma = (_box(g_c * g_c, 4) < 0.0004).astype(np.float32)
+    # Hard gates + box smoothing: cores of large qualifying surfaces reach
+    # ~1.0, edges feather out -- not a soft product capped below 0.5.
+    # Texture is gated, not multiplied: real walls sit at tex ~0.2-0.3
+    # (noise-only), brick/foliage at 0.5+.
+    flat_ok = (flat_float > 0.35).astype(np.float32)
+    tex_ok = (tex < 0.45).astype(np.float32)
+    cand = (
+        flat_ok
+        * tex_ok
+        * low_edge
+        * low_h2
+        * low_hf_chroma
+        * np.clip(1.0 - edge_band, 0.0, 1.0)
+    )
+    cand = _box(cand, 6)
+    # A wall carries a meaningful low-frequency illumination field; a blank
+    # void does not. Soft weight so near-uniform walls keep partial
+    # confidence instead of being excluded entirely.
+    base = _gauss(y, 8)
+    illum_var = _box((base - _box(base, 24)) ** 2, 8)
+    illum_w = np.clip((illum_var - 1e-6) / 1e-5, 0.0, 1.0)
+    return np.clip(_box(cand * illum_w, 4), 0.0, 1.0)
+
+
+def _cnf(a, mask):
+    """C8 v5 coarse-noise fraction: energy in the coarse residual band
+    (~0.03-0.15 cyc/px) over the full residual band (~0.03-0.45 cyc/px).
+    Same RMS can be premium (fine) or dirty (coarse); CNF separates them."""
+    band_coarse = _gauss(a, 3.0) - _gauss(a, 7.0)
+    band_all = a - _gauss(a, 7.0)
+    e_c = _masked_rms(band_coarse, mask) ** 2
+    e_a = _masked_rms(band_all, mask) ** 2
+    return float(e_c / max(e_a, 1e-9))
+
+
+def _correlation_length(a, mask):
+    """C8 v5 correlation length: first lag (px) where the horizontal
+    autocorrelation of the residual drops below 1/e. Premium walls collapse
+    toward pixel scale; coarse old-phone grain persists 2-4px."""
+    m = mask > 0.5
+    if m.sum() < 4096:
+        return 1
+    x = a - float(np.mean(a[m]))
+    var = float(np.mean(x[m] ** 2))
+    if var < 1e-12:
+        return 1
+    for lag in range(1, 5):
+        mm = m[:, lag:] & m[:, :-lag]
+        if mm.sum() < 1024:
+            continue
+        r = float(np.mean((x[:, lag:] * x[:, :-lag])[mm])) / var
+        if r < (1.0 / np.e):
+            return lag
+    return 4
 
 
 def _masked_rms(a, mask):

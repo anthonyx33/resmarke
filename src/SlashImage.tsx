@@ -97,7 +97,7 @@ export default function SlashImage() {
   const [metadataMode, setMetadataMode] = useState<"device" | "minimal">("device");
   // Finish options.
   const [finishPreset, setFinishPreset] = useState<"conservative" | "standard" | "strong" | "fidelity">("standard");
-  const [finishScale, setFinishScale] = useState<"native" | "1.6" | "2">("1.6");
+  const [finishScale, setFinishScale] = useState<"native" | "1.6" | "2">("native");
   const [finishMode, setFinishMode] = useState<"adaptive" | "template">("adaptive");
   // Pro tuning (finish overrides): 1.00 = preset default, clamped server-side.
   const [tuneDither, setTuneDither] = useState(1);

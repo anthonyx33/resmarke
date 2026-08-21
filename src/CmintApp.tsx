@@ -169,7 +169,7 @@ export default function CmintApp() {
 
   // Stage 2 — Quality Finish.
   const [qfPreset, setQfPreset] = useState<QfPreset>("standard");
-  const [qfScale, setQfScale] = useState(1.6);
+  const [qfScale, setQfScale] = useState(1);
   const [finishMode, setFinishMode] = useState<FinishRouting>("adaptive");
   // Pro tuning — multipliers over the preset's calibrated gains. 1.00 = preset
   // default; the worker clamps every value to its own accepted range.

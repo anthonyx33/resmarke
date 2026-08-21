@@ -415,6 +415,13 @@ def handler(job):
                         "flux_family": flux_f,
                         "cleared": cleared_f,
                         "probe_error": probe_error,
+                        # C8 v5: gate margin is the uncertainty signal.
+                        # Near-threshold clears are flagged for manual QA
+                        # instead of shipping silently.
+                        "borderline": bool(
+                            (ai_f is not None and 0.25 <= ai_f <= ai_t)
+                            or (flux_f is not None and 0.15 <= flux_f <= src_t)
+                        ),
                     }
                     engine_report["quality_finish"] = rep
                     engine_report["finish_adaptive"] = {
