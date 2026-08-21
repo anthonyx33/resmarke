@@ -29,6 +29,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { config, hasSupabaseConfig } from "./lib/config";
 import { readLocalCredits, spendLocalPrivacyCredit, type CreditSnapshot } from "./lib/localCredits";
+import { buildSettingsCode } from "./lib/settingsCode";
 import {
   cancelDeepCleanJob,
   createDeepCleanJob,
@@ -79,7 +80,7 @@ type QueueItem = {
 type WashModel = "qwen" | "zimage" | "qwen+zimage";
 type Strength = "light" | "balanced" | "deep";
 type MetadataMode = "device" | "minimal";
-type NameStyle = "photo-style" | "original" | "custom";
+type NameStyle = "photo-style" | "original" | "custom" | "settings-code";
 type QfPreset = "conservative" | "standard" | "strong" | "fidelity";
 type FinishRouting = "adaptive" | "template";
 
@@ -461,6 +462,33 @@ export default function CmintApp() {
     };
   }
 
+  function settingsCodeFor() {
+    return buildSettingsCode({
+      mode,
+      remint: remintOptions(),
+      finish: finishOptions()
+    });
+  }
+
+  function deliveredNameFor(position: number): {
+    style: "photo-style" | "original" | "custom" | "settings-code";
+    custom: string;
+  } {
+    // Naming: custom = the exact name (first item) then consecutive +2, +3;
+    // settings-code = the code encoding the exact settings, numbered per
+    // item so identical-settings files never collide.
+    if (!runsRemint) return { style: nameStyle, custom: nameCustom };
+    if (nameStyle === "custom") {
+      const base = nameCustom.trim() || "image";
+      return { style: "custom", custom: position > 1 ? `${base}-${position}` : base };
+    }
+    if (nameStyle === "settings-code") {
+      const code = settingsCodeFor();
+      return { style: "settings-code", custom: position > 1 ? `${code}-${position}` : code };
+    }
+    return { style: nameStyle, custom: nameCustom };
+  }
+
   /* Single-item processor. Both the batch run and the per-item Re-run go
      through this, so a re-run is byte-for-byte the same request path with
      whatever settings are on screen at the moment it is pressed. */
@@ -471,6 +499,7 @@ export default function CmintApp() {
     setStatus(`Preparing ${position} of ${total} · ${item.file.name}`);
 
     try {
+      const naming = deliveredNameFor(position);
       const job = await createDeepCleanJob({
         file: item.file,
         creatorId: userEmail || "creator@example.com",
@@ -482,8 +511,8 @@ export default function CmintApp() {
           mode === "sequence"
             ? { remint: remintOptions(), finish: finishOptions(), finishMode }
             : undefined,
-        outputNameStyle: runsRemint ? nameStyle : undefined,
-        outputNameCustom: runsRemint ? nameCustom : undefined
+        outputNameStyle: naming.style,
+        outputNameCustom: naming.custom
       });
       created = job;
       patchItem(item.id, { status: "uploading", job });
@@ -588,6 +617,14 @@ export default function CmintApp() {
   /* ---------------- downloads ---------------- */
 
   function outputNameFor(item: QueueItem, position?: number) {
+    if (nameStyle === "custom") {
+      const base = nameCustom.trim() || "image";
+      return `${position === undefined ? base : `${base}-${position + 1}`}.jpg`;
+    }
+    if (nameStyle === "settings-code") {
+      const code = settingsCodeFor();
+      return `${position === undefined ? code : `${code}-${position + 1}`}.jpg`;
+    }
     const raw = item.file.name.replace(/\.[^.]+$/, "");
     const base = raw.replace(/[<>:"/\\|?*\u0000-\u001f\s]+/g, "-").slice(0, 90) || "image";
     const prefix = position === undefined ? "" : `${String(position + 1).padStart(2, "0")}-`;
@@ -1283,6 +1320,7 @@ export default function CmintApp() {
                             <option value="photo-style">Photo style (IMG_####)</option>
                             <option value="original">Keep original name</option>
                             <option value="custom">Custom…</option>
+                            <option value="settings-code">Settings code</option>
                           </select>
                           {nameStyle === "custom" ? (
                             <input
@@ -1292,6 +1330,19 @@ export default function CmintApp() {
                               placeholder="my-photo"
                               onChange={(event) => setNameCustom(event.target.value)}
                             />
+                          ) : null}
+                          {nameStyle === "custom" ? (
+                            <p className="cm-hint">
+                              First image keeps the exact name; each next image adds -2, -3…
+                            </p>
+                          ) : null}
+                          {nameStyle === "settings-code" ? (
+                            <p className="cm-hint">
+                              The filename encodes the exact settings used — share it back for a
+                              full settings → performance loop.
+                              <br />
+                              <code>{settingsCodeFor()}</code>
+                            </p>
                           ) : null}
                         </div>
                       </div>

@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { hasSupabaseConfig } from "./lib/config";
 import { supabase } from "./lib/supabase";
+import { buildSettingsCode } from "./lib/settingsCode";
 import {
   cancelDeepCleanJob,
   createDeepCleanJob,
@@ -103,7 +104,7 @@ export default function SlashImage() {
   const [tuneSmooth, setTuneSmooth] = useState(1);
   const [tuneSharpen, setTuneSharpen] = useState(1);
   // Output naming.
-  const [nameStyle, setNameStyle] = useState<"photo-style" | "original" | "custom">("photo-style");
+  const [nameStyle, setNameStyle] = useState<"photo-style" | "original" | "custom" | "settings-code">("photo-style");
   const [nameCustom, setNameCustom] = useState("");
 
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -199,23 +200,50 @@ export default function SlashImage() {
     if (data?.deepCleanCredits !== undefined) setCredits(data.deepCleanCredits);
   }
 
-  function buildJobOptions() {
-    const finishOptions = {
-      preset: finishPreset,
-      scale: finishScale === "native" ? null : Number(finishScale),
-      overrides: { dither: tuneDither, smoothness: tuneSmooth, sharpen: tuneSharpen }
-    };
-    const remintOptions = {
+  function remintOpts() {
+    return {
       engineMode,
       washModel,
       strength,
       iphoneExif,
       metadataMode
     };
-    const naming = {
-      outputNameStyle: nameStyle,
-      outputNameCustom: nameStyle === "custom" ? nameCustom : undefined
+  }
+
+  function finishOpts() {
+    return {
+      preset: finishPreset,
+      scale: finishScale === "native" ? null : Number(finishScale),
+      overrides: { dither: tuneDither, smoothness: tuneSmooth, sharpen: tuneSharpen }
     };
+  }
+
+  function settingsCodeFor() {
+    return buildSettingsCode({ mode, remint: remintOpts(), finish: finishOpts() });
+  }
+
+  function namingFor(seq: number): {
+    outputNameStyle: "photo-style" | "original" | "custom" | "settings-code";
+    outputNameCustom?: string;
+  } {
+    if (nameStyle === "custom") {
+      const base = nameCustom.trim() || "image";
+      return { outputNameStyle: "custom", outputNameCustom: seq > 1 ? `${base}-${seq}` : base };
+    }
+    if (nameStyle === "settings-code") {
+      const code = settingsCodeFor();
+      return { outputNameStyle: "settings-code", outputNameCustom: seq > 1 ? `${code}-${seq}` : code };
+    }
+    return {
+      outputNameStyle: nameStyle,
+      outputNameCustom: undefined
+    };
+  }
+
+  function buildJobOptions(seq = 1) {
+    const finishOptions = finishOpts();
+    const remintOptions = remintOpts();
+    const naming = namingFor(seq);
     if (mode === "sequence") {
       return {
         profile: "ds-remint-v8.9-hd" as const,
@@ -229,14 +257,14 @@ export default function SlashImage() {
     return { profile: "quality-finish" as const, qualityFinish: finishOptions };
   }
 
-  async function processItem(item: QueueItem) {
+  async function processItem(item: QueueItem, seq: number) {
     let job: DeepCleanJob | undefined;
     try {
       setQueue((q) =>
         q.map((x) => (x.id === item.id ? { ...x, status: "preparing", error: undefined } : x))
       );
       setStatusLine(`Preparing ${item.file.name}…`);
-      const options = buildJobOptions();
+      const options = buildJobOptions(seq);
       job = await createDeepCleanJob({
         file: item.file,
         creatorId: userId,
@@ -296,13 +324,13 @@ export default function SlashImage() {
     let completed = 0;
     let failed = 0;
 
-    for (const item of queue) {
+    for (const [index, item] of queue.entries()) {
       if (item.status === "completed") {
         completed += 1;
         continue;
       }
       try {
-        await processItem(item);
+        await processItem(item, index + 1);
         completed += 1;
       } catch {
         failed += 1;
@@ -322,7 +350,7 @@ export default function SlashImage() {
     setRunning(true);
     setStatusLine(`Re-running ${item.file.name} with current settings…`);
     try {
-      await processItem(item);
+      await processItem(item, 1);
       setStatusLine(`Re-ran ${item.file.name} · ready.`);
     } catch {
       setStatusLine(`Re-run of ${item.file.name} failed.`);
@@ -344,6 +372,14 @@ export default function SlashImage() {
   /* ---------------- downloads ---------------- */
 
   function outputNameFor(item: QueueItem, position?: number) {
+    if (nameStyle === "custom") {
+      const base = nameCustom.trim() || "image";
+      return `${position === undefined ? base : `${base}-${position + 1}`}.jpg`;
+    }
+    if (nameStyle === "settings-code") {
+      const code = settingsCodeFor();
+      return `${position === undefined ? code : `${code}-${position + 1}`}.jpg`;
+    }
     const raw = item.file.name.replace(/\.[^.]+$/, "");
     const base = raw.replace(/[<>:"/\\|?*\u0000-\u001f\s]+/g, "-").slice(0, 90) || "image";
     const prefix = position === undefined ? "" : `${String(position + 1).padStart(2, "0")}-`;
@@ -757,7 +793,7 @@ export default function SlashImage() {
                 <div className="slash-field">
                   <label className="slash-label">File name</label>
                   <div className="slash-seg">
-                    {(["photo-style", "original", "custom"] as const).map((n) => (
+                    {(["photo-style", "original", "custom", "settings-code"] as const).map((n) => (
                       <button
                         key={n}
                         type="button"
@@ -765,19 +801,32 @@ export default function SlashImage() {
                         disabled={running}
                         onClick={() => setNameStyle(n)}
                       >
-                        {n}
+                        {n === "settings-code" ? "Settings code" : n}
                       </button>
                     ))}
                   </div>
                 </div>
                 {nameStyle === "custom" ? (
-                  <input
-                    className="slash-input"
-                    placeholder="Custom prefix"
-                    value={nameCustom}
-                    disabled={running}
-                    onChange={(e) => setNameCustom(e.target.value)}
-                  />
+                  <>
+                    <input
+                      className="slash-input"
+                      placeholder="Custom prefix"
+                      value={nameCustom}
+                      disabled={running}
+                      onChange={(e) => setNameCustom(e.target.value)}
+                    />
+                    <small className="slash-hint">
+                      First image keeps the exact name; each next image adds -2, -3…
+                    </small>
+                  </>
+                ) : null}
+                {nameStyle === "settings-code" ? (
+                  <small className="slash-hint">
+                    The filename encodes the exact settings — share it back for a full
+                    settings → performance loop.
+                    <br />
+                    <code>{settingsCodeFor()}</code>
+                  </small>
                 ) : null}
               </div>
             ) : null}

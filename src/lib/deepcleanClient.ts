@@ -187,7 +187,7 @@ export async function createDeepCleanJob(params: {
   dsRemintV89?: DsRemintV8_8Options;
   qualityFinish?: QualityFinishOptions;
   dsRemintV89Hd?: DsRemintV8_9HdOptions;
-  outputNameStyle?: "photo-style" | "original" | "custom";
+  outputNameStyle?: "photo-style" | "original" | "custom" | "settings-code";
   outputNameCustom?: string;
 }): Promise<DeepCleanJob> {
   if (!supabase) {

@@ -367,16 +367,17 @@ function sanitizeNamePart(value: string, maxLength: number): string {
 function buildOutputName(style: unknown, custom: unknown, originalFileName: string): string {
   // V8 user setting: how the delivered file is named. photo-style (default,
   // IMG_XXXX.JPG), original (keeps the uploaded base name with a -clean
-  // suffix), or custom (sanitized user prefix).
-  const styles = ["photo-style", "original", "custom"];
+  // suffix), custom (the sanitized user name EXACTLY), or settings-code
+  // (client-computed code encoding the exact settings used).
+  const styles = ["photo-style", "original", "custom", "settings-code"];
   const resolved = typeof style === "string" && styles.includes(style) ? style : "photo-style";
   if (resolved === "original") {
     const base = sanitizeNamePart(originalFileName.replace(/\.[^.]+$/, ""), 80) || "image";
     return `${base}-clean.JPG`;
   }
-  if (resolved === "custom") {
-    const prefix = typeof custom === "string" ? sanitizeNamePart(custom, 60) : "";
-    return `${prefix || "ResMarke"}-clean.JPG`;
+  if (resolved === "custom" || resolved === "settings-code") {
+    const prefix = typeof custom === "string" ? sanitizeNamePart(custom, 120) : "";
+    return `${prefix || "ResMarke"}.JPG`;
   }
   return photoStyleOutputName();
 }
