@@ -1,12 +1,11 @@
-import { fnv1a32 } from "./hash";
-
 /**
  * Settings-code filename system.
  *
  * The exported filename ENCODES the exact settings that produced the image:
- * a short human-readable field block plus a 4-char hash of the canonical
- * options JSON. Share the filename back and the exact configuration can be
- * reconstructed / matched for a full settings -> performance feedback loop.
+ * a minimal human prefix (mode, preset, scale, wall toggle) plus a dense
+ * 12-char hash of the canonical options JSON carrying EVERY config field.
+ * Share the filename back and the exact configuration can be reconstructed /
+ * matched for a full settings -> performance feedback loop.
  */
 
 export type SettingsCodeMode = "sequence" | "remint" | "finish";
@@ -21,6 +20,7 @@ export interface SettingsCodeInput {
   finish: {
     preset?: string;
     scale?: number | null;
+    finishMode?: string;
     overrides?: { dither?: number; smoothness?: number; sharpen?: number };
     materialClean?: boolean;
   };
@@ -43,36 +43,45 @@ export function canonicalJson(value: unknown): string {
 
 const B32 = "abcdefghijklmnopqrstuvwxyz234567";
 
-/** Short deterministic hash of the canonical settings JSON. */
-export function settingsShortHash(text: string, chars = 4): string {
-  let x = fnv1a32(text);
+/** Dense deterministic hash of the canonical settings JSON: FNV-1a and FNV-1
+ * run in parallel (64-bit-ish) and are merged into up to 16 base32 chars.
+ * Every config field participates via the canonical JSON, so two exports with
+ * different settings cannot share a hash in practice. */
+export function settingsShortHash(text: string, chars = 12): string {
+  let a = 0x811c9dc5;
+  let b = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text.charCodeAt(i);
+    a ^= c;
+    a = Math.imul(a, 0x01000193);
+    b = Math.imul(b, 0x01000193);
+    b ^= c;
+  }
+  a >>>= 0;
+  b >>>= 0;
   let out = "";
   for (let i = 0; i < chars; i += 1) {
-    out += B32[x % 32];
-    x = (x >>> 5) + 0x9e3779b9;
+    if (i % 2 === 0) {
+      out += B32[a % 32];
+      a = (a >>> 5) + 0x9e3779b9;
+    } else {
+      out += B32[b % 32];
+      b = (b >>> 5) + 0x85ebca6b;
+    }
   }
   return out;
 }
 
-const pct = (v: unknown): string => {
-  const n = typeof v === "number" && Number.isFinite(v) ? v : 1;
-  return `${String(Math.round(n * 100)).padStart(3, "0")}`;
-};
-
 export function buildSettingsCode(input: SettingsCodeInput): string {
   const m = { sequence: "SEQ", remint: "REM", finish: "QF" }[input.mode] ?? "SEQ";
-  const w =
-    { qwen: "Q", zimage: "Z", "qwen+zimage": "QZ" }[input.remint.washModel ?? "qwen"] ?? "Q";
-  const s = { light: "L", balanced: "B", deep: "D" }[input.remint.strength ?? "balanced"] ?? "B";
-  const e = input.remint.engineMode === "template" ? "T" : "A";
   const p =
     { conservative: "CON", standard: "STD", strong: "STR", fidelity: "FID" }[
       input.finish.preset ?? "standard"
     ] ?? "STD";
   const scale = input.finish.scale == null ? "N" : String(input.finish.scale);
-  const ov = input.finish.overrides ?? {};
-  const readable = `${m}-${w}-${s}-${e}-${p}-${scale}-D${pct(ov.dither ?? 1)}-S${pct(
-    ov.smoothness ?? 1
-  )}-X${pct(ov.sharpen ?? 1)}-M${input.finish.materialClean === false ? "0" : "1"}`;
-  return `${readable}-${settingsShortHash(canonicalJson(input))}`;
+  const wall = input.finish.materialClean === false ? "M0" : "M1";
+  // Minimal human prefix (mode, preset, scale, wall toggle); the dense hash
+  // carries EVERY config field via the canonical JSON.
+  const readable = `${m}-${p}-${scale}-${wall}`;
+  return `${readable}-${settingsShortHash(canonicalJson(input), 12)}`;
 }

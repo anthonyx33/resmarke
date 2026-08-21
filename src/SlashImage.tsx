@@ -105,7 +105,7 @@ export default function SlashImage() {
   const [tuneSmooth, setTuneSmooth] = useState(1);
   const [tuneSharpen, setTuneSharpen] = useState(1);
   // Output naming.
-  const [nameStyle, setNameStyle] = useState<"photo-style" | "original" | "custom" | "settings-code">("photo-style");
+  const [nameStyle, setNameStyle] = useState<"photo-style" | "original" | "custom" | "settings-code">("settings-code");
   const [nameCustom, setNameCustom] = useState("");
 
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -221,7 +221,11 @@ export default function SlashImage() {
   }
 
   function settingsCodeFor() {
-    return buildSettingsCode({ mode, remint: remintOpts(), finish: finishOpts() });
+    return buildSettingsCode({
+      mode,
+      remint: remintOpts(),
+      finish: { ...finishOpts(), finishMode }
+    });
   }
 
   function namingFor(seq: number): {

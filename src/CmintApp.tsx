@@ -164,7 +164,7 @@ export default function CmintApp() {
   const [engineMode, setEngineMode] = useState<CxRemintEngineMode>("adaptive");
   const [metadataMode, setMetadataMode] = useState<MetadataMode>("device");
   const [deviceExif, setDeviceExif] = useState(true);
-  const [nameStyle, setNameStyle] = useState<NameStyle>("photo-style");
+  const [nameStyle, setNameStyle] = useState<NameStyle>("settings-code");
   const [nameCustom, setNameCustom] = useState("");
 
   // Stage 2 — Quality Finish.
@@ -468,7 +468,7 @@ export default function CmintApp() {
     return buildSettingsCode({
       mode,
       remint: remintOptions(),
-      finish: finishOptions()
+      finish: { ...finishOptions(), finishMode }
     });
   }
 
