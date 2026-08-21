@@ -33,6 +33,21 @@ difficult one). The images are attached with this prompt.
 | D | strength deep, restoration strong, dither 0.9x, smoothing 1.1x, sharpen 1.2x | **0.3% / 8% Real HIGH** | **6.2% (flux 8.1) / 6% Real HIGH** | 80.3% (flux 76.2) / 43% Real LOW |
 | E | strength balanced, restoration standard (defaults) | **0.7% / 47% Real LOW** | **19% (flux 22.1) / 8% Real HIGH** | 90.9% (flux 86) / 96% AI HIGH |
 | F | strength balanced, restoration fidelity HD | 1.4% / 71% AI MED | 3.9% / 74% AI MED | 83.1% (flux 86.8) / 74% AI MED |
+| G = FINAL A (wall smoothing ON) | strength deep, restoration STRONG, smoothing 1.25x | **0.6% (flux 0.1) / 9% Real HIGH / 4% Real HIGH** | **2.7% (flux 2) / 42% Real LOW / 29% Real MED** | **6% (flux 6.7) / 12% Real HIGH** |
+| H = FINAL B (wall smoothing ON) | strength deep, restoration STANDARD, smoothing 1.25x | 0.3% (firefly 0.2) | 9.4% (flux2 14.1, flux 1.1) | 55.2% (flux 61.7) / 5% Real HIGH |
+
+FINAL A/B VERDICT: Config A (deep + STRONG + smoothing 1.25x, wall
+smoothing ON) is the first configuration in the project's history to
+clear ALL THREE images on both graders with clean margins — including
+the lit brick wall (image 3), which failed at 55-99% under every other
+configuration. STRONG (not Standard) is the differentiator for brick:
+image 3 reads 6% under Strong and 55.2% under Standard, everything else
+held equal. Strategy A (one fixed config) is therefore PROVEN viable;
+the remaining questions are quality-side only: does the Config A output
+read as premium at 100% zoom, and does the wall-smoothing toggle
+(material_clean M1 vs M0) measurably improve perceived quality on these
+three images (isolated A/B still pending). Settings-code filenames are
+now the DEFAULT output name, so all future exports are self-describing.
 
 Additional operator notes:
 
