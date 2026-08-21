@@ -163,8 +163,16 @@ WALL_CNF_TRIGGER = 0.30
 WALL_RMS_BRIGHT = 0.32 / 255.0
 WALL_RMS_DARK = 0.55 / 255.0
 WALL_CHROMA_RMS = 0.08 / 255.0
-WALL_DITHER_Y = 0.15 / 255.0
-WALL_DITHER_C = 0.05 / 255.0
+WALL_DITHER_Y = 0.13 / 255.0
+WALL_DITHER_C = 0.04 / 255.0
+
+# V6 Final Polish (C8 v6): à-trous coefficient shrinkage. g_min per scale
+# (small unsupported coefficients get gain -> g_min; large ones -> 1); tau
+# is the soft-shrink knee in luma units (LSB-ish).
+POLISH_G_MIN = (0.40, 0.55, 0.75)
+POLISH_TAU = (0.004, 0.007, 0.010)
+POLISH_P = 2.0
+ATROUS_KERNEL = np.array([1.0, 4.0, 6.0, 4.0, 1.0], dtype=np.float32) / 16.0
 
 # Final encode policy (C8 v3): Q97 preserves low-amplitude gradient variation
 # and deliberate dither disproportionately better in large smooth skies.
@@ -442,7 +450,8 @@ def _residual_rms(a, mask):
 # ---------------------------------------------------------------------------
 
 def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_float=False,
-                gradient_alpha=1.0, overrides=None, material_clean=True):
+                gradient_alpha=1.0, overrides=None, material_clean=True,
+                reference_rgb=None, polish_enabled=True, wall_dither_boost=0.0):
     """rgb: uint8 HxWx3. Returns (out, qc_report, passed); `out` is uint8
     unless return_float=True (pre-quantization float RGB, for experiments).
     dither=False leaves the gradient dither stage out (variant generation).
@@ -730,7 +739,36 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
             resid_noise = (1.0 - p_struct) * resid
             rms_n = _masked_rms(resid_noise, material)
             bright = (y > 0.5).astype(np.float32)
-            target = bright * WALL_RMS_BRIGHT + (1.0 - bright) * WALL_RMS_DARK
+            # C8 v6 source-relative target: measure the ORIGINAL source's
+            # residual in the SAME domain (one reference resize -> same
+            # fine-residual decomposition -> same material ROI), then cap
+            # the output at ~1.15-1.20x of that. Pristine sources stay
+            # pristine; naturally noisy sources keep a little character.
+            src_sigma = None
+            if reference_rgb is not None:
+                try:
+                    ref = reference_rgb.astype(np.float32) / 255.0
+                    if ref.shape[1] != y.shape[1] or ref.shape[0] != y.shape[0]:
+                        ref = (
+                            np.asarray(
+                                Image.fromarray(reference_rgb, mode="RGB").resize(
+                                    (y.shape[1], y.shape[0]), Image.Resampling.LANCZOS
+                                )
+                            ).astype(np.float32)
+                            / 255.0
+                        )
+                    src_y = 0.299 * ref[..., 0] + 0.587 * ref[..., 1] + 0.114 * ref[..., 2]
+                    src_sigma = _masked_rms(src_y - _gauss(src_y, 0.7), material)
+                except Exception:
+                    src_sigma = None
+            if src_sigma is not None and src_sigma > 0:
+                target = np.where(
+                    bright,
+                    np.clip(1.15 * src_sigma, 0.25 / 255.0, 0.40 / 255.0),
+                    np.clip(1.20 * src_sigma, 0.35 / 255.0, 0.60 / 255.0),
+                ).astype(np.float32)
+            else:
+                target = bright * WALL_RMS_BRIGHT + (1.0 - bright) * WALL_RMS_DARK
             target_field = _box(target, 8)
             gain = np.clip(target_field / max(rms_n, 1e-4), 0.0, 1.0)
             y = base_y + resid_struct + resid_noise * (material * gain + (1.0 - material))
@@ -830,6 +868,14 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
             sharpen_retry=True,
         )
 
+    # ---- V6 Final Polish (C8 v6) -------------------------------------------
+    # À-trous coefficient shrinkage AFTER sharpening and BEFORE dither:
+    # remove unsupported residual amplitude inside smooth-material regions
+    # only. Structure, sky, brick and foliage are untouched by design.
+    polish_report = {"applied": False}
+    if polish_enabled and material_clean and float(np.mean(material > 0.1)) > 0.01:
+        y, cb, cr, polish_report = _final_polish(y, cb, cr, material, p_struct)
+
     # ---- Always-on gradient-masked shaped dither (C8 v3) -------------------
     # Immediately before 8-bit quantization: sub-visible deterministic
     # shaped noise breaks 1-LSB staircase contours in smooth gradients.
@@ -841,11 +887,11 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
         # proven gradient dither is untouched.
         amp_y = (
             grad_mask_out * p["dither_luma"] * np.clip(1.0 - material, 0.0, 1.0)
-            + material * WALL_DITHER_Y
+            + material * (WALL_DITHER_Y + wall_dither_boost)
         )
         amp_c = (
             grad_mask_out * p["dither_chroma"] * np.clip(1.0 - material, 0.0, 1.0)
-            + material * WALL_DITHER_C
+            + material * (WALL_DITHER_C + 0.3 * wall_dither_boost)
         )
         dith_y = _tiled_noise(y.shape, 64, f"qf-dither-y:{seed_extra}")
         dith_cb = _tiled_noise(cb.shape, 64, f"qf-dither-cb:{seed_extra}")
@@ -892,6 +938,7 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     qc["step_fraction_jpeg"] = round(frac_jpeg, 5)
     qc["staircase_reconstructed"] = staircase_reconstructed
     qc["gradient_alpha"] = round(gradient_alpha, 3)
+    qc["final_polish"] = polish_report
 
     # ---- Material-branch QC (C8 v5) ----------------------------------------
     # Report the wall metrics that matter (RMS, CNF, correlation length,
@@ -1005,15 +1052,99 @@ def _jpeg_delivery_info(path):
 
 def _cross_scale_persistence(y):
     """C8 v5 cross-scale persistence: coherent surface structure survives
-    multiple Gaussian scales with agreement; noise/speckle does not.
-    Returns P_structure in [0,1] (1 = keep as structure, 0 = noise)."""
+    multiple Gaussian scales with aligned orientation; noise/speckle does
+    not (its gradient orientation is random across scales). Returns
+    P_structure in [0,1] (1 = keep as structure, 0 = noise)."""
     eps = 1e-6
-    g1 = _grad_mag(_gauss(y, 0.7))
-    g2 = _grad_mag(_gauss(y, 1.4))
-    g3 = _grad_mag(_gauss(y, 2.4))
-    p = np.minimum(g1, 1.6 * g2) / (g1 + eps)
-    agree = np.minimum(g2, 1.2 * g3) / (g2 + eps)
-    return _box(np.clip(p * np.clip(agree, 0.0, 1.0), 0.0, 1.0), 2)
+
+    def grads(a):
+        gx = np.zeros_like(a)
+        gy = np.zeros_like(a)
+        gx[:, 1:-1] = (a[:, 2:] - a[:, :-2]) * 0.5
+        gy[1:-1, :] = (a[2:, :] - a[:-2, :]) * 0.5
+        return gx, gy
+
+    s1 = _gauss(y, 0.7)
+    s2 = _gauss(y, 1.4)
+    s3 = _gauss(y, 2.4)
+    gx1, gy1 = grads(s1)
+    gx2, gy2 = grads(s2)
+    gx3, gy3 = grads(s3)
+    m1 = np.sqrt(gx1 * gx1 + gy1 * gy1)
+    m2 = np.sqrt(gx2 * gx2 + gy2 * gy2)
+    m3 = np.sqrt(gx3 * gx3 + gy3 * gy3)
+    p12 = np.minimum(m1, 1.6 * m2) / (np.maximum(m1, 1.6 * m2) + eps)
+    p23 = np.minimum(m2, 1.2 * m3) / (np.maximum(m2, 1.2 * m3) + eps)
+    c12 = np.clip((gx1 * gx2 + gy1 * gy2) / (m1 * m2 + eps), 0.0, 1.0)
+    c23 = np.clip((gx2 * gx3 + gy2 * gy3) / (m2 * m3 + eps), 0.0, 1.0)
+    return _box(np.clip(p12 * p23 * c12 * c23, 0.0, 1.0), 2)
+
+
+def _atrous_filter(a, hole):
+    """One undecimated à-trous scale: separable B3-spline [1,4,6,4,1]/16
+    convolution with `hole` zeros between taps. No downsampling."""
+    k = ATROUS_KERNEL
+    b = k[2] * a
+    b += k[1] * (np.roll(a, hole, axis=1) + np.roll(a, -hole, axis=1))
+    b += k[0] * (np.roll(a, 2 * hole, axis=1) + np.roll(a, -2 * hole, axis=1))
+    c = k[2] * b
+    c += k[1] * (np.roll(b, hole, axis=0) + np.roll(b, -hole, axis=0))
+    c += k[0] * (np.roll(b, 2 * hole, axis=0) + np.roll(b, -2 * hole, axis=0))
+    return c
+
+
+def _final_polish(y, cb, cr, material, p_struct):
+    """C8 v6 Final Polish: shrink UNSUPPORTED wavelet coefficients inside
+    smooth-material regions only. Coherent structure (persistence -> 1)
+    stays; sky/brick/foliage are untouched (material -> 0). Soft shrinkage,
+    never threshold deletion. Returns (y, cb, cr, report)."""
+    coeffs_y = []
+    coarse_y = y
+    for s in range(3):
+        nxt = _atrous_filter(coarse_y, 1 << s)
+        coeffs_y.append(coarse_y - nxt)
+        coarse_y = nxt
+    coarse_cb = cb
+    coarse_cr = cr
+    coeffs_cb = []
+    coeffs_cr = []
+    for s in range(3):
+        ncb = _atrous_filter(coarse_cb, 1 << s)
+        coeffs_cb.append(coarse_cb - ncb)
+        coarse_cb = ncb
+        ncr = _atrous_filter(coarse_cr, 1 << s)
+        coeffs_cr.append(coarse_cr - ncr)
+        coarse_cr = ncr
+    p_levels = (p_struct, _box(p_struct, 2), _box(p_struct, 4))
+    w = np.clip(material, 0.0, 1.0)
+    mean_gains = []
+    rec_y = coarse_y
+    rec_cb = coarse_cb
+    rec_cr = coarse_cr
+    for s in range(3):
+        wj = coeffs_y[s]
+        abs_w = np.abs(wj)
+        g = POLISH_G_MIN[s] + (1.0 - POLISH_G_MIN[s]) * (
+            abs_w ** POLISH_P / (abs_w ** POLISH_P + POLISH_TAU[s] ** POLISH_P)
+        )
+        g_eff = p_levels[s] + (1.0 - p_levels[s]) * g
+        # Hard brick/structure guard: high persistence never shrinks hard.
+        g_eff = np.where(p_levels[s] > 0.75, np.maximum(g_eff, 0.9), g_eff)
+        # Spatial emphasis: shrink only inside the smooth-material regions.
+        g_eff = 1.0 - w * (1.0 - g_eff)
+        rec_y = rec_y + wj * g_eff
+        rec_cb = rec_cb + coeffs_cb[s] * g_eff
+        rec_cr = rec_cr + coeffs_cr[s] * g_eff
+        sel = material > 0.5
+        if float(sel.sum()) > 256:
+            mean_gains.append(round(float(np.mean(g_eff[sel])), 3))
+        else:
+            mean_gains.append(1.0)
+    return rec_y, rec_cb, rec_cr, {
+        "applied": True,
+        "coverage": round(float(np.mean(material > 0.5)), 3),
+        "mean_gain_per_scale": mean_gains,
+    }
 
 
 def _material_smooth_confidence(y, cb, cr, flat_float, tex, edge_band):
@@ -1471,9 +1602,22 @@ def apply_quality_finish(
     )
     overrides = sub.get("overrides") if isinstance(sub.get("overrides"), dict) else None
     material_clean = bool(sub.get("material_clean", True))
+    # The original source (when available) drives the V6 source-relative
+    # cleanup targets and the structure guard retries.
+    reference_rgb = None
+    if reference is not None:
+        try:
+            if isinstance(reference, (str, Path)):
+                reference_rgb = np.asarray(Image.open(reference).convert("RGB")).astype(np.uint8)
+            else:
+                arr = np.asarray(reference)
+                if arr.ndim == 3 and arr.shape[2] >= 3:
+                    reference_rgb = arr[..., :3].astype(np.uint8)
+        except Exception:
+            reference_rgb = None
     out_u8, qc, passed = _finish_rgb(
         rgb, preset, scale, standalone, seed_extra, overrides=overrides,
-        material_clean=material_clean,
+        material_clean=material_clean, reference_rgb=reference_rgb,
     )
     ladder_attempts = 1
     # Fail-soft alpha ladder (C8 v4): when QC fails on a GRADIENT-axis
@@ -1500,6 +1644,7 @@ def apply_quality_finish(
             gradient_alpha=alpha,
             overrides=overrides,
             material_clean=material_clean,
+            reference_rgb=reference_rgb,
         )
         gradient_axis = (
             float(qc.get("rho1", 0.0)) > QC_RHO1_MAX
@@ -1507,6 +1652,48 @@ def apply_quality_finish(
             or bool(qc.get("banding_worse"))
         )
     qc["gradient_ladder_attempts"] = ladder_attempts
+
+    # V6 structure guard: if Final Polish ran but the original-reference
+    # texture transfer dropped below 0.95, retry once with polish disabled.
+    # Structure always wins over polish.
+    if (
+        passed
+        and reference_rgb is not None
+        and bool(qc.get("final_polish", {}).get("applied"))
+        and float(qc.get("reference", {}).get("texture_detail_transfer", 1.0)) < 0.95
+    ):
+        out_u8, qc, passed = _finish_rgb(
+            rgb,
+            preset,
+            scale,
+            standalone,
+            seed_extra,
+            overrides=overrides,
+            material_clean=material_clean,
+            reference_rgb=reference_rgb,
+            polish_enabled=False,
+        )
+        qc["final_polish"]["retried_disabled"] = True
+
+    # V6 dither escalation: raise wall dither only when the DECODED JPEG
+    # staircase proves the low baseline insufficient (never pre-emptively).
+    if (
+        passed
+        and bool(qc.get("material_wall", {}).get("applied"))
+        and float(qc.get("staircase_index_jpeg", 0.0)) > 0.7
+    ):
+        out_u8, qc, passed = _finish_rgb(
+            rgb,
+            preset,
+            scale,
+            standalone,
+            seed_extra,
+            overrides=overrides,
+            material_clean=material_clean,
+            reference_rgb=reference_rgb,
+            wall_dither_boost=0.05 / 255.0,
+        )
+        qc["material_wall"]["dither_boosted"] = True
 
     # Fidelity reference (C8 v4): when the ORIGINAL source is available,
     # measure the output against it (not against the stage-1 intermediate).
