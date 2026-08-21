@@ -472,6 +472,34 @@ export default function CmintApp() {
     });
   }
 
+  // WAVL-v1: one-click Config A (the proven all-clear combination).
+  const wavlActive =
+    mode === "sequence" &&
+    washModel === "qwen" &&
+    strength === "deep" &&
+    engineMode === "adaptive" &&
+    qfPreset === "strong" &&
+    qfScale <= 1.001 &&
+    Math.abs(tuneSmooth - 1.25) < 0.001 &&
+    Math.abs(tuneDither - 1) < 0.001 &&
+    Math.abs(tuneSharpen - 1) < 0.001 &&
+    wallClean &&
+    finishMode === "adaptive";
+
+  function applyWavl() {
+    setMode("sequence");
+    setWashModel("qwen");
+    setStrength("deep");
+    setEngineMode("adaptive");
+    setQfPreset("strong");
+    setQfScale(1);
+    setTuneSmooth(1.25);
+    setTuneDither(1);
+    setTuneSharpen(1);
+    setWallClean(true);
+    setFinishMode("adaptive");
+  }
+
   function deliveredNameFor(position: number): {
     style: "photo-style" | "original" | "custom" | "settings-code";
     custom: string;
@@ -1145,6 +1173,20 @@ export default function CmintApp() {
 
             <div className="cm-pane-scroll">
               <div className="cm-ctl">
+                {/* WAVL-v1 master preset: one click = exact Config A. */}
+                <button
+                  type="button"
+                  className={`cm-wavl${wavlActive ? " is-active" : ""}`}
+                  disabled={running}
+                  onClick={applyWavl}
+                  title="One-click Config A: Deep · Strong · Smoothing 1.25× · Wall smoothing ON"
+                >
+                  <span className="cm-wavl-badge">WAVL-v1</span>
+                  <span className="cm-wavl-label">Config A · Proven all-clear</span>
+                  <span className="cm-wavl-sub">Deep · Strong · S1.25 · Wall Clean</span>
+                  {wavlActive ? <Check size={14} aria-hidden="true" /> : null}
+                </button>
+
                 {/* mode picker */}
                 <div className="cm-modes" role="radiogroup" aria-label="Pipeline mode">
                   <ModeCard

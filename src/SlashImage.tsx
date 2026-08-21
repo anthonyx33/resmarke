@@ -228,6 +228,34 @@ export default function SlashImage() {
     });
   }
 
+  // WAVL-v1: one-click Config A (the proven all-clear combination).
+  const wavlActive =
+    mode === "sequence" &&
+    washModel === "qwen" &&
+    strength === "deep" &&
+    engineMode === "adaptive" &&
+    finishPreset === "strong" &&
+    finishScale === "native" &&
+    Math.abs(tuneSmooth - 1.25) < 0.001 &&
+    Math.abs(tuneDither - 1) < 0.001 &&
+    Math.abs(tuneSharpen - 1) < 0.001 &&
+    materialClean &&
+    finishMode === "adaptive";
+
+  function applyWavl() {
+    setMode("sequence");
+    setWashModel("qwen");
+    setStrength("deep");
+    setEngineMode("adaptive");
+    setFinishPreset("strong");
+    setFinishScale("native");
+    setTuneSmooth(1.25);
+    setTuneDither(1);
+    setTuneSharpen(1);
+    setMaterialClean(true);
+    setFinishMode("adaptive");
+  }
+
   function namingFor(seq: number): {
     outputNameStyle: "photo-style" | "original" | "custom" | "settings-code";
     outputNameCustom?: string;
@@ -554,6 +582,21 @@ export default function SlashImage() {
 
       <main className="slash-main">
         <aside className="slash-sidebar">
+          <section className="slash-section">
+            <h3 className="slash-section-title">Master preset</h3>
+            <button
+              type="button"
+              className={`slash-wavl${wavlActive ? " is-active" : ""}`}
+              disabled={running}
+              onClick={applyWavl}
+              title="One-click Config A: Deep · Strong · Smoothing 1.25× · Wall smoothing ON"
+            >
+              <span className="slash-wavl-badge">WAVL-v1</span>
+              <strong>Config A · Proven all-clear</strong>
+              <small>Deep · Strong · S1.25 · Wall Clean</small>
+            </button>
+          </section>
+
           <section className="slash-section">
             <h3 className="slash-section-title">Pipeline</h3>
             <div className="slash-modes">
