@@ -1208,7 +1208,12 @@ function qualityFinishExpertRefinement(input: unknown) {
   };
   return {
     mode: "quality-finish",
-    quality_finish: { preset, scale, overrides }
+    quality_finish: {
+      preset,
+      scale,
+      overrides,
+      material_clean: raw.material_clean !== false
+    }
   };
 }
 
@@ -1240,7 +1245,8 @@ function dsRemintV8_9HdExpertRefinement(input: unknown) {
         dither: clampNumber(qfOvRaw.dither, 0, 1.5, 1),
         smoothness: clampNumber(qfOvRaw.smoothness, 0.5, 1.5, 1),
         sharpen: clampNumber(qfOvRaw.sharpen, 0, 1.5, 1)
-      }
+      },
+      material_clean: qfRaw.material_clean !== false
     }
   };
 }

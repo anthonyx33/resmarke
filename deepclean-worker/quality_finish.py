@@ -442,7 +442,7 @@ def _residual_rms(a, mask):
 # ---------------------------------------------------------------------------
 
 def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_float=False,
-                gradient_alpha=1.0, overrides=None):
+                gradient_alpha=1.0, overrides=None, material_clean=True):
     """rgb: uint8 HxWx3. Returns (out, qc_report, passed); `out` is uint8
     unless return_float=True (pre-quantization float RGB, for experiments).
     dither=False leaves the gradient dither stage out (variant generation).
@@ -711,12 +711,16 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     p_struct = _cross_scale_persistence(y)
     material_native = material
     wall_applied = False
+    wall_would_trigger = False
     wall_rms_before = 0.0
     wall_cnf_before = 0.0
     if float(np.mean(material > 0.5)) >= WALL_COVERAGE_MIN:
         wall_rms_before = _masked_rms(y - _gauss(y, 0.7), material)
         wall_cnf_before = _cnf(y, material)
-        if wall_rms_before > WALL_RMS_TRIGGER or wall_cnf_before > WALL_CNF_TRIGGER:
+        wall_would_trigger = (
+            wall_rms_before > WALL_RMS_TRIGGER or wall_cnf_before > WALL_CNF_TRIGGER
+        )
+        if material_clean and wall_would_trigger:
             wall_applied = True
             base_y = _guided_filter(y, y, 8, 1e-3)
             base_cb = _guided_filter(cb, y, 12, 1e-3)
@@ -899,6 +903,15 @@ def _finish_rgb(rgb, preset, scale, standalone, seed_extra, dither=True, return_
     qc["material_wall"] = {
         "coverage": round(float(np.mean(material_diag > 0.5)), 3),
         "applied": wall_applied,
+        "enabled": material_clean,
+        "would_trigger": wall_would_trigger,
+        "reason": (
+            "applied"
+            if wall_applied
+            else "disabled_by_user"
+            if wall_would_trigger and not material_clean
+            else "below_threshold_or_no_material"
+        ),
         "rms_before": round(wall_rms_before * 255.0, 3),
         "cnf_before": round(wall_cnf_before, 3),
         "rms_after": round(_masked_rms(wall_res, material_diag) * 255.0, 3),
@@ -1384,6 +1397,9 @@ def normalize_quality_finish_settings(settings):
         "smoothness": _clamp_override(ov_raw, "smoothness", 0.5, 1.5, 1.0),
         "sharpen": _clamp_override(ov_raw, "sharpen", 0.0, 1.5, 1.0),
     }
+    # Wall smoothing (Mobile Clean) toggle: default ON; OFF keeps the
+    # branch fully inert while still MEASURING it (A/B test mode).
+    material_clean = bool(sub.get("material_clean", True)) if isinstance(sub, dict) else True
     return {
         "mode": MODE,
         "quality_finish": {
@@ -1391,6 +1407,7 @@ def normalize_quality_finish_settings(settings):
             "scale": scale,
             "finish_mode": finish_mode,
             "overrides": overrides,
+            "material_clean": material_clean,
         },
     }
 
@@ -1453,8 +1470,10 @@ def apply_quality_finish(
         else np.asarray(src.convert("RGB")).astype(np.uint8)
     )
     overrides = sub.get("overrides") if isinstance(sub.get("overrides"), dict) else None
+    material_clean = bool(sub.get("material_clean", True))
     out_u8, qc, passed = _finish_rgb(
-        rgb, preset, scale, standalone, seed_extra, overrides=overrides
+        rgb, preset, scale, standalone, seed_extra, overrides=overrides,
+        material_clean=material_clean,
     )
     ladder_attempts = 1
     # Fail-soft alpha ladder (C8 v4): when QC fails on a GRADIENT-axis
@@ -1480,6 +1499,7 @@ def apply_quality_finish(
             seed_extra,
             gradient_alpha=alpha,
             overrides=overrides,
+            material_clean=material_clean,
         )
         gradient_axis = (
             float(qc.get("rho1", 0.0)) > QC_RHO1_MAX

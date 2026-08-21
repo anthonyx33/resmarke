@@ -99,6 +99,7 @@ export default function SlashImage() {
   const [finishPreset, setFinishPreset] = useState<"conservative" | "standard" | "strong" | "fidelity">("standard");
   const [finishScale, setFinishScale] = useState<"native" | "1.6" | "2">("native");
   const [finishMode, setFinishMode] = useState<"adaptive" | "template">("adaptive");
+  const [materialClean, setMaterialClean] = useState(true);
   // Pro tuning (finish overrides): 1.00 = preset default, clamped server-side.
   const [tuneDither, setTuneDither] = useState(1);
   const [tuneSmooth, setTuneSmooth] = useState(1);
@@ -214,7 +215,8 @@ export default function SlashImage() {
     return {
       preset: finishPreset,
       scale: finishScale === "native" ? null : Number(finishScale),
-      overrides: { dither: tuneDither, smoothness: tuneSmooth, sharpen: tuneSharpen }
+      overrides: { dither: tuneDither, smoothness: tuneSmooth, sharpen: tuneSharpen },
+      materialClean
     };
   }
 
@@ -692,6 +694,19 @@ export default function SlashImage() {
                         ))}
                       </div>
                     </div>
+                    <label className="slash-check">
+                      <input
+                        type="checkbox"
+                        checked={materialClean}
+                        disabled={running}
+                        onChange={(e) => setMaterialClean(e.target.checked)}
+                      />
+                      Wall smoothing · Mobile Clean
+                    </label>
+                    <small className="slash-hint">
+                      Auto-smooths rendered walls while keeping structure. Turn off to A/B
+                      compare — the report still measures what it would have done.
+                    </small>
                     <div className="slash-field">
                       <div className="slash-tune-head">
                         <label className="slash-label">Pro tuning</label>

@@ -22,6 +22,7 @@ export interface SettingsCodeInput {
     preset?: string;
     scale?: number | null;
     overrides?: { dither?: number; smoothness?: number; sharpen?: number };
+    materialClean?: boolean;
   };
 }
 
@@ -72,6 +73,6 @@ export function buildSettingsCode(input: SettingsCodeInput): string {
   const ov = input.finish.overrides ?? {};
   const readable = `${m}-${w}-${s}-${e}-${p}-${scale}-D${pct(ov.dither ?? 1)}-S${pct(
     ov.smoothness ?? 1
-  )}-X${pct(ov.sharpen ?? 1)}`;
+  )}-X${pct(ov.sharpen ?? 1)}-M${input.finish.materialClean === false ? "0" : "1"}`;
   return `${readable}-${settingsShortHash(canonicalJson(input))}`;
 }

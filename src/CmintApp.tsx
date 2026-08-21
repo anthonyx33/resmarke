@@ -170,6 +170,7 @@ export default function CmintApp() {
   // Stage 2 — Quality Finish.
   const [qfPreset, setQfPreset] = useState<QfPreset>("standard");
   const [qfScale, setQfScale] = useState(1);
+  const [wallClean, setWallClean] = useState(true);
   const [finishMode, setFinishMode] = useState<FinishRouting>("adaptive");
   // Pro tuning — multipliers over the preset's calibrated gains. 1.00 = preset
   // default; the worker clamps every value to its own accepted range.
@@ -458,7 +459,8 @@ export default function CmintApp() {
       preset: qfPreset,
       // `null` is the native-size path the finisher already understands.
       scale: qfScale <= 1.001 ? null : Number(qfScale.toFixed(2)),
-      overrides: { dither: tuneDither, smoothness: tuneSmooth, sharpen: tuneSharpen }
+      overrides: { dither: tuneDither, smoothness: tuneSmooth, sharpen: tuneSharpen },
+      materialClean: wallClean
     };
   }
 
@@ -1432,6 +1434,23 @@ export default function CmintApp() {
                           ))}
                         </div>
                       </div>
+
+                      <label className="cm-switch">
+                        <input
+                          type="checkbox"
+                          checked={wallClean}
+                          disabled={running}
+                          onChange={(event) => setWallClean(event.target.checked)}
+                        />
+                        <span className="cm-switch-track" aria-hidden="true">
+                          <span className="cm-switch-thumb" />
+                        </span>
+                        <span>Wall smoothing · Mobile Clean</span>
+                      </label>
+                      <p className="cm-hint">
+                        Auto-smooths rendered walls while keeping structure. Turn off to A/B
+                        compare — the report still measures what it would have done.
+                      </p>
 
                       {/* Pro tuning — multipliers over the preset's calibrated gains. */}
                       <div className="cm-field">

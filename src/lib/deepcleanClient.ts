@@ -104,6 +104,8 @@ export type QualityFinishOptions = {
   preset: "conservative" | "standard" | "strong" | "fidelity";
   scale: number | null;
   overrides?: QualityFinishOverrides;
+  /** Wall smoothing (Mobile Clean) toggle — default true. */
+  materialClean?: boolean;
 };
 
 export type DsRemintV8_9HdOptions = {
