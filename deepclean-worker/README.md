@@ -87,3 +87,98 @@ Warmup-only payload for the RunPod test console:
 ```
 
 The first warmup can take minutes (downloading the 10 model files on first boot, then loading Qwen into VRAM). Later warmups on the same worker return quickly and report `"warmed": true`.
+
+## Postmortem — Aug 22 2026: endpoint stuck "Initializing", zero workers, zero logs
+
+**Symptom.** New endpoint `remint-v6` (`2c9528ebg2vzvx`) sat at "Initializing"
+for 15+ minutes. `/health` reported every worker counter at 0 while jobs piled
+up in the queue. **No container logs were ever produced.**
+
+**Root cause: the GPU selection was narrowed until nothing could be scheduled.**
+The endpoint's release #2 set:
+
+```
+AMPERE_24,-NVIDIA L4,-NVIDIA RTX A5000,-NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb
+```
+
+Those three exclusions leave **RTX 3090 as the only permitted GPU**. Because a
+network volume is attached (required — see above), the endpoint is also pinned
+to that volume's single data center. Allowed GPUs ∩ that data center's
+serverless 3090 capacity was empty, so RunPod never allocated a machine. No
+machine means no container, and no container means **no logs at all** — that
+total absence of logs is the diagnostic signature. A failed image pull looks
+different: it produces logs and an `unhealthy` worker.
+
+**Fix.** Re-enable the full 24 GB tier (L4, A5000, Blackwell MIG). RunPod
+serverless bills per **VRAM tier**, not per GPU model — every card in the 24 GB
+tier bills at the same flex rate, so excluding models saves nothing and only
+destroys schedulable capacity. Keep the 24 GB tier itself: the Q4_K_M GGUF
+weights are chosen to fit it (observed peak load 12.7 GB of 22.6 GB usable).
+
+### Things ruled out — do not re-investigate these
+
+- **GHCR package private / registry credentials.** Not the cause. The package
+  pulls anonymously; verified by fetching a `ghcr.io/token` scope token and
+  resolving the manifest (HTTP 200). Leave registry credentials **blank**.
+- **Wrong image / wrong architecture.** Tag
+  `4c7235cefa5495232d9e924c3b83998760420edd` resolves to digest
+  `sha256:34d6eb5d…`, matching what the endpoint pinned; config blob reports
+  `architecture=amd64`, `os=linux`, `Cmd=["/app/start.sh"]`.
+- **"Container image validation" toggle.** This option no longer exists in the
+  current RunPod console. Its absence is normal, not a misconfiguration.
+
+### Gotchas confirmed while fixing this
+
+- **Never deploy `:latest`.** It resolves to a *different* digest
+  (`sha256:cf8a357f…`) than the newest git-SHA tag. Always pin the full
+  commit SHA tag, as the Dockerfile header already warns.
+- **Leave "Container Start Command" empty.** The image supplies
+  `CMD ["/app/start.sh"]`; anything typed there overrides it and breaks boot.
+- **Container disk:** the image is 8.19 GB compressed across 44 layers and
+  unpacks to roughly 20 GB. RunPod's 5 GB default cannot hold it.
+- **Model payload is ~30.2 GB, not the ~10 GB stated earlier in this file.**
+  Measured via HTTP HEAD against each URL in `bootstrap_models.py`
+  (qwen-image-2512 Q4_K_M alone is 13.24 GB, z_image_turbo 4.98 GB,
+  Qwen2.5-VL-7B 4.68 GB). Size the network volume accordingly.
+- **Benign error in worker logs — ignore it:**
+  `Can't find mmproj file for 'Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf' …
+  Qwen-Image-Edit will be broken!` plus a long `clip missing: ['visual.*']`
+  warning. `remarkee-max-v2.api.json` contains **no** Qwen-Image-Edit or vision
+  nodes; node 608 feeds node 564 (Power Lora Loader) into plain `CLIPTextEncode`
+  nodes 9/10, so only the *text* tower is used. The vision tensors are never
+  requested. Confirmed by a clean run: `Prompt executed in 137.33 seconds`.
+
+### Confirmed by worker logs (Aug 22, worker `5pi3xl6hg5zxw6`)
+
+The scheduling diagnosis above was verified empirically — once the excluded
+cards were re-enabled, the worker landed on one of them:
+
+```
+[INFO] Device: cuda:0 NVIDIA RTX A5000 : cudaMallocAsync
+[INFO] Total VRAM 24112 MB
+```
+
+`NVIDIA RTX A5000` was one of the three GPUs the endpoint had been excluding.
+Full boot then succeeded: models already cached on the volume
+(`[bootstrap] all 11 model files already present`), ComfyUI ready in 12 s,
+`runtime self-check passed`, and the handler registered:
+`--- Starting Serverless Worker | Version 1.7.13 ---`.
+
+### `DEEPCLEAN_PRELOAD=0` is the right setting for scale-to-zero
+
+With Active Workers = 0 a worker only boots *because* a job arrived, so the
+boot-time warmup is pure waste: it delays that job by ~137 s (measured) and
+bills a throwaway 512x512 generation. The model-load cost is paid once either
+way — preload only adds a redundant sampling pass and pushes back handler
+registration. Set `DEEPCLEAN_PRELOAD=0` unless running with Active Workers >= 1.
+
+### Expected failure: `KeyError: 'job_id'`
+
+A queued smoke/test job whose `input` lacks `job_id` crashes at
+[worker.py:116](worker.py) with `KeyError: 'job_id'`. This is **not** a bug —
+`handler()` requires `job_id`, `webhook_url`, and `webhook_secret`, and
+`dispatch-deepclean-job` supplies all three. Seeing this traceback means the
+handler is alive and executing. Purge stale test jobs from the queue, or they
+keep waking workers and failing. A warmup-only payload
+(`{"input": {"action": "warmup"}}`) short-circuits before the `job_id` lookup
+and is always safe.
