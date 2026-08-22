@@ -37,45 +37,63 @@ You have full access to:
    15+ minutes, with NO logs and NO workers ever appearing, even though
    jobs are queued. (With Active Workers = 0, workers only boot on demand —
    but a queued job SHOULD trigger a boot. It is not triggering.)
-6. The GHCR package `ghcr.io/anthonyx33/resmarke-deepclean` is **PRIVATE**.
-   It is UNKNOWN whether the owner entered GitHub registry credentials on
-   the endpoint. RunPod's GraphQL introspection is disabled, so config
-   fields cannot be enumerated from here.
+6. The GHCR package `ghcr.io/anthonyx33/resmarke-deepclean` is **PUBLIC** —
+   verified Aug 22 by anonymous manifest pull (HTTP 200). No registry
+   credentials needed. The private-image hypothesis is DEAD.
 
-## Leading hypotheses (ranked)
+## Root cause — CONFIRMED via live GraphQL (Aug 22 2026)
 
-1. **Private image without registry credentials.** The template cannot pull
-   the image and sits in a failed/retry state forever; queued jobs never
-   boot a worker. This is the most common cause of "Initializing forever,
-   zero workers".
-2. **Template stuck from a previous failed validation.** "Container image
-   validation" was possibly left ON; the worker's `start.sh` boots ComfyUI
-   (up to 120s), which can stall the validator.
-3. **No matching GPU capacity / wrong data center** — jobs would show
-   throttled or eventually error, not silent zero-workers.
-4. **Missing worker environment variables** — does NOT block boot (only the
-   first real job), listed here for completeness:
-   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-   `DEEPCLEAN_OUTPUT_BUCKET=deepclean-outputs`, `DEEPCLEAN_PRELOAD=1`,
-   `DEEPCLEAN_PRELOAD_PROFILE=standard`, `DEEPCLEAN_SEED=0`, `HF_TOKEN`
-   (optional).
+Query `myself { endpoints { id name gpuIds gpuCount workersMax workersMin idleTimeout networkVolumeId } }`
+returns for `remint-v6` (`2c9528ebg2vzvx`):
+
+- `gpuIds = "AMPERE_24,-NVIDIA L4,-NVIDIA RTX A5000,-NVIDIA RTX PRO 6000
+  Blackwell Server Edition MIG 1g.24gb"` — the ENTIRE 24 GB serverless
+  tier was excluded except RTX 3090. 3090 serverless capacity is scarce,
+  so the scheduler finds no hardware: no container, no logs, jobs stay
+  IN_QUEUE, UI reads "Initializing" forever. This is the primary cause.
+- `workersMin = 1` — RunPod continuously tries to keep one worker alive,
+  which is why the endpoint spins on Initializing even with no jobs.
+- `networkVolumeId = null` — the new endpoint has NO network volume.
+  The worker REQUIRES `/runpod-volume` (`bootstrap_models.py` seeds ~10 GB
+  of model weights + ComfyUI base there; the Dockerfile hardcodes
+  `HF_HOME=/runpod-volume/hf`, `COMFYUI_BASE=/runpod-volume/ComfyUI`).
+  Even after the GPU fix, the first real job would re-download models to
+  ephemeral disk on every worker boot. This is the SECOND blocker.
+- The network volume `m0zdf6o3ot` (`healthy_scarlet_squid`, EU-SE-1,
+  50 GB) is still attached to the OLD endpoint `al6fd30432kkov`
+  (`resmarke-deepclean-prodx`). It holds the model cache. Do NOT delete it.
+
+### Verified false hypotheses
+
+- Private image pull — FALSE: package is public, anonymous pull is 200.
+- "Container image validation" toggle — removed from the new RunPod
+  console; not a factor.
+- `throttled` workers non-zero — FALSE: `/health` reports `throttled: 0`
+  (all six worker counters are zero).
+
+### The fix (owner, dashboard)
+
+1. Endpoint `remint-v6` → Edit → GPU selection → re-enable NVIDIA L4,
+   NVIDIA RTX A5000, and RTX PRO 6000 Blackwell MIG (keep RTX 3090) → Save.
+2. Attach network volume `m0zdf6o3ot` at `/runpod-volume`. If RunPod
+   complains it is in use, detach it from the old endpoint first.
+3. Keep 24 GB tier, GPU count 1, workersMin 1 (warm worker = no
+   cold-start latency; costs the idle rate).
+4. Re-submit a smoke job and expect: worker boots → handler runs → job
+   FAILS on the bad input (that proves the chain) → then run one real
+   end-to-end job.
 
 ## What you must do
 
-1. **Confirm/deny hypothesis 1** — the highest-value action: have the owner
-   either (a) flip the GHCR package to Public (GitHub → Profile → Packages →
-   `resmarke-deepclean` → Package settings → Change visibility → Public),
-   or (b) attach registry credentials in the endpoint form
-   (username `anthonyx33`, password = a GitHub PAT with `read:packages`).
-   Then recreate the endpoint (or trigger a new release) with
-   "Container image validation" OFF and the same image tag.
-2. **Prove boot**: with `RUNPOD_API_KEY` exported, submit a smoke job
-   (`input_url` pointing at a real reachable URL or `https://example.invalid/...`
-   is fine for boot-only) and poll `/v2/2c9528ebg2vzvx/status/<job-id>`
-   every 20s. Success = a worker appears in `/health` counters
-   (initializing → running) and the job status moves past IN_QUEUE.
-   The job may end FAILED due to the fake input — that is EXPECTED and
-   proves the handler ran.
+1. **Apply the two confirmed fixes (owner, dashboard)**: re-enable the
+   excluded 24 GB GPUs and attach network volume `m0zdf6o3ot` at
+   `/runpod-volume` (see Root cause section). Then verify via GraphQL:
+   `myself { endpoints { id name gpuIds workersMin networkVolumeId } }`
+   must show no exclusions in `gpuIds` and `networkVolumeId = m0zdf6o3ot`.
+2. **Prove boot**: submit a smoke job and poll `/v2/2c9528ebg2vzvx/status/<job-id>`
+   every 20s. Success = worker counters in `/health` move (initializing →
+   running) and the job leaves IN_QUEUE. The job may end FAILED on bad
+   input — that is EXPECTED and proves the handler ran.
 3. **Verify the Supabase side still matches**:
    `supabase secrets list --project-ref otzjqcnrabfbonjywlye` and confirm
    `RUNPOD_ENDPOINT_ID` + `RUNPOD_API_KEY`.
