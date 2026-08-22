@@ -1,5 +1,6 @@
 import {
   Archive,
+  ArrowRight,
   Check,
   ChevronDown,
   Download,
@@ -668,6 +669,15 @@ export default function CdxRemintApp() {
               <span>Image restoration console</span>
             </span>
           </div>
+          <div className="rx-pipeline-chain" aria-label="Active pipeline">
+            <span className={runsRemint ? "is-active" : ""}>
+              {runsRemint ? <Check size={11} /> : null} Remint
+            </span>
+            <ArrowRight size={12} aria-hidden="true" />
+            <span className={runsFinish ? "is-active" : ""}>
+              {runsFinish ? <Check size={11} /> : null} Quality Finish
+            </span>
+          </div>
           <span className="rx-top-spacer" />
           <span className={`rx-proven${configAActive ? " is-active" : ""}`}>
             {configAActive ? <Check size={12} aria-hidden="true" /> : null}
@@ -686,6 +696,44 @@ export default function CdxRemintApp() {
 
         <main className="rx-main">
           <section className="rx-card rx-queue-card" aria-labelledby="rx-queue-title">
+            <div className="rx-queue-head">
+              <span>
+                <b>Queue</b>
+                <small>{queue.length}/{MAX_QUEUE}</small>
+              </span>
+              <button
+                className="rx-button rx-button-subtle"
+                type="button"
+                disabled={running || queue.length >= MAX_QUEUE}
+                onClick={() => inputRef.current?.click()}
+              >
+                <Upload size={13} /> Add
+              </button>
+            </div>
+
+            <div
+              className={`rx-rail-drop${dropActive ? " is-active" : ""}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => inputRef.current?.click()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") inputRef.current?.click();
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDropActive(true);
+              }}
+              onDragLeave={() => setDropActive(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDropActive(false);
+                addFiles(Array.from(event.dataTransfer.files ?? []));
+              }}
+            >
+              <Upload size={16} aria-hidden="true" />
+              <span><b>Drop images</b><small>JPEG · PNG · WebP · 25 MB</small></span>
+            </div>
+
             <div className="rx-section-head rx-studio-head">
               <div>
                 <span className="rx-eyebrow">Workspace</span>
@@ -794,6 +842,16 @@ export default function CdxRemintApp() {
                 <span className="rx-add-label">Choose images</span>
               </div>
             )}
+
+            <div className="rx-viewer-status" aria-live="polite">
+              {notice ? (
+                <span className="is-warning">{notice}</span>
+              ) : active?.error ? (
+                <span className="is-error">{active.error}</span>
+              ) : (
+                <span>{status || (hasSupabaseConfig ? "Ready to process." : "Supabase environment variables are required to dispatch jobs.")}</span>
+              )}
+            </div>
 
             {queue.length ? (
               <div className="rx-queue" aria-label="Queued images">

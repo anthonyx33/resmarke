@@ -1,24 +1,32 @@
 import {
   Archive,
+  ArrowRight,
   Check,
   ChevronDown,
+  Copy,
   Download,
+  Gauge,
+  GripVertical,
+  Images,
   Info,
   KeyRound,
   Loader2,
   LogOut,
   Mail,
-  Menu,
+  Maximize2,
   Moon,
   Play,
   RefreshCw,
-  RotateCcw,
+  Scan,
+  SlidersHorizontal,
   Sparkles,
   Sun,
   Trash2,
   Upload,
+  UserRound,
   Wallet,
-  X
+  X,
+  Zap
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { config, hasSupabaseConfig } from "./lib/config";
@@ -37,21 +45,30 @@ import { supabase } from "./lib/supabase";
 import "./remint.css";
 
 /* ============================================================
-   /REMINT — the simplified console.
+   /REMINT — the same console as /cmint, tightened.
 
-   Same engines, same job payloads and the same credit rules as
-   /cmint (which stays the reference implementation and is not
-   touched by this file). What changes is the surface: four
-   decisions stay on screen, everything else lives behind the
-   drawer.
+   Identical engines, identical job payloads, identical credit
+   rules. /cmint stays the reference implementation and is not
+   touched by this file. What changes here is the workbench:
+
+     · Config A is the boot state, presented as a real preset
+       card instead of a debug button.
+     · The settings-code (the delivered filename) is live in
+       the topbar, one click from the clipboard.
+     · Metadata and naming are segmented controls, not selects.
+     · The queue rail gains Re-run all, per-item error text and
+       a live batch counter; the run bar gains a progress bar
+       and a Cmd/Ctrl+Enter shortcut.
+     · The result card collapses, so the rail stops growing.
 
    No engine behaviour lives here — every run goes through the
-   shared `createDeepCleanJob` client, unchanged.
+   same createDeepCleanJob payloads the existing pages use.
    ============================================================ */
 
 type PipelineMode = "sequence" | "remint" | "finish";
 type Theme = "light" | "dark";
 type AuthMode = "signin" | "signup" | "reset" | "update";
+type CompareMode = "split" | "result" | "original";
 type QueueStatus =
   | "ready"
   | "preparing"
@@ -84,7 +101,8 @@ const MAX_BYTES = 25 * 1024 * 1024;
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
 
 /* Credit cost model — identical to /cmint: V8.9 = 15 (+2 when the adaptive
-   engine runs its extra passes), Quality Finish = 6. */
+   engine runs its extra passes), Quality Finish = 6 (CPU-only). The sequence
+   is a single job that performs both stages, so it bills the sum. */
 const COST_REMINT = 15;
 const COST_FINISH = 6;
 const COST_ADAPTIVE = 2;
@@ -96,42 +114,24 @@ const PROFILE_FOR: Record<PipelineMode, "ds-remint-v8.9" | "quality-finish" | "d
     finish: "quality-finish"
   };
 
-const MODE_LABEL: Record<PipelineMode, string> = {
-  sequence: "Remint + Finish",
-  remint: "Remint only",
-  finish: "Finish only"
-};
-
-const STRENGTH_LABEL: Record<Strength, string> = {
-  light: "Light",
-  balanced: "Balanced",
-  deep: "Deep"
+const WASH_LABEL: Record<WashModel, string> = {
+  qwen: "Qwen",
+  zimage: "Z-Image",
+  "qwen+zimage": "Qwen + Z-Image"
 };
 
 const STRENGTH_HINT: Record<Strength, string> = {
   light: "The lightest pass — for frames that already look right.",
-  balanced: "The everyday production pass.",
-  deep: "The strongest pass — when Balanced isn't enough."
-};
-
-const QF_LABEL: Record<QfPreset, string> = {
-  conservative: "Conservative",
-  standard: "Standard",
-  strong: "Strong",
-  fidelity: "Fidelity HD"
+  balanced: "The recommended pass for everyday production work.",
+  deep: "The strongest pass — only when Balanced isn't enough."
 };
 
 const QF_HINT: Record<QfPreset, string> = {
   conservative: "Lightest touch. Closest to the original file.",
   standard: "The recommended finish for everyday delivery.",
-  strong: "Strongest cleanup and sharpening — check the QC readouts.",
-  fidelity: "Maximum fidelity at delivery resolution with the lightest grain."
-};
-
-const WASH_LABEL: Record<WashModel, string> = {
-  qwen: "Qwen",
-  zimage: "Z-Image",
-  "qwen+zimage": "Both"
+  strong: "Strongest cleanup and sharpening — watch the self-QC readouts.",
+  fidelity:
+    "Maximum fidelity. Runs at delivery resolution with the lightest grain — for professionals."
 };
 
 const WASH_HINT: Record<WashModel, string> = {
@@ -140,16 +140,20 @@ const WASH_HINT: Record<WashModel, string> = {
   "qwen+zimage": "Both models blended 50/50."
 };
 
-/* Delivery size — three buttons over the finisher's scale factor. `null` on
-   the wire is the native-size path the finisher already understands. */
-const SIZE_PRESETS: { key: string; label: string; value: number }[] = [
-  { key: "native", label: "Native", value: 1 },
-  { key: "hd", label: "1.6× HD", value: 1.6 },
-  { key: "max", label: "2× Max", value: 2 }
-];
+const METADATA_HINT: Record<MetadataMode, string> = {
+  device: "Writes a coherent device EXIF block on the output.",
+  minimal: "Ships with the minimum viable tag set."
+};
+
+const NAME_LABEL: Record<NameStyle, string> = {
+  "settings-code": "Settings code",
+  "photo-style": "Photo style",
+  original: "Original",
+  custom: "Custom"
+};
 
 function initialTheme(): Theme {
-  if (typeof window === "undefined") return "light";
+  if (typeof window === "undefined") return "dark";
   const saved = localStorage.getItem("resmarke:theme");
   if (saved === "light" || saved === "dark") return saved;
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -159,6 +163,7 @@ export default function RemintApp() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const seqRef = useRef(0);
   const queueRef = useRef<QueueItem[]>([]);
+  const runRef = useRef<(() => void) | null>(null);
 
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -170,10 +175,17 @@ export default function RemintApp() {
   const [notice, setNotice] = useState("");
   const [zipBusy, setZipBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState("");
-  const [drawer, setDrawer] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [batch, setBatch] = useState({ done: 0, total: 0 });
 
-  /* ---- Config A is the state this page boots into (see applyConfigA). ---- */
+  const [compare, setCompare] = useState<CompareMode>("split");
+  const [splitPos, setSplitPos] = useState(50);
+  const [pixelView, setPixelView] = useState(false);
+
+  /* ---- Pipeline. Config A is the boot state (see applyConfigA). ---- */
   const [mode, setMode] = useState<PipelineMode>("sequence");
+
+  // Stage 1 — DS ReMint V8.9 (identical option set to the frozen engine).
   const [washModel, setWashModel] = useState<WashModel>("qwen");
   const [strength, setStrength] = useState<Strength>("deep");
   const [engineMode, setEngineMode] = useState<CxRemintEngineMode>("adaptive");
@@ -182,15 +194,17 @@ export default function RemintApp() {
   const [nameStyle, setNameStyle] = useState<NameStyle>("settings-code");
   const [nameCustom, setNameCustom] = useState("");
 
+  // Stage 2 — Quality Finish.
   const [qfPreset, setQfPreset] = useState<QfPreset>("strong");
   const [qfScale, setQfScale] = useState(1);
   const [wallClean, setWallClean] = useState(true);
   const [finishMode, setFinishMode] = useState<FinishRouting>("adaptive");
-  // Pro tuning — multipliers over the preset's calibrated gains. 1.00 is the
-  // preset default; the worker clamps every value to its own accepted range.
+  // Pro tuning — multipliers over the preset's calibrated gains. 1.00 = preset
+  // default; the worker clamps every value to its own accepted range.
   const [tuneDither, setTuneDither] = useState(1);
   const [tuneSmooth, setTuneSmooth] = useState(1.25);
   const [tuneSharpen, setTuneSharpen] = useState(1);
+  const tuned = tuneDither !== 1 || tuneSmooth !== 1 || tuneSharpen !== 1;
 
   // Account
   const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
@@ -215,6 +229,10 @@ export default function RemintApp() {
   const completed = queue.filter((item) => item.status === "completed" && item.job?.outputUrl);
   const totalCost = pending.length * unitCost;
   const active = queue.find((item) => item.id === activeId) ?? queue[0] ?? null;
+  const activeBusy = Boolean(
+    active && ["preparing", "uploading", "queued", "processing"].includes(active.status)
+  );
+  const resultUrl = active?.job?.status === "completed" ? active.job.outputUrl ?? "" : "";
   const canRun =
     pending.length > 0 &&
     !running &&
@@ -235,7 +253,7 @@ export default function RemintApp() {
   }, [theme]);
 
   useEffect(() => {
-    document.title = "Remint — console";
+    document.title = "/REMINT — Coherent Pro + Quality Finish";
   }, []);
 
   useEffect(() => {
@@ -265,20 +283,28 @@ export default function RemintApp() {
       if (event === "PASSWORD_RECOVERY") {
         setAuthMode("update");
         setAuthStatus("Choose a new password for this account.");
-        setDrawer(true);
       }
     });
     return () => data.subscription.unsubscribe();
   }, []);
 
+  // Cmd/Ctrl+Enter runs the queue from anywhere on the page.
   useEffect(() => {
-    if (!drawer) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDrawer(false);
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        runRef.current?.();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [drawer]);
+  }, []);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1400);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
 
   async function refreshCredits(nextUserId: string) {
     if (!supabase) return;
@@ -491,8 +517,8 @@ export default function RemintApp() {
   }
 
   /* The settings-code input mirrors /cmint field for field. The hash covers
-     the whole canonical object, so identical settings on either page must
-     produce an identical code. */
+     the whole canonical object, so identical settings on either page produce
+     an identical code. */
   function settingsCodeFor() {
     return buildSettingsCode({
       mode,
@@ -531,8 +557,14 @@ export default function RemintApp() {
     setFinishMode("adaptive");
   }
 
-  const sizeKey =
-    SIZE_PRESETS.find((preset) => Math.abs(preset.value - qfScale) < 0.001)?.key ?? "custom";
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(settingsCode);
+      setCopied(true);
+    } catch {
+      setNotice(`Settings code: ${settingsCode}`);
+    }
+  }
 
   function deliveredNameFor(position: number): { style: NameStyle; custom: string } {
     // custom = the exact name (first item) then consecutive -2, -3;
@@ -552,7 +584,7 @@ export default function RemintApp() {
 
   /* ---------------- run ---------------- */
 
-  /* Single-item processor. The batch run, Re-run all and the per-item redo
+  /* Single-item processor. The batch run, Re-run all and the per-item re-run
      all go through this, so every path is the same request with whatever
      settings are on screen at the moment it is pressed. */
   async function processItem(item: QueueItem, position: number, total: number) {
@@ -634,6 +666,7 @@ export default function RemintApp() {
 
     setRunning(true);
     setNotice("");
+    setBatch({ done: 0, total: items.length });
     let ok = 0;
     let failed = 0;
 
@@ -644,9 +677,11 @@ export default function RemintApp() {
       } catch {
         failed += 1;
       }
+      setBatch({ done: index + 1, total: items.length });
     }
 
     setRunning(false);
+    setBatch({ done: 0, total: 0 });
     if (userId) await refreshCredits(userId);
     setStatus(
       failed
@@ -663,10 +698,14 @@ export default function RemintApp() {
     );
   }
 
-  /* Re-run everything in the queue with the settings currently on screen.
-     Each image is a brand-new job and bills a fresh unit cost. */
+  // Keeps the keyboard shortcut in sync without re-binding the listener.
+  runRef.current = canRun ? runQueue : null;
+
+  /* Re-run every image in the queue with the settings currently on screen —
+     completed ones included. Each is a brand-new job and bills a fresh unit
+     cost. */
   function rerunAll() {
-    if (running || zipBusy) return;
+    if (running || zipBusy || !queue.length) return;
     void runItems(queue, "Re-ran the queue");
   }
 
@@ -702,7 +741,7 @@ export default function RemintApp() {
       return `${position === undefined ? code : `${code}-${position + 1}`}.jpg`;
     }
     const raw = item.file.name.replace(/\.[^.]+$/, "");
-    const base = raw.replace(/[<>:"/\\|?*\u0000-\u001f\s]+/g, "-").slice(0, 90) || "image";
+    const base = raw.replace(/[<>:"/\\|?*\s]+/g, "-").slice(0, 90) || "image";
     const prefix = position === undefined ? "" : `${String(position + 1).padStart(2, "0")}-`;
     const suffix = mode === "finish" ? "finish" : mode === "remint" ? "remint" : "remint-hd";
     return `${prefix}${base}-${suffix}.jpg`;
@@ -781,7 +820,6 @@ export default function RemintApp() {
   const engineReport = active?.job?.report?.engine as Record<string, unknown> | undefined;
   const qfReport = readQfReport(engineReport);
   const rating = readRating88(active?.job?.report);
-  const resultUrl = active?.job?.status === "completed" ? active.job.outputUrl ?? "" : "";
 
   return (
     <div className="remint">
@@ -798,64 +836,200 @@ export default function RemintApp() {
       />
 
       <div className="rx-shell">
-        {/* ---------- top bar ---------- */}
+        {/* ---------- topbar ---------- */}
         <header className="rx-top">
           <div className="rx-brand">
             <span className="rx-brand-mark">
               <Sparkles size={15} aria-hidden="true" />
             </span>
             <span className="rx-brand-text">
-              <b>Remint</b>
-              <span>{MODE_LABEL[mode]}</span>
+              <b>/REMINT</b>
+              <span>Coherent Pro · Quality Finish</span>
             </span>
           </div>
 
-          <span className="rx-spacer" />
+          <div className="rx-chain" aria-label="Active pipeline">
+            <span className={`rx-chain-node${runsRemint ? " is-on" : ""}`}>
+              {runsRemint ? <Check size={11} aria-hidden="true" /> : null}
+              Remint
+            </span>
+            <span className="rx-chain-arrow" aria-hidden="true">
+              <ArrowRight size={12} />
+            </span>
+            <span className={`rx-chain-node is-two${runsFinish ? " is-on" : ""}`}>
+              {runsFinish ? <Check size={11} aria-hidden="true" /> : null}
+              Quality Finish
+            </span>
+          </div>
+
+          <span className="rx-top-spacer" />
 
           <div className="rx-top-right">
-            {configAActive ? (
-              <span className="rx-chip is-on" title="The proven all-clear configuration">
-                <Check size={12} aria-hidden="true" /> Config A · Proven
-              </span>
-            ) : (
-              <button
-                className="rx-chip"
-                type="button"
-                onClick={applyConfigA}
-                disabled={running}
-                title="Reset every control to Config A"
-              >
-                <RotateCcw size={12} aria-hidden="true" /> Reset to Config A
-              </button>
-            )}
+            {/* The settings-code is the delivered filename — keep it visible
+                and one click from the clipboard. */}
+            <button
+              className={`rx-code-chip${copied ? " is-copied" : ""}`}
+              type="button"
+              title="Settings code — the delivered filename. Click to copy."
+              onClick={() => void copyCode()}
+            >
+              {copied ? (
+                <Check size={12} aria-hidden="true" />
+              ) : (
+                <Copy size={12} aria-hidden="true" />
+              )}
+              <code>{settingsCode}</code>
+            </button>
 
             <span className="rx-credits" title="Credit balance">
               <Wallet size={13} aria-hidden="true" />
               <b>{credits.privacyCredits}</b>
             </span>
 
+            {showAuth ? (
+              <details className="rx-pop" open={authMode === "update"}>
+                <summary className="rx-pop-trigger">
+                  <UserRound size={14} aria-hidden="true" /> Sign in
+                </summary>
+                <div className="rx-pop-panel">
+                  {authMode !== "update" ? (
+                    <div className="rx-seg">
+                      <button
+                        type="button"
+                        className={authMode === "signin" ? "is-active" : ""}
+                        onClick={() => {
+                          setAuthMode("signin");
+                          setAuthStatus("");
+                        }}
+                      >
+                        Sign in
+                      </button>
+                      <button
+                        type="button"
+                        className={authMode === "signup" ? "is-active" : ""}
+                        onClick={() => {
+                          setAuthMode("signup");
+                          setAuthStatus("");
+                        }}
+                      >
+                        Sign up
+                      </button>
+                    </div>
+                  ) : null}
+                  {authMode !== "update" ? (
+                    <div className="rx-input-icon">
+                      <Mail size={14} aria-hidden="true" />
+                      <input
+                        className="rx-input"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="you@email.com"
+                        value={authEmail}
+                        onChange={(event) => setAuthEmail(event.target.value)}
+                      />
+                    </div>
+                  ) : null}
+                  {authMode !== "reset" ? (
+                    <div className="rx-input-icon">
+                      <KeyRound size={14} aria-hidden="true" />
+                      <input
+                        className="rx-input"
+                        type="password"
+                        autoComplete={authMode === "signin" ? "current-password" : "new-password"}
+                        placeholder={authMode === "update" ? "New password" : "Password"}
+                        value={authPassword}
+                        onChange={(event) => setAuthPassword(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") void submitAuth();
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <button
+                    className="rx-btn rx-btn-primary rx-btn-block"
+                    type="button"
+                    onClick={submitAuth}
+                  >
+                    {authMode === "signin"
+                      ? "Sign in"
+                      : authMode === "signup"
+                        ? "Create account"
+                        : authMode === "reset"
+                          ? "Send reset link"
+                          : "Update password"}
+                  </button>
+                  {authMode === "signin" ? (
+                    <button
+                      className="rx-link"
+                      type="button"
+                      onClick={() => {
+                        setAuthMode("reset");
+                        setAuthStatus("");
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  ) : authMode === "reset" ? (
+                    <button
+                      className="rx-link"
+                      type="button"
+                      onClick={() => {
+                        setAuthMode("signin");
+                        setAuthStatus("");
+                      }}
+                    >
+                      Back to sign in
+                    </button>
+                  ) : null}
+                  {authStatus ? <p className="rx-pop-status">{authStatus}</p> : null}
+                </div>
+              </details>
+            ) : hasSupabaseConfig && userId ? (
+              <details className="rx-pop">
+                <summary className="rx-pop-trigger">
+                  <UserRound size={14} aria-hidden="true" />
+                  {userEmail || "Account"}
+                </summary>
+                <div className="rx-pop-panel">
+                  <div className="rx-row">
+                    <span>Credits</span>
+                    <b>{credits.privacyCredits}</b>
+                  </div>
+                  <div className="rx-row">
+                    <span>Re-Mint Max</span>
+                    <b>{credits.deepCleanCredits}</b>
+                  </div>
+                  {isAdmin ? <span className="rx-tag is-on">Developer admin</span> : null}
+                  <button className="rx-btn rx-btn-block" type="button" onClick={signOut}>
+                    <LogOut size={14} aria-hidden="true" /> Sign out
+                  </button>
+                </div>
+              </details>
+            ) : null}
+
             <button
               className="rx-icon-btn"
               type="button"
-              aria-label="Open settings"
-              aria-expanded={drawer}
-              title="Settings"
-              onClick={() => setDrawer(true)}
+              aria-label="Toggle theme"
+              title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
-              <Menu size={16} />
+              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
             </button>
           </div>
         </header>
 
         <div className="rx-work">
-          {/* ---------- images ---------- */}
-          <section className="rx-pane rx-pane-left" aria-label="Images">
-            <div className="rx-pane-head">
-              <span className="rx-pane-title">Images</span>
-              <span className="rx-count">
-                {queue.length}/{MAX_QUEUE}
+          {/* ---------- queue rail ---------- */}
+          <section className="rx-pane rx-pane-queue" aria-label="Image queue">
+            <div className="rx-rail-head">
+              <span className="rx-rail-title">Queue</span>
+              <span className={`rx-count${running ? " is-run" : ""}`}>
+                {running && batch.total
+                  ? `${batch.done}/${batch.total}`
+                  : `${queue.length}/${MAX_QUEUE}`}
               </span>
-              <span className="rx-spacer" />
+              <span className="rx-top-spacer" />
               <button
                 className="rx-btn rx-btn-sm"
                 type="button"
@@ -866,7 +1040,7 @@ export default function RemintApp() {
               </button>
             </div>
 
-            <div className="rx-scroll">
+            <div className="rx-pane-scroll">
               <div
                 className={`rx-drop${dragging ? " is-drag" : ""}`}
                 role="button"
@@ -886,7 +1060,7 @@ export default function RemintApp() {
                   addFiles(Array.from(event.dataTransfer.files ?? []));
                 }}
               >
-                <Upload className="rx-drop-icon" size={20} aria-hidden="true" />
+                <Upload size={17} aria-hidden="true" />
                 <b>Drop images</b>
                 <span>JPEG · PNG · WebP · up to 25 MB each</span>
               </div>
@@ -896,9 +1070,9 @@ export default function RemintApp() {
                   {queue.map((item) => (
                     <div
                       key={item.id}
-                      className={`rx-item${item.id === active?.id ? " is-active" : ""}${
+                      className={`rx-qitem${item.id === active?.id ? " is-active" : ""}${
                         item.id === draggedId ? " is-dragging" : ""
-                      }`}
+                      }${item.status === "failed" ? " is-fail" : ""}`}
                       role="button"
                       tabIndex={0}
                       draggable={!running}
@@ -915,26 +1089,30 @@ export default function RemintApp() {
                         setDraggedId("");
                       }}
                     >
-                      <span className="rx-thumb">
+                      <span className="rx-qthumb">
                         <img src={item.previewUrl} alt="" />
                       </span>
-                      <span className="rx-item-body">
-                        <span className="rx-item-name">{item.file.name}</span>
-                        <span className="rx-item-meta">
+                      <span className="rx-qbody">
+                        <span className="rx-qname">{item.file.name}</span>
+                        <span className="rx-qmeta">
                           <i className={`rx-dot ${statusDotClass(item.status)}`} />
                           {statusLabel(item.status)}
                           {item.width ? ` · ${item.width}×${item.height}` : ""}
                         </span>
-                        {item.error ? <span className="rx-item-err">{item.error}</span> : null}
+                        {/* Per-item failure text, so a bad image in a batch is
+                            readable without selecting it. */}
+                        {item.status === "failed" && item.error ? (
+                          <span className="rx-qerr">{item.error}</span>
+                        ) : null}
                       </span>
-                      <span className="rx-item-actions">
+                      <span className="rx-qactions">
                         {item.status === "completed" ? (
                           <>
                             <button
-                              className="rx-act"
+                              className="rx-qact"
                               type="button"
-                              title={`Redo this image with the current settings (${unitCost} credits)`}
-                              aria-label="Redo this image"
+                              title={`Re-run this image with the current settings (${unitCost} credits)`}
+                              aria-label="Re-run this image"
                               disabled={running || zipBusy}
                               onClick={(event) => {
                                 event.stopPropagation();
@@ -944,7 +1122,7 @@ export default function RemintApp() {
                               <RefreshCw size={14} />
                             </button>
                             <button
-                              className="rx-act"
+                              className="rx-qact"
                               type="button"
                               title="Download"
                               aria-label="Download this image"
@@ -963,7 +1141,7 @@ export default function RemintApp() {
                           </>
                         ) : null}
                         <button
-                          className="rx-act is-danger"
+                          className="rx-qact is-danger"
                           type="button"
                           title="Remove"
                           aria-label="Remove this image"
@@ -975,19 +1153,19 @@ export default function RemintApp() {
                         >
                           <X size={14} />
                         </button>
+                        <span className="rx-grip" aria-hidden="true">
+                          <GripVertical size={13} />
+                        </span>
                       </span>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <p className="rx-empty">
-                  Nothing queued yet. Drop images above, set the four controls on the right, and
-                  run.
-                </p>
-              )}
+              ) : null}
+            </div>
 
-              {queue.length ? (
-                <div className="rx-queue-foot">
+            {queue.length ? (
+              <div className="rx-rail-foot">
+                <div className="rx-foot-split">
                   <button
                     className="rx-btn"
                     type="button"
@@ -999,7 +1177,7 @@ export default function RemintApp() {
                     ) : (
                       <Archive size={14} aria-hidden="true" />
                     )}
-                    Download all ({completed.length})
+                    ZIP ({completed.length})
                   </button>
                   <button
                     className="rx-btn"
@@ -1012,155 +1190,622 @@ export default function RemintApp() {
                   >
                     <RefreshCw size={14} aria-hidden="true" /> Re-run all
                   </button>
-                  <button
-                    className="rx-btn"
-                    type="button"
-                    onClick={clearAll}
-                    disabled={running || zipBusy}
-                  >
-                    <Trash2 size={14} aria-hidden="true" /> Clear
-                  </button>
+                </div>
+                <button
+                  className="rx-btn rx-btn-block"
+                  type="button"
+                  onClick={clearAll}
+                  disabled={running || zipBusy}
+                >
+                  <Trash2 size={14} aria-hidden="true" /> Clear queue
+                </button>
+              </div>
+            ) : null}
+          </section>
+
+          {/* ---------- stage ---------- */}
+          <section className="rx-pane rx-pane-stage" aria-label="Viewer">
+            <div className="rx-stage-bar">
+              {active ? (
+                <div className="rx-stage-file">
+                  <b>{active.file.name}</b>
+                  <span>
+                    {(active.file.size / 1_000_000).toFixed(2)} MB
+                    {active.width ? ` · ${active.width}×${active.height}` : ""}
+                  </span>
+                </div>
+              ) : (
+                <span className="rx-rail-title">Viewer</span>
+              )}
+
+              <span className="rx-top-spacer" />
+
+              {resultUrl ? (
+                <div
+                  className="rx-seg"
+                  style={{ width: 210 }}
+                  role="radiogroup"
+                  aria-label="Compare mode"
+                >
+                  {(["original", "split", "result"] as CompareMode[]).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={compare === value}
+                      className={compare === value ? "is-active" : ""}
+                      onClick={() => setCompare(value)}
+                    >
+                      {value === "original" ? "Original" : value === "split" ? "Split" : "Result"}
+                    </button>
+                  ))}
                 </div>
               ) : null}
+
+              <button
+                className="rx-icon-btn"
+                type="button"
+                title={pixelView ? "Fit to view" : "View at 1:1 pixels"}
+                aria-label="Toggle pixel view"
+                disabled={!active}
+                onClick={() => setPixelView((current) => !current)}
+              >
+                {pixelView ? <Scan size={15} /> : <Maximize2 size={15} />}
+              </button>
+            </div>
+
+            <div className={`rx-stage-body${pixelView ? " is-pixel" : ""}`}>
+              {!active ? (
+                <div className="rx-empty">
+                  <Images size={30} aria-hidden="true" />
+                  <h2>Nothing loaded</h2>
+                  <p>
+                    Add images to the queue and run. Config A is already applied, so the only
+                    decision left is what to drop in. Results appear here with a split compare
+                    against the original.
+                  </p>
+                  <button className="rx-btn rx-btn-primary" type="button" onClick={openPicker}>
+                    <Upload size={15} aria-hidden="true" /> Add images
+                  </button>
+                </div>
+              ) : (
+                <StageFrame
+                  originalUrl={active.previewUrl}
+                  resultUrl={resultUrl}
+                  compare={compare}
+                  splitPos={splitPos}
+                  onSplit={setSplitPos}
+                  busy={activeBusy}
+                  busyLabel={statusLabel(active.status)}
+                />
+              )}
+            </div>
+
+            <div className="rx-stage-foot">
+              {notice ? (
+                <span style={{ color: "var(--rx-warn)" }}>{notice}</span>
+              ) : active?.error ? (
+                <span style={{ color: "var(--rx-danger)" }}>{active.error}</span>
+              ) : (
+                <span>
+                  {status ||
+                    (hasSupabaseConfig
+                      ? "Ready. Config A is applied — drop images and run."
+                      : "Supabase env vars are not set — jobs cannot be dispatched.")}
+                </span>
+              )}
             </div>
           </section>
 
-          {/* ---------- controls ---------- */}
-          <section className="rx-pane rx-pane-right" aria-label="Controls">
-            <div className="rx-pane-head">
-              <span className="rx-pane-title">Settings</span>
-              <span className="rx-spacer" />
+          {/* ---------- control rail ---------- */}
+          <section className="rx-pane rx-pane-ctl" aria-label="Pipeline controls">
+            <div className="rx-rail-head">
+              <SlidersHorizontal size={13} aria-hidden="true" />
+              <span className="rx-rail-title">Pipeline</span>
+              <span className="rx-top-spacer" />
               <span className="rx-count">{unitCost} cr / image</span>
             </div>
 
-            <div className="rx-scroll">
-              <div className="rx-card">
-                <div className="rx-card-body">
-                  <Field label="Strength" hint={STRENGTH_HINT[strength]}>
-                    <div className="rx-seg" role="radiogroup" aria-label="Strength">
-                      {(["light", "balanced", "deep"] as Strength[]).map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          role="radio"
-                          aria-checked={strength === value}
-                          className={strength === value ? "is-active" : ""}
-                          disabled={running || !runsRemint}
-                          onClick={() => setStrength(value)}
-                        >
-                          {STRENGTH_LABEL[value]}
-                        </button>
-                      ))}
-                    </div>
-                  </Field>
-
-                  <Field label="Restoration" hint={QF_HINT[qfPreset]}>
-                    <div className="rx-seg" role="radiogroup" aria-label="Restoration">
-                      {(["conservative", "standard", "strong", "fidelity"] as QfPreset[]).map(
-                        (value) => (
-                          <button
-                            key={value}
-                            type="button"
-                            role="radio"
-                            aria-checked={qfPreset === value}
-                            className={qfPreset === value ? "is-active" : ""}
-                            disabled={running || !runsFinish}
-                            onClick={() => setQfPreset(value)}
-                          >
-                            {QF_LABEL[value]}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </Field>
-
-                  <Field
-                    label="Delivery size"
-                    detail={qfScale <= 1.001 ? "native" : `${qfScale.toFixed(2)}×`}
-                    hint={
-                      qfScale <= 1.001
-                        ? "Native delivery is always the quality floor."
-                        : "Enlargement adds perceived resolution only when the finisher's self-QC passes."
-                    }
-                  >
-                    <div className="rx-seg" role="radiogroup" aria-label="Delivery size">
-                      {SIZE_PRESETS.map((preset) => (
-                        <button
-                          key={preset.key}
-                          type="button"
-                          role="radio"
-                          aria-checked={sizeKey === preset.key}
-                          className={sizeKey === preset.key ? "is-active" : ""}
-                          disabled={running || !runsFinish}
-                          onClick={() => setQfScale(preset.value)}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-                  </Field>
-
-                  <label className="rx-switch">
-                    <input
-                      type="checkbox"
-                      checked={wallClean}
-                      disabled={running || !runsFinish}
-                      onChange={(event) => setWallClean(event.target.checked)}
-                    />
-                    <span className="rx-switch-text">
-                      <b>Wall smoothing</b>
-                      <span className="rx-hint">Mobile Clean — flattens wall and sky banding.</span>
-                    </span>
-                    <span className="rx-switch-track">
-                      <span className="rx-switch-knob" />
-                    </span>
-                  </label>
-
-                  <div className="rx-code" title="The delivered filename encodes these settings">
-                    <code>{settingsCode}</code>
-                    <button
-                      className="rx-link"
-                      type="button"
-                      style={{ flex: "0 0 auto" }}
-                      onClick={() => setDrawer(true)}
-                    >
-                      Naming
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* ---- results ---- */}
-              <details className="rx-acc">
-                <summary>
-                  Results
-                  <span className="rx-acc-sub">
-                    {active?.job?.status === "completed"
-                      ? active.file.name
-                      : `${completed.length} ready`}
+            <div className="rx-pane-scroll">
+              <div className="rx-ctl">
+                {/* Config A — one tap restores the proven all-clear tuple. */}
+                <button
+                  type="button"
+                  className={`rx-preset${configAActive ? " is-active" : ""}`}
+                  disabled={running}
+                  onClick={applyConfigA}
+                  title="Deep · Strong · Native · Smoothing 1.25× · Wall smoothing on · Adaptive"
+                >
+                  <span className="rx-preset-mark">
+                    <Zap size={15} aria-hidden="true" />
                   </span>
-                  <ChevronDown className="rx-acc-chev" size={15} aria-hidden="true" />
-                </summary>
-                <div className="rx-acc-body">
-                  {!active || active.job?.status !== "completed" ? (
-                    <p className="rx-hint">
-                      Run an image to see runtime, delivery size and the finisher's self-QC here.
-                    </p>
-                  ) : (
-                    <>
-                      {resultUrl ? (
-                        <div className="rx-preview">
-                          <figure>
-                            <img src={active.previewUrl} alt="Original" />
-                            <figcaption>Original</figcaption>
-                          </figure>
-                          <figure>
-                            <img src={resultUrl} alt="Result" />
-                            <figcaption>Result</figcaption>
-                          </figure>
+                  <span className="rx-preset-text">
+                    <b>Config A</b>
+                    <span>Deep · Strong · Native · S1.25 · Wall clean</span>
+                  </span>
+                  <span className="rx-preset-state">
+                    {configAActive ? (
+                      <>
+                        <Check size={12} aria-hidden="true" /> Active
+                      </>
+                    ) : (
+                      "Restore"
+                    )}
+                  </span>
+                </button>
+
+                {/* mode picker */}
+                <div className="rx-modes" role="radiogroup" aria-label="Pipeline mode">
+                  <ModeCard
+                    active={mode === "sequence"}
+                    disabled={running}
+                    title="Remint + Finish"
+                    detail="The complete flow. Remint, then the HD finish — one job, end to end."
+                    cost={
+                      COST_REMINT + (engineMode === "adaptive" ? COST_ADAPTIVE : 0) + COST_FINISH
+                    }
+                    onClick={() => setMode("sequence")}
+                  />
+                  <ModeCard
+                    active={mode === "remint"}
+                    disabled={running}
+                    title="Remint"
+                    detail="The core pass alone. A clean, naturalized file up to 1250px."
+                    cost={COST_REMINT + (engineMode === "adaptive" ? COST_ADAPTIVE : 0)}
+                    onClick={() => setMode("remint")}
+                  />
+                  <ModeCard
+                    active={mode === "finish"}
+                    disabled={running}
+                    title="Quality Finish"
+                    detail="Polish a file you already have. Detail restored, grain kept — CPU only."
+                    cost={COST_FINISH}
+                    onClick={() => setMode("finish")}
+                  />
+                </div>
+
+                {mode === "finish" ? (
+                  <div className="rx-note">
+                    <Info size={13} aria-hidden="true" />
+                    <span>
+                      Quality Finish alone — it polishes whatever you give it and never runs the
+                      remint stage.
+                    </span>
+                  </div>
+                ) : null}
+
+                {/* ---- stage 1 ---- */}
+                {runsRemint ? (
+                  <div className="rx-card">
+                    <div className="rx-card-head">
+                      <span className="rx-card-num">1</span>
+                      <span className="rx-card-title">
+                        <b>Remint · V8.9</b>
+                        <span>The coherent camera pass — GPU</span>
+                      </span>
+                      <span className="rx-tag is-on">GPU</span>
+                    </div>
+
+                    <div className="rx-card-body">
+                      <div className="rx-stats">
+                        <Stat label="Wash" value={WASH_LABEL[washModel]} />
+                        <Stat label="Camera" value={`${strength} model`} />
+                        <Stat label="Resample" value="1× · ≤1250px" />
+                        <Stat
+                          label="Engine"
+                          value={engineMode === "adaptive" ? "up to 3 passes" : "1 pass"}
+                        />
+                      </div>
+
+                      <div className="rx-field">
+                        <span className="rx-label">Strength</span>
+                        <div className="rx-seg" role="radiogroup" aria-label="V8.9 strength">
+                          {(["light", "balanced", "deep"] as Strength[]).map((value) => (
+                            <button
+                              key={value}
+                              type="button"
+                              role="radio"
+                              aria-checked={strength === value}
+                              className={strength === value ? "is-active" : ""}
+                              disabled={running}
+                              onClick={() => setStrength(value)}
+                            >
+                              {value[0].toUpperCase() + value.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="rx-hint">{STRENGTH_HINT[strength]}</p>
+                      </div>
+
+                      <div className="rx-field">
+                        <span className="rx-label">Engine</span>
+                        <div className="rx-seg" role="radiogroup" aria-label="V8.9 engine">
+                          {(["adaptive", "template"] as CxRemintEngineMode[]).map((value) => (
+                            <button
+                              key={value}
+                              type="button"
+                              role="radio"
+                              aria-checked={engineMode === value}
+                              className={engineMode === value ? "is-active" : ""}
+                              disabled={running}
+                              onClick={() => setEngineMode(value)}
+                            >
+                              {value === "adaptive" ? "Adaptive" : "Template"}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="rx-hint">
+                          {engineMode === "adaptive"
+                            ? `Tries the lightest settings first and ships the least destructive result that meets the quality bar. +${COST_ADAPTIVE} credits.`
+                            : "One deterministic pass at the chosen strength."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <details className="rx-disc">
+                      <summary>
+                        <SlidersHorizontal size={13} aria-hidden="true" /> Expert · wash, metadata,
+                        naming
+                        <ChevronDown className="rx-chev" size={14} aria-hidden="true" />
+                      </summary>
+                      <div className="rx-disc-body">
+                        <div className="rx-field">
+                          <span className="rx-label">Wash model</span>
+                          <div className="rx-seg" role="radiogroup" aria-label="Wash model">
+                            {(["qwen", "zimage", "qwen+zimage"] as WashModel[]).map((value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={washModel === value}
+                                className={washModel === value ? "is-active" : ""}
+                                disabled={running}
+                                onClick={() => setWashModel(value)}
+                              >
+                                {value === "qwen" ? "Qwen" : value === "zimage" ? "Z-Image" : "Both"}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="rx-hint">{WASH_HINT[washModel]}</p>
+                        </div>
+
+                        <div className="rx-field">
+                          <span className="rx-label">Metadata</span>
+                          <div className="rx-seg" role="radiogroup" aria-label="Metadata mode">
+                            {(["device", "minimal"] as MetadataMode[]).map((value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={metadataMode === value}
+                                className={metadataMode === value ? "is-active" : ""}
+                                disabled={running}
+                                onClick={() => setMetadataMode(value)}
+                              >
+                                {value === "device" ? "Device EXIF" : "Minimal"}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="rx-hint">{METADATA_HINT[metadataMode]}</p>
+                        </div>
+
+                        <label className="rx-switch">
+                          <input
+                            type="checkbox"
+                            checked={deviceExif}
+                            disabled={running}
+                            onChange={(event) => setDeviceExif(event.target.checked)}
+                          />
+                          <span className="rx-switch-track" aria-hidden="true">
+                            <span className="rx-switch-thumb" />
+                          </span>
+                          <span>Coherent device EXIF</span>
+                        </label>
+
+                        <div className="rx-field">
+                          <span className="rx-label">Output filename</span>
+                          <div
+                            className="rx-seg rx-seg-wrap"
+                            role="radiogroup"
+                            aria-label="Filename style"
+                          >
+                            {(
+                              ["settings-code", "photo-style", "original", "custom"] as NameStyle[]
+                            ).map((value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={nameStyle === value}
+                                className={nameStyle === value ? "is-active" : ""}
+                                disabled={running}
+                                onClick={() => setNameStyle(value)}
+                              >
+                                {NAME_LABEL[value]}
+                              </button>
+                            ))}
+                          </div>
+                          {nameStyle === "custom" ? (
+                            <>
+                              <input
+                                className="rx-input"
+                                value={nameCustom}
+                                disabled={running}
+                                placeholder="my-photo"
+                                onChange={(event) => setNameCustom(event.target.value)}
+                              />
+                              <p className="rx-hint">
+                                First image keeps the exact name; each next image adds -2, -3…
+                              </p>
+                            </>
+                          ) : null}
+                          {nameStyle === "settings-code" ? (
+                            <p className="rx-hint">
+                              The filename encodes the exact settings used — share it back for a
+                              full settings → performance loop.
+                              <br />
+                              <code>{settingsCode}</code>
+                            </p>
+                          ) : null}
+                          {nameStyle === "photo-style" ? (
+                            <p className="rx-hint">Camera-style names, IMG_0001 upward.</p>
+                          ) : null}
+                          {nameStyle === "original" ? (
+                            <p className="rx-hint">Keeps the name of the file you dropped in.</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                ) : null}
+
+                {/* ---- stage 2 ---- */}
+                {runsFinish ? (
+                  <div className="rx-card">
+                    <div className="rx-card-head">
+                      <span className="rx-card-num is-two">{runsRemint ? "2" : "1"}</span>
+                      <span className="rx-card-title">
+                        <b>Quality Finish</b>
+                        <span>Non-AI restoration · grain kept, crispness restored</span>
+                      </span>
+                      <span className="rx-tag is-two">CPU</span>
+                    </div>
+
+                    <div className="rx-card-body">
+                      <div className="rx-stats">
+                        <Stat label="Preset" value={qfReport?.preset ?? qfPreset} />
+                        <Stat
+                          label="Delivery"
+                          value={
+                            qfReport
+                              ? qfReport.scale
+                                ? `${qfReport.scale.toFixed(2)}× HD`
+                                : "native size"
+                              : qfScale <= 1.001
+                                ? "native size"
+                                : `${qfScale.toFixed(2)}× HD`
+                          }
+                        />
+                        <Stat label="Encode" value={encodeLabel(qfReport)} />
+                        <Stat
+                          label="Self-QC"
+                          value={
+                            qfReport
+                              ? qfReport.applied
+                                ? "passed"
+                                : "input shipped"
+                              : "ships input on fail"
+                          }
+                        />
+                      </div>
+
+                      <div className="rx-field">
+                        <span className="rx-label">Restoration strength</span>
+                        <div
+                          className="rx-seg rx-seg-2"
+                          role="radiogroup"
+                          aria-label="Finish preset"
+                        >
+                          {(["conservative", "standard", "strong", "fidelity"] as QfPreset[]).map(
+                            (value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={qfPreset === value}
+                                className={qfPreset === value ? "is-active" : ""}
+                                disabled={running}
+                                onClick={() => setQfPreset(value)}
+                              >
+                                {value === "fidelity"
+                                  ? "Fidelity HD"
+                                  : value[0].toUpperCase() + value.slice(1)}
+                              </button>
+                            )
+                          )}
+                        </div>
+                        <p className="rx-hint">{QF_HINT[qfPreset]}</p>
+                      </div>
+
+                      <div className="rx-field">
+                        <span className="rx-label">
+                          Delivery size
+                          <em>{qfScale <= 1.001 ? "native" : `${qfScale.toFixed(2)}×`}</em>
+                        </span>
+                        <div
+                          className="rx-seg rx-seg-2"
+                          role="radiogroup"
+                          aria-label="Delivery size"
+                        >
+                          {[
+                            { value: 1, label: "Native" },
+                            { value: 1.6, label: "1.6× HD" },
+                            { value: 2, label: "2× Max" }
+                          ].map((stop) => (
+                            <button
+                              key={stop.label}
+                              type="button"
+                              role="radio"
+                              aria-checked={Math.abs(qfScale - stop.value) < 0.001}
+                              className={Math.abs(qfScale - stop.value) < 0.001 ? "is-active" : ""}
+                              disabled={running}
+                              onClick={() => setQfScale(stop.value)}
+                            >
+                              {stop.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <label className="rx-switch">
+                        <input
+                          type="checkbox"
+                          checked={wallClean}
+                          disabled={running}
+                          onChange={(event) => setWallClean(event.target.checked)}
+                        />
+                        <span className="rx-switch-track" aria-hidden="true">
+                          <span className="rx-switch-thumb" />
+                        </span>
+                        <span>Wall smoothing · Mobile Clean</span>
+                      </label>
+                      <p className="rx-hint">
+                        Auto-smooths rendered walls while keeping structure. Turn off to A/B
+                        compare — the report still measures what it would have done.
+                      </p>
+
+                      {/* Pro tuning — multipliers over the preset's calibrated gains. */}
+                      <div className="rx-field">
+                        <span className="rx-label">
+                          Pro tuning
+                          {tuned ? (
+                            <button
+                              className="rx-reset"
+                              type="button"
+                              disabled={running}
+                              onClick={() => {
+                                setTuneDither(1);
+                                setTuneSmooth(1);
+                                setTuneSharpen(1);
+                              }}
+                            >
+                              Reset to preset
+                            </button>
+                          ) : null}
+                        </span>
+                        <TuneRow
+                          name="Gradient dither"
+                          min={0}
+                          max={1.5}
+                          value={tuneDither}
+                          disabled={running}
+                          onChange={setTuneDither}
+                        />
+                        <TuneRow
+                          name="Smoothing"
+                          min={0.5}
+                          max={1.5}
+                          value={tuneSmooth}
+                          disabled={running}
+                          onChange={setTuneSmooth}
+                        />
+                        <TuneRow
+                          name="Sharpening"
+                          min={0}
+                          max={1.5}
+                          value={tuneSharpen}
+                          disabled={running}
+                          onChange={setTuneSharpen}
+                        />
+                        <p className="rx-hint">
+                          1.00 = preset default. Each slider is a multiplier over the preset's
+                          calibrated gain, so leave them at 1.00 unless a specific image asks for
+                          more or less.
+                        </p>
+                      </div>
+
+                      {mode === "sequence" ? (
+                        <div className="rx-field">
+                          <span className="rx-label">Finish routing</span>
+                          <div
+                            className="rx-seg rx-seg-2"
+                            role="radiogroup"
+                            aria-label="Finish routing"
+                          >
+                            {(["adaptive", "template"] as FinishRouting[]).map((value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                role="radio"
+                                aria-checked={finishMode === value}
+                                className={finishMode === value ? "is-active" : ""}
+                                disabled={running}
+                                onClick={() => setFinishMode(value)}
+                              >
+                                {value === "adaptive" ? "Adaptive" : "Template"}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="rx-hint">
+                            {finishMode === "adaptive"
+                              ? "Builds more than one finish candidate and ships the strongest one that meets the quality bar."
+                              : "Runs exactly the preset selected above, with no candidate selection."}
+                          </p>
                         </div>
                       ) : null}
+                    </div>
 
+                    <details className="rx-disc">
+                      <summary>
+                        <Gauge size={13} aria-hidden="true" /> Expert · exact enlargement factor
+                        <ChevronDown className="rx-chev" size={14} aria-hidden="true" />
+                      </summary>
+                      <div className="rx-disc-body">
+                        <div className="rx-field">
+                          <span className="rx-label">
+                            Enlargement
+                            <em>{qfScale <= 1.001 ? "native" : `${qfScale.toFixed(2)}×`}</em>
+                          </span>
+                          <input
+                            className="rx-range"
+                            type="range"
+                            min={1}
+                            max={2}
+                            step={0.05}
+                            value={qfScale}
+                            disabled={running}
+                            aria-label="Exact enlargement factor"
+                            onChange={(event) => setQfScale(Number(event.target.value))}
+                          />
+                          <div className="rx-range-ends">
+                            <span>Native (quality floor)</span>
+                            <span>2× (~2500px)</span>
+                          </div>
+                          <p className="rx-hint">
+                            The finisher accepts any factor from 1.00 to 2.00. Native delivery is
+                            always the quality floor; enlargement is the HD path and adds perceived
+                            resolution only when the finisher's self-QC passes.
+                          </p>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                ) : null}
+
+                {/* ---- result / QC — collapsible, so the rail stops growing ---- */}
+                {active?.job?.status === "completed" ? (
+                  <details className="rx-card" open>
+                    <summary className="rx-card-head">
+                      <span className="rx-card-num">
+                        <Check size={11} aria-hidden="true" />
+                      </span>
+                      <span className="rx-card-title">
+                        <b>Result</b>
+                        <span>{active.file.name}</span>
+                      </span>
+                      <ChevronDown className="rx-chev" size={14} aria-hidden="true" />
+                    </summary>
+                    <div className="rx-card-body">
                       <div className="rx-stats">
                         <Stat
                           label="Runtime"
@@ -1220,7 +1865,7 @@ export default function RemintApp() {
 
                       {rating !== null ? (
                         <div
-                          className={`rx-index is-${
+                          className={`rx-risk rx-risk-${
                             rating <= 29 ? "low" : rating <= 58 ? "mid" : "high"
                           }`}
                         >
@@ -1308,6 +1953,7 @@ export default function RemintApp() {
                         )}
                         Download this image
                       </button>
+
                       <button
                         className="rx-btn rx-btn-block"
                         type="button"
@@ -1317,18 +1963,10 @@ export default function RemintApp() {
                         <RefreshCw size={15} aria-hidden="true" />
                         Re-run with current settings ({unitCost} cr)
                       </button>
-                    </>
-                  )}
-                </div>
-              </details>
-
-              <button
-                className="rx-btn rx-btn-block rx-mobile-only"
-                type="button"
-                onClick={() => setDrawer(true)}
-              >
-                <Menu size={15} aria-hidden="true" /> All settings
-              </button>
+                    </div>
+                  </details>
+                ) : null}
+              </div>
             </div>
 
             {/* ---- run bar ---- */}
@@ -1336,25 +1974,20 @@ export default function RemintApp() {
               {hasSupabaseConfig && !userId ? (
                 <div className="rx-note is-warn">
                   <Info size={13} aria-hidden="true" />
-                  <span>
-                    Sign in to dispatch jobs —{" "}
-                    <button className="rx-link" type="button" onClick={() => setDrawer(true)}>
-                      open the account panel
-                    </button>
-                    .
-                  </span>
+                  <span>Sign in to dispatch jobs.</span>
                 </div>
               ) : pending.length > 0 && credits.privacyCredits < totalCost ? (
                 <div className="rx-note is-warn">
                   <Info size={13} aria-hidden="true" />
                   <span>
-                    This run needs {totalCost} credits; you have {credits.privacyCredits}.
+                    This queue needs {totalCost} credits; you have {credits.privacyCredits}.
                   </span>
                 </div>
-              ) : notice ? (
-                <div className="rx-note is-warn">
-                  <Info size={13} aria-hidden="true" />
-                  <span>{notice}</span>
+              ) : null}
+
+              {running && batch.total ? (
+                <div className="rx-progress" aria-hidden="true">
+                  <span style={{ width: `${(batch.done / batch.total) * 100}%` }} />
                 </div>
               ) : null}
 
@@ -1380,471 +2013,15 @@ export default function RemintApp() {
                     <Play size={16} aria-hidden="true" />
                     {pending.some((item) => item.status === "failed")
                       ? "Retry unfinished"
-                      : `Remint ${pending.length} ${pending.length === 1 ? "image" : "images"}`}
+                      : `Run ${pending.length} ${pending.length === 1 ? "image" : "images"}`}
+                    <kbd className="rx-kbd">⌘⏎</kbd>
                   </>
                 )}
               </button>
-
-              <p className="rx-status">
-                {status ||
-                  (hasSupabaseConfig
-                    ? "Ready."
-                    : "Supabase env vars are not set — jobs cannot be dispatched.")}
-              </p>
             </div>
           </section>
         </div>
       </div>
-
-      {/* ---------- drawer ---------- */}
-      {drawer ? (
-        <>
-          <button
-            className="rx-scrim"
-            type="button"
-            aria-label="Close settings"
-            onClick={() => setDrawer(false)}
-          />
-          <aside className="rx-drawer" role="dialog" aria-label="All settings">
-            <div className="rx-drawer-head">
-              <h2>Settings</h2>
-              <span className="rx-spacer" />
-              <button
-                className="rx-icon-btn"
-                type="button"
-                aria-label="Toggle theme"
-                title={theme === "dark" ? "Switch to light" : "Switch to dark"}
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              >
-                {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-              </button>
-              <button
-                className="rx-icon-btn"
-                type="button"
-                aria-label="Close settings"
-                onClick={() => setDrawer(false)}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="rx-drawer-body">
-              <button
-                className="rx-btn rx-btn-block"
-                type="button"
-                disabled={running || configAActive}
-                onClick={applyConfigA}
-              >
-                <RotateCcw size={14} aria-hidden="true" />
-                {configAActive ? "Config A is active" : "Reset to Config A"}
-              </button>
-
-              {/* ---- pipeline ---- */}
-              <details className="rx-acc">
-                <summary>
-                  Pipeline
-                  <span className="rx-acc-sub">{MODE_LABEL[mode]}</span>
-                  <ChevronDown className="rx-acc-chev" size={15} aria-hidden="true" />
-                </summary>
-                <div className="rx-acc-body">
-                  <Field
-                    label="Stages"
-                    hint="The sequence runs the remint and the HD finish as one job."
-                  >
-                    <div className="rx-seg is-stack" role="radiogroup" aria-label="Pipeline">
-                      {(["sequence", "remint", "finish"] as PipelineMode[]).map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          role="radio"
-                          aria-checked={mode === value}
-                          className={mode === value ? "is-active" : ""}
-                          disabled={running}
-                          onClick={() => setMode(value)}
-                        >
-                          {MODE_LABEL[value]}
-                        </button>
-                      ))}
-                    </div>
-                  </Field>
-
-                  <Field label="Wash model" hint={WASH_HINT[washModel]}>
-                    <div className="rx-seg" role="radiogroup" aria-label="Wash model">
-                      {(["qwen", "zimage", "qwen+zimage"] as WashModel[]).map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          role="radio"
-                          aria-checked={washModel === value}
-                          className={washModel === value ? "is-active" : ""}
-                          disabled={running || !runsRemint}
-                          onClick={() => setWashModel(value)}
-                        >
-                          {WASH_LABEL[value]}
-                        </button>
-                      ))}
-                    </div>
-                  </Field>
-
-                  <Field
-                    label="Engine"
-                    hint={
-                      engineMode === "adaptive"
-                        ? "Runs extra passes and ships the strongest result that clears the bar (+2 credits)."
-                        : "Runs the template path exactly as configured."
-                    }
-                  >
-                    <div className="rx-seg" role="radiogroup" aria-label="Engine">
-                      {(["adaptive", "template"] as CxRemintEngineMode[]).map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          role="radio"
-                          aria-checked={engineMode === value}
-                          className={engineMode === value ? "is-active" : ""}
-                          disabled={running || !runsRemint}
-                          onClick={() => setEngineMode(value)}
-                        >
-                          {value === "adaptive" ? "Adaptive" : "Template"}
-                        </button>
-                      ))}
-                    </div>
-                  </Field>
-
-                  {mode === "sequence" ? (
-                    <Field
-                      label="Finish routing"
-                      hint={
-                        finishMode === "adaptive"
-                          ? "Builds more than one finish candidate and ships the strongest one that meets the quality bar."
-                          : "Runs exactly the preset selected on the main panel."
-                      }
-                    >
-                      <div className="rx-seg" role="radiogroup" aria-label="Finish routing">
-                        {(["adaptive", "template"] as FinishRouting[]).map((value) => (
-                          <button
-                            key={value}
-                            type="button"
-                            role="radio"
-                            aria-checked={finishMode === value}
-                            className={finishMode === value ? "is-active" : ""}
-                            disabled={running}
-                            onClick={() => setFinishMode(value)}
-                          >
-                            {value === "adaptive" ? "Adaptive" : "Template"}
-                          </button>
-                        ))}
-                      </div>
-                    </Field>
-                  ) : null}
-                </div>
-              </details>
-
-              {/* ---- metadata ---- */}
-              <details className="rx-acc">
-                <summary>
-                  Metadata
-                  <span className="rx-acc-sub">
-                    {metadataMode === "device" ? "Device" : "Minimal"}
-                  </span>
-                  <ChevronDown className="rx-acc-chev" size={15} aria-hidden="true" />
-                </summary>
-                <div className="rx-acc-body">
-                  <Field
-                    label="Metadata"
-                    hint={
-                      metadataMode === "device"
-                        ? "Writes a full device-style tag block."
-                        : "Writes the minimum viable tag set."
-                    }
-                  >
-                    <div className="rx-seg" role="radiogroup" aria-label="Metadata">
-                      {(["device", "minimal"] as MetadataMode[]).map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          role="radio"
-                          aria-checked={metadataMode === value}
-                          className={metadataMode === value ? "is-active" : ""}
-                          disabled={running || !runsRemint}
-                          onClick={() => setMetadataMode(value)}
-                        >
-                          {value === "device" ? "Device" : "Minimal"}
-                        </button>
-                      ))}
-                    </div>
-                  </Field>
-
-                  <label className="rx-switch">
-                    <input
-                      type="checkbox"
-                      checked={deviceExif}
-                      disabled={running || !runsRemint}
-                      onChange={(event) => setDeviceExif(event.target.checked)}
-                    />
-                    <span className="rx-switch-text">
-                      <b>iPhone EXIF</b>
-                      <span className="rx-hint">
-                        Stamp an iPhone capture profile on the output.
-                      </span>
-                    </span>
-                    <span className="rx-switch-track">
-                      <span className="rx-switch-knob" />
-                    </span>
-                  </label>
-                </div>
-              </details>
-
-              {/* ---- pro tuning ---- */}
-              <details className="rx-acc">
-                <summary>
-                  Pro tuning
-                  <span className="rx-acc-sub">
-                    {tuneDither === 1 && tuneSmooth === 1 && tuneSharpen === 1
-                      ? "preset defaults"
-                      : "tuned"}
-                  </span>
-                  <ChevronDown className="rx-acc-chev" size={15} aria-hidden="true" />
-                </summary>
-                <div className="rx-acc-body">
-                  <p className="rx-hint">
-                    Multipliers over the preset's calibrated gains — 1.00× is the preset. The worker
-                    clamps each value to its own accepted range.
-                  </p>
-                  <TuneRow
-                    label="Dither"
-                    value={tuneDither}
-                    min={0}
-                    max={1.5}
-                    disabled={running || !runsFinish}
-                    onChange={setTuneDither}
-                  />
-                  <TuneRow
-                    label="Smoothing"
-                    value={tuneSmooth}
-                    min={0.5}
-                    max={1.5}
-                    disabled={running || !runsFinish}
-                    onChange={setTuneSmooth}
-                  />
-                  <TuneRow
-                    label="Sharpen"
-                    value={tuneSharpen}
-                    min={0}
-                    max={1.5}
-                    disabled={running || !runsFinish}
-                    onChange={setTuneSharpen}
-                  />
-
-                  <Field
-                    label="Exact enlargement"
-                    detail={qfScale <= 1.001 ? "native" : `${qfScale.toFixed(2)}×`}
-                    hint="The finisher accepts any factor from 1.00 to 2.00."
-                  >
-                    <input
-                      className="rx-range"
-                      type="range"
-                      min={1}
-                      max={2}
-                      step={0.05}
-                      value={qfScale}
-                      disabled={running || !runsFinish}
-                      aria-label="Exact enlargement factor"
-                      onChange={(event) => setQfScale(Number(event.target.value))}
-                    />
-                    <div className="rx-range-ends">
-                      <span>Native (quality floor)</span>
-                      <span>2× (~2500px)</span>
-                    </div>
-                  </Field>
-                </div>
-              </details>
-
-              {/* ---- naming ---- */}
-              <details className="rx-acc">
-                <summary>
-                  Naming
-                  <span className="rx-acc-sub">{nameStyle}</span>
-                  <ChevronDown className="rx-acc-chev" size={15} aria-hidden="true" />
-                </summary>
-                <div className="rx-acc-body">
-                  <Field
-                    label="Filename"
-                    hint="The settings-code encodes every option that produced the image, so a filename can be traced back to its exact configuration."
-                  >
-                    <div className="rx-seg is-stack" role="radiogroup" aria-label="Filename style">
-                      {(["settings-code", "photo-style", "original", "custom"] as NameStyle[]).map(
-                        (value) => (
-                          <button
-                            key={value}
-                            type="button"
-                            role="radio"
-                            aria-checked={nameStyle === value}
-                            className={nameStyle === value ? "is-active" : ""}
-                            disabled={running}
-                            onClick={() => setNameStyle(value)}
-                          >
-                            {value === "settings-code"
-                              ? "Settings code"
-                              : value === "photo-style"
-                                ? "Photo style"
-                                : value === "original"
-                                  ? "Original name"
-                                  : "Custom"}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </Field>
-
-                  {nameStyle === "custom" ? (
-                    <input
-                      className="rx-input"
-                      type="text"
-                      placeholder="my-shoot"
-                      value={nameCustom}
-                      disabled={running}
-                      onChange={(event) => setNameCustom(event.target.value)}
-                    />
-                  ) : null}
-
-                  <div className="rx-code">
-                    <code>{settingsCode}</code>
-                  </div>
-                </div>
-              </details>
-
-              {/* ---- account ---- */}
-              <details className="rx-acc" open={showAuth}>
-                <summary>
-                  Account
-                  <span className="rx-acc-sub">{userEmail || "not signed in"}</span>
-                  <ChevronDown className="rx-acc-chev" size={15} aria-hidden="true" />
-                </summary>
-                <div className="rx-acc-body">
-                  <div className="rx-row">
-                    <span>Credits</span>
-                    <b>{credits.privacyCredits}</b>
-                  </div>
-                  <div className="rx-row">
-                    <span>Re-Mint Max</span>
-                    <b>{credits.deepCleanCredits}</b>
-                  </div>
-
-                  {!hasSupabaseConfig ? (
-                    <p className="rx-hint">
-                      Supabase is not configured in this build — credits run in demo mode and jobs
-                      cannot be dispatched.
-                    </p>
-                  ) : showAuth ? (
-                    <>
-                      {authMode !== "update" ? (
-                        <div className="rx-seg">
-                          <button
-                            type="button"
-                            className={authMode === "signin" ? "is-active" : ""}
-                            onClick={() => {
-                              setAuthMode("signin");
-                              setAuthStatus("");
-                            }}
-                          >
-                            Sign in
-                          </button>
-                          <button
-                            type="button"
-                            className={authMode === "signup" ? "is-active" : ""}
-                            onClick={() => {
-                              setAuthMode("signup");
-                              setAuthStatus("");
-                            }}
-                          >
-                            Sign up
-                          </button>
-                        </div>
-                      ) : null}
-                      {authMode !== "update" ? (
-                        <div className="rx-input-icon">
-                          <Mail size={14} aria-hidden="true" />
-                          <input
-                            className="rx-input"
-                            type="email"
-                            autoComplete="email"
-                            placeholder="you@email.com"
-                            value={authEmail}
-                            onChange={(event) => setAuthEmail(event.target.value)}
-                          />
-                        </div>
-                      ) : null}
-                      {authMode !== "reset" ? (
-                        <div className="rx-input-icon">
-                          <KeyRound size={14} aria-hidden="true" />
-                          <input
-                            className="rx-input"
-                            type="password"
-                            autoComplete={
-                              authMode === "signin" ? "current-password" : "new-password"
-                            }
-                            placeholder={authMode === "update" ? "New password" : "Password"}
-                            value={authPassword}
-                            onChange={(event) => setAuthPassword(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") void submitAuth();
-                            }}
-                          />
-                        </div>
-                      ) : null}
-                      <button
-                        className="rx-btn rx-btn-primary rx-btn-block"
-                        type="button"
-                        onClick={submitAuth}
-                      >
-                        {authMode === "signin"
-                          ? "Sign in"
-                          : authMode === "signup"
-                            ? "Create account"
-                            : authMode === "reset"
-                              ? "Send reset link"
-                              : "Update password"}
-                      </button>
-                      {authMode === "signin" ? (
-                        <button
-                          className="rx-link"
-                          type="button"
-                          onClick={() => {
-                            setAuthMode("reset");
-                            setAuthStatus("");
-                          }}
-                        >
-                          Forgot password?
-                        </button>
-                      ) : authMode === "reset" ? (
-                        <button
-                          className="rx-link"
-                          type="button"
-                          onClick={() => {
-                            setAuthMode("signin");
-                            setAuthStatus("");
-                          }}
-                        >
-                          Back to sign in
-                        </button>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      {isAdmin ? <span className="rx-chip is-on">Developer admin</span> : null}
-                      <button className="rx-btn rx-btn-block" type="button" onClick={signOut}>
-                        <LogOut size={14} aria-hidden="true" /> Sign out
-                      </button>
-                    </>
-                  )}
-                  {authStatus ? <p className="rx-hint">{authStatus}</p> : null}
-                </div>
-              </details>
-            </div>
-          </aside>
-        </>
-      ) : null}
     </div>
   );
 }
@@ -1853,56 +2030,158 @@ export default function RemintApp() {
    Sub-components
    ============================================================ */
 
-function Field({
-  label,
-  detail,
-  hint,
-  children
+function StageFrame({
+  originalUrl,
+  resultUrl,
+  compare,
+  splitPos,
+  onSplit,
+  busy,
+  busyLabel
 }: {
-  label: string;
-  detail?: string;
-  hint?: string;
-  children: ReactNode;
+  originalUrl: string;
+  resultUrl: string;
+  compare: CompareMode;
+  splitPos: number;
+  onSplit: (value: number) => void;
+  busy: boolean;
+  busyLabel: string;
 }) {
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const draggingRef = useRef(false);
+
+  function positionFrom(clientX: number) {
+    const box = frameRef.current?.getBoundingClientRect();
+    if (!box || box.width === 0) return;
+    onSplit(Math.max(0, Math.min(100, ((clientX - box.left) / box.width) * 100)));
+  }
+
+  const split = Boolean(resultUrl) && compare === "split";
+  const showResult = Boolean(resultUrl) && compare !== "original";
+
   return (
-    <div className="rx-field">
-      <span className="rx-label">
-        {label}
-        {detail ? <em>{detail}</em> : null}
-      </span>
-      {children}
-      {hint ? <p className="rx-hint">{hint}</p> : null}
+    <div
+      ref={frameRef}
+      className={`rx-frame${split ? " rx-compare" : ""}`}
+      onPointerDown={
+        split
+          ? (event) => {
+              draggingRef.current = true;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              positionFrom(event.clientX);
+            }
+          : undefined
+      }
+      onPointerMove={
+        split
+          ? (event) => {
+              if (draggingRef.current) positionFrom(event.clientX);
+            }
+          : undefined
+      }
+      onPointerUp={
+        split
+          ? (event) => {
+              draggingRef.current = false;
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+          : undefined
+      }
+    >
+      {/* Base layer: the original when splitting or showing the original,
+          otherwise the result on its own (so native size is honoured). */}
+      <img
+        src={split || !showResult ? originalUrl : resultUrl}
+        alt={split || !showResult ? "Original image" : "Processed result"}
+        draggable={false}
+      />
+
+      {split ? (
+        <>
+          <div className="rx-split-top" style={{ clipPath: `inset(0 0 0 ${splitPos}%)` }}>
+            <img src={resultUrl} alt="Processed result" draggable={false} />
+          </div>
+          <div className="rx-split-handle" style={{ left: `${splitPos}%` }}>
+            <span className="rx-split-knob">
+              <GripVertical size={14} aria-hidden="true" />
+            </span>
+          </div>
+          <span className="rx-split-tag is-left">Original</span>
+          <span className="rx-split-tag is-right">Processed</span>
+        </>
+      ) : null}
+
+      {busy ? (
+        <div className="rx-veil">
+          <Loader2 className="rx-spin" size={26} aria-hidden="true" />
+          <span>{busyLabel}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
 
+function ModeCard({
+  active,
+  disabled,
+  title,
+  detail,
+  cost,
+  onClick
+}: {
+  active: boolean;
+  disabled: boolean;
+  title: string;
+  detail: string;
+  cost: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      className={`rx-mode${active ? " is-active" : ""}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className="rx-mode-radio" aria-hidden="true" />
+      <span className="rx-mode-text">
+        <b>{title}</b>
+        <span>{detail}</span>
+      </span>
+      <span className="rx-cost">{cost} cr</span>
+    </button>
+  );
+}
+
 function TuneRow({
-  label,
-  value,
+  name,
   min,
   max,
+  value,
   disabled,
   onChange
 }: {
-  label: string;
-  value: number;
+  name: string;
   min: number;
   max: number;
+  value: number;
   disabled: boolean;
   onChange: (next: number) => void;
 }) {
   return (
     <div className="rx-tune">
-      <span>{label}</span>
+      <span className="rx-tune-name">{name}</span>
       <input
         className="rx-range"
         type="range"
+        aria-label={name}
         min={min}
         max={max}
         step={0.05}
         value={value}
         disabled={disabled}
-        aria-label={label}
         onChange={(event) => onChange(Number(event.target.value))}
       />
       <span className={`rx-tune-val${value !== 1 ? " is-tuned" : ""}`}>{value.toFixed(2)}×</span>
@@ -2006,7 +2285,8 @@ function readQfReport(engine: Record<string, unknown> | undefined): QfView | nul
   // The sequence nests the finisher report under `quality_finish`; a
   // standalone finish puts it at the engine root. Check both rather than
   // trusting the currently-selected mode — the job may have run under a
-  // different one.
+  // different one. The nested slot is always the finisher's, so accept it
+  // even in its short "no candidate applied" form, which carries no `mode`.
   const nested = engine.quality_finish;
   const raw = isRecord(nested) ? nested : isQfShape(engine) ? engine : undefined;
   if (!raw) return null;
