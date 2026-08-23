@@ -2,17 +2,17 @@
    A cleaner evolution of the proven CMint workbench: queue, viewer, controls. */
 
 .remint {
-  --rx-page: #f3f7f6;
+  --rx-page: #f3f8fb;
   --rx-pane: #ffffff;
-  --rx-pane-soft: #f6f9f8;
-  --rx-sunken: #eaf0ee;
-  --rx-canvas: #edf2f0;
-  --rx-line: #dfe8e5;
-  --rx-line-soft: #eaf0ee;
-  --rx-line-strong: #cbd9d4;
-  --rx-text: #0b1814;
-  --rx-muted: #61716b;
-  --rx-faint: #8a9994;
+  --rx-pane-soft: #f5f9fc;
+  --rx-sunken: #eaf2f7;
+  --rx-canvas: #edf4f8;
+  --rx-line: #dce8ef;
+  --rx-line-soft: #e9f1f5;
+  --rx-line-strong: #c5d8e3;
+  --rx-text: #0c1921;
+  --rx-muted: #5f707b;
+  --rx-faint: #8798a2;
   --rx-blue: #89cff0;
   --rx-blue-deep: #318fbd;
   --rx-blue-ink: #062432;
@@ -25,8 +25,8 @@
   --rx-danger-soft: rgba(202, 68, 59, 0.1);
   --rx-warning: #9d6819;
   --rx-warning-soft: rgba(184, 120, 24, 0.11);
-  --rx-shadow: 0 1px 2px rgba(8, 24, 19, 0.05), 0 18px 44px -32px rgba(8, 24, 19, 0.32);
-  --rx-shadow-pop: -24px 0 74px -30px rgba(8, 24, 19, 0.44);
+  --rx-shadow: 0 1px 2px rgba(9, 34, 48, 0.05), 0 18px 44px -32px rgba(9, 34, 48, 0.3);
+  --rx-shadow-pop: -24px 0 74px -30px rgba(7, 27, 39, 0.42);
   --rx-top: 54px;
   min-height: 100dvh;
   color: var(--rx-text);
@@ -41,17 +41,17 @@
 }
 
 html[data-theme="dark"] .remint {
-  --rx-page: #07100d;
-  --rx-pane: #0d1714;
-  --rx-pane-soft: #121e1a;
-  --rx-sunken: #07100d;
-  --rx-canvas: #050a08;
-  --rx-line: #1c2925;
-  --rx-line-soft: #15211d;
-  --rx-line-strong: #2b3b36;
-  --rx-text: #eaf5f1;
-  --rx-muted: #93a59f;
-  --rx-faint: #64766f;
+  --rx-page: #071118;
+  --rx-pane: #0c1820;
+  --rx-pane-soft: #11212b;
+  --rx-sunken: #071119;
+  --rx-canvas: #050b10;
+  --rx-line: #1a2c37;
+  --rx-line-soft: #14242d;
+  --rx-line-strong: #2a414e;
+  --rx-text: #edf6fb;
+  --rx-muted: #96aab5;
+  --rx-faint: #657985;
   --rx-blue: #89cff0;
   --rx-blue-deep: #9bdaf7;
   --rx-blue-ink: #061820;
@@ -73,12 +73,12 @@ body:has(.remint) {
   min-height: 100dvh;
   margin: 0;
   overflow: hidden;
-  background: #f3f7f6;
+  background: #f3f8fb;
   background-image: none;
 }
 
 html[data-theme="dark"] body:has(.remint) {
-  background: #07100d;
+  background: #071118;
   background-image: none;
 }
 
@@ -213,8 +213,8 @@ html[data-theme="dark"] body:has(.remint) {
 }
 
 .rx-pipeline-chain > span:last-child.is-active {
-  color: var(--rx-mint);
-  background: var(--rx-mint-soft);
+  color: var(--rx-blue-deep);
+  background: var(--rx-blue-soft);
 }
 
 .rx-pipeline-chain > svg {
@@ -244,9 +244,9 @@ html[data-theme="dark"] body:has(.remint) {
 }
 
 .rx-proven.is-active {
-  border-color: var(--rx-mint-line);
-  color: var(--rx-mint);
-  background: var(--rx-mint-soft);
+  border-color: var(--rx-blue-line);
+  color: var(--rx-blue-deep);
+  background: var(--rx-blue-soft);
 }
 
 .rx-icon-button {
@@ -492,10 +492,10 @@ html[data-theme="dark"] body:has(.remint) {
   border-right: 1px solid var(--rx-line);
   background-color: var(--rx-canvas);
   background-image:
-    linear-gradient(45deg, rgba(87, 112, 104, 0.045) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(87, 112, 104, 0.045) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(87, 112, 104, 0.045) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(87, 112, 104, 0.045) 75%);
+    linear-gradient(45deg, rgba(75, 105, 122, 0.05) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(75, 105, 122, 0.05) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(75, 105, 122, 0.05) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(75, 105, 122, 0.05) 75%);
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
   background-size: 16px 16px;
 }
@@ -606,7 +606,7 @@ html[data-theme="dark"] body:has(.remint) {
 .rx-segmented button.is-active {
   color: var(--rx-text);
   background: var(--rx-pane);
-  box-shadow: 0 1px 4px rgba(8, 24, 19, 0.14);
+  box-shadow: 0 1px 4px rgba(8, 28, 39, 0.14);
 }
 
 .rx-canvas-image {
@@ -624,7 +624,7 @@ html[data-theme="dark"] body:has(.remint) {
   height: 100%;
   min-height: 0;
   object-fit: contain;
-  filter: drop-shadow(0 18px 34px rgba(6, 19, 14, 0.14));
+  filter: drop-shadow(0 18px 34px rgba(5, 20, 29, 0.16));
 }
 
 .rx-canvas-veil,
@@ -1043,12 +1043,12 @@ html[data-theme="dark"] body:has(.remint) {
   height: 19px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 5px rgba(8, 24, 19, 0.28);
+  box-shadow: 0 1px 5px rgba(8, 28, 39, 0.28);
   transition: transform 160ms ease;
 }
 
 .rx-switch-row input:checked + .rx-switch {
-  background: var(--rx-mint);
+  background: var(--rx-blue);
   box-shadow: none;
 }
 
@@ -1405,14 +1405,14 @@ html[data-theme="dark"] body:has(.remint) {
   display: flex;
   justify-content: flex-end;
   visibility: hidden;
-  background: rgba(3, 13, 10, 0);
+  background: rgba(4, 13, 19, 0);
   pointer-events: none;
   transition: background 180ms ease, visibility 180ms ease;
 }
 
 .rx-drawer-shade.is-open {
   visibility: visible;
-  background: rgba(3, 13, 10, 0.3);
+  background: rgba(4, 13, 19, 0.3);
   pointer-events: auto;
 }
 
@@ -1581,7 +1581,7 @@ html[data-theme="dark"] .rx-drawer-shade.is-open {
   border: 1px solid var(--rx-line-strong);
   border-radius: 50%;
   background: var(--rx-pane);
-  box-shadow: 0 2px 5px rgba(8, 24, 19, 0.18);
+  box-shadow: 0 2px 5px rgba(8, 28, 39, 0.18);
   appearance: none;
 }
 
@@ -1635,10 +1635,10 @@ html[data-theme="dark"] .rx-drawer-shade.is-open {
   align-items: center;
   gap: 8px;
   padding: 9px 10px;
-  border: 1px solid var(--rx-mint-line);
+  border: 1px solid var(--rx-blue-line);
   border-radius: 9px;
-  color: var(--rx-mint);
-  background: var(--rx-mint-soft);
+  color: var(--rx-blue-deep);
+  background: var(--rx-blue-soft);
 }
 
 .rx-credit-card > span {
