@@ -144,7 +144,8 @@ equals this tuple (same predicate idea as cmint's `wavlActive`). Provide a
   `{ mode, remint: { washModel, strength, engineMode }, finish: { preset,
   scale, finishMode, overrides, materialClean } }`. Output format
   `SEQ-STD-N-M1-<12char>` (preset codes CON/STD/STR/FID, scale `N` when null,
-  `M0` when wall off).
+  `M0` when wall off). EXCEPTION: exact Config A emits `SEQ-CFA-<12char>`
+  (CFA is reserved for the exact all-clear tuple and nothing else).
 - Default `nameStyle: "settings-code"`. Show the live preview chip
   (recomputed from current on-screen settings). Keep `photo-style`, `original`,
   `custom` available in the hamburger (expert) menu.

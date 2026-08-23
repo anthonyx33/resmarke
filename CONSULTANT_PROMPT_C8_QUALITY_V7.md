@@ -45,8 +45,10 @@ changes — V7 — that visibly reduce grain/pixelation on Config A outputs at
   `{preset, scale, overrides}` only). Until fixed, the M1 vs M0 wall toggle
   cannot be A/B tested through the UI. Assume it is fixed by the time the
   matrix below runs; if not, the M1/M0 rows are invalid.
-- Naming: settings-code filenames (`SEQ-STR-N-M1-<hash>.jpg`) are the
-  DEFAULT, so every split-test export is self-describing.
+- Naming: settings-code filenames are the DEFAULT, so every split-test
+  export is self-describing. Exact Config A emits `SEQ-CFA-<hash>.jpg`
+  (CFA = guaranteed all-clear tuple); any other setting emits
+  `SEQ-{CON|STD|STR|FID}-{scale}-{M0|M1}-<hash>.jpg`.
 - New `/remint` console is being built on Config A defaults — the product
   shape is locked: **Config A fixed default + the three pro-tuning
   multipliers + wall toggle**, everything else hidden.
@@ -111,7 +113,8 @@ Field observations (raw, un-interpreted):
 R0 (mandatory, replaces the old R0): the SAME 10 SOLVARIA images at TRUE
 Config A (deep + STRONG + smoothing 1.25× + wall ON + native) PLUS the
 ORIGINAL files graded on the same two vendors. Verify each delivered
-filename reads `SEQ-STR-N-M1-...` (STR, not STD) and confirm the worker
+filename reads `SEQ-CFA-...` (CFA = exact Config A; STD in the name means
+non-Config-A settings were dispatched) and confirm the worker
 report's `quality_finish.preset = "strong"` before grading. Without OG
 baselines we cannot tell whether remint hurts or helps net detection on
 this class.

@@ -72,8 +72,38 @@ export function settingsShortHash(text: string, chars = 12): string {
   return out;
 }
 
+/** Exact Config A detector: the proven all-clear tuple (deep + STRONG +
+ * smoothing 1.25x, wall ON, native, adaptive routing, defaults elsewhere).
+ * Mirrors the WAVL-v1 predicate in the consoles. iphoneExif / metadataMode
+ * are deliberately excluded — the Config A button does not set them. */
+export function isConfigA(input: SettingsCodeInput): boolean {
+  const r = input.remint;
+  const f = input.finish;
+  const o = f.overrides ?? {};
+  const near = (x: number | undefined, target: number) =>
+    typeof x === "number" && Math.abs(x - target) < 1e-6;
+  return (
+    input.mode === "sequence" &&
+    r.washModel === "qwen" &&
+    r.strength === "deep" &&
+    r.engineMode === "adaptive" &&
+    f.preset === "strong" &&
+    f.scale == null &&
+    f.finishMode === "adaptive" &&
+    f.materialClean !== false &&
+    near(o.dither, 1) &&
+    near(o.smoothness, 1.25) &&
+    near(o.sharpen, 1)
+  );
+}
+
 export function buildSettingsCode(input: SettingsCodeInput): string {
   const m = { sequence: "SEQ", remint: "REM", finish: "QF" }[input.mode] ?? "SEQ";
+  // Exact Config A gets the unmistakable CFA marker — no other setting emits
+  // it, so a CFA filename is a guarantee the proven all-clear tuple ran.
+  if (isConfigA(input)) {
+    return `${m}-CFA-${settingsShortHash(canonicalJson(input), 12)}`;
+  }
   const p =
     { conservative: "CON", standard: "STD", strong: "STR", fidelity: "FID" }[
       input.finish.preset ?? "standard"
