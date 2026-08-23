@@ -51,11 +51,56 @@ changes — V7 — that visibly reduce grain/pixelation on Config A outputs at
   shape is locked: **Config A fixed default + the three pro-tuning
   multipliers + wall toggle**, everything else hidden.
 
+## Real-world field data — SOLVARIA batch (Aug 23–24, 10 remint images, 2 graders)
+
+**Read these caveats FIRST — they change what the data means:**
+
+1. Every delivered filename is `SEQ-STD-N-M1-...` → restoration = **STANDARD**,
+   NOT Config A's STRONG. The single biggest lever ever measured in this
+   project (STRONG vs STD on brick: 6% vs 55.2%) was NOT exercised. Treat
+   every row below as STD field data, not Config A validation.
+2. The ORIGINAL images were not graded — net effect vs source is unknown.
+3. Content = real SOLVARIA outdoor-lighting product photos (twilight sky,
+   hard shadows, specular highlights, glowing fixtures). This is the beta
+   content class and it is HARDER than the rendered-wall set.
+
+| # | AI-gen % (G1) | dominant source (G1) | Deepfake AI prob (G2) | G2 verdict |
+|---|---|---|---|---|
+| 10 | 99.6 | wan 94.7 | 97% | Synthetic HIGH |
+| 9 | 23.4 | sd 5.6 / flux 4.7 | 38% | Real MED |
+| 8 | 99.3 | flux 78.8 / wan 17.4 | 96% | Synthetic HIGH |
+| 7 | 97.1 | flux 50.4 / wan 39.1 | 28% | Real MED |
+| 6 | 0.5 | firefly 0.7 | 13% | Real HIGH |
+| 5 | 96.0 | flux 97.1 | 75% | Likely Synthetic MED |
+| 4 | 97.6 | wan 97.5 | 3% | Real HIGH |
+| 3 | 15.9 | flux 3.8 | 0% | Real LOW |
+| 2 | 13.1 | flux 24.0 | 17% | Real HIGH |
+| 1 | 2.4 | flux 0.9 | 22% | Real MED |
+
+Field observations (raw, un-interpreted):
+
+- Only 2/10 approach clear on G1 (0.5%, 2.4%); 7/10 fail G1 hard.
+- WAN-dominant rows fail G1 hard but SPLIT on G2: #10 wan 94.7 → G2 97%
+  Synthetic; #4 wan 97.5 → G2 3% Real HIGH. A WAN-family residual
+  fingerprint after the stage-one Qwen wash is now a live hypothesis.
+- The flux-dominant row (#5, flux 97.1) fails BOTH graders (96% / 75%).
+- Grader anti-correlation persists at real-world extremes (#4: 97.6% vs 3%).
+- One near-clear (#6) is firefly-dominant (0.7%) — the only row where the
+  wash appears to have fully de-stamped.
+
 ## Split-test matrix — run these FIRST, fill in the table, then answer
 
+## Revised protocol (runs BEFORE any V7 design decision)
+
+R0 (mandatory, replaces the old R0): the SAME 10 SOLVARIA images at TRUE
+Config A (deep + STRONG + smoothing 1.25× + wall ON + native) PLUS the
+ORIGINAL files graded on the same two vendors. Without OG baselines we
+cannot tell whether remint hurts or helps net detection on this class.
+Then the original R1–R5 rows on the rendered-wall set + the SOLVARIA
+batch. Fill in the matrix below with BOTH data sets.
+
 Protocol: 3 known images (1 dusk wall+house, 2 pale wall beams, 3 lit
-terracotta brick) + **one real-photo control** (non-rendered, mixed
-foliage/product — the content class the beta will actually receive).
+terracotta brick) + the SOLVARIA 10 as the real-photo control set.
 Every row: 2 independent graders, same scoring as before, PLUS a human
 100%-zoom quality rubric: grain visibility, edge crispness, banding,
 chroma blotch, "premium or not" 1–5.
@@ -108,6 +153,15 @@ live worker before any V7 build.
 7. Top five concrete changes ranked, each with its trade-off and the
    minimal experiment to validate it. Flag the single largest expected
    visible win for the "pixelated/grainy" complaint.
+8. NEW (field data): the stage-one Qwen wash leaves a WAN-family residual
+   on night/twilight product photos (rows #4, #10 above). Is this a real
+   fingerprint, and can the FINISHER suppress it (structure-preserving,
+   non-generative), or does it require a stage-one debate? Give the exact
+   detection heuristic and what it would target.
+9. NEW (field data): design the night-scene class treatment — twilight sky
+   gradients, hard speculars on lit fixtures, glowing warm sources. What
+   must NOT be smoothed (beam edges, light falloff) vs what may (sky
+   gradient, dark fence), with QC gates.
 
 ## Constraints (frozen unless you argue with data)
 
