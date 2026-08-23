@@ -53,12 +53,26 @@ changes — V7 — that visibly reduce grain/pixelation on Config A outputs at
 
 ## Real-world field data — SOLVARIA batch (Aug 23–24, 10 remint images, 2 graders)
 
-**Read these caveats FIRST — they change what the data means:**
+**Decoded ground truth (hash `kqx5y3fezqbt` reversed against the canonical
+settings space — one unique match):**
 
-1. Every delivered filename is `SEQ-STD-N-M1-...` → restoration = **STANDARD**,
-   NOT Config A's STRONG. The single biggest lever ever measured in this
-   project (STRONG vs STD on brick: 6% vs 55.2%) was NOT exercised. Treat
-   every row below as STD field data, not Config A validation.
+```
+mode: sequence
+remint: engineMode adaptive · iphoneExif true · metadataMode device ·
+        strength BALANCED · washModel qwen
+finish: finishMode adaptive · materialClean true · preset STANDARD ·
+        scale null (native) · overrides dither 1.0 / smoothness 1.0 / sharpen 1.0
+```
+
+→ This batch ran the PRISTINE DEFAULT state — equivalent to round E
+(strength balanced, restoration standard, defaults), the configuration
+already known to be the weakest on rendered walls (brick 90.9%/96%).
+**NOT ONE Config A lever was exercised:** deep, STRONG, and smoothing
+1.25× were all absent. Treat every row below as round-E-equivalent field
+data on the harder real-photo class — NOT Config A validation.
+
+Other caveats:
+
 2. The ORIGINAL images were not graded — net effect vs source is unknown.
 3. Content = real SOLVARIA outdoor-lighting product photos (twilight sky,
    hard shadows, specular highlights, glowing fixtures). This is the beta
@@ -79,7 +93,9 @@ changes — V7 — that visibly reduce grain/pixelation on Config A outputs at
 
 Field observations (raw, un-interpreted):
 
-- Only 2/10 approach clear on G1 (0.5%, 2.4%); 7/10 fail G1 hard.
+- Only 2/10 approach clear on G1 (0.5%, 2.4%); 7/10 fail G1 hard — all at
+  the DEFAULT settings above. This is the baseline the beta would ship if
+  the Config A default were not applied; it is NOT a Config A measurement.
 - WAN-dominant rows fail G1 hard but SPLIT on G2: #10 wan 94.7 → G2 97%
   Synthetic; #4 wan 97.5 → G2 3% Real HIGH. A WAN-family residual
   fingerprint after the stage-one Qwen wash is now a live hypothesis.
@@ -94,8 +110,11 @@ Field observations (raw, un-interpreted):
 
 R0 (mandatory, replaces the old R0): the SAME 10 SOLVARIA images at TRUE
 Config A (deep + STRONG + smoothing 1.25× + wall ON + native) PLUS the
-ORIGINAL files graded on the same two vendors. Without OG baselines we
-cannot tell whether remint hurts or helps net detection on this class.
+ORIGINAL files graded on the same two vendors. Verify each delivered
+filename reads `SEQ-STR-N-M1-...` (STR, not STD) and confirm the worker
+report's `quality_finish.preset = "strong"` before grading. Without OG
+baselines we cannot tell whether remint hurts or helps net detection on
+this class.
 Then the original R1–R5 rows on the rendered-wall set + the SOLVARIA
 batch. Fill in the matrix below with BOTH data sets.
 
