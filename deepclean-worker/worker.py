@@ -455,6 +455,7 @@ def handler(job):
                             settings=cand_settings,
                             seed_extra=f"{job_id}:{input_sha}",
                             creator_id=creator_id,
+                            reference=input_path,
                         )
                         if not rep.get("applied"):
                             continue

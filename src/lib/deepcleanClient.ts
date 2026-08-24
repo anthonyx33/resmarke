@@ -89,6 +89,9 @@ export type DsRemintV8_8Options = {
   strength: "light" | "balanced" | "deep";
   iphoneExif: boolean;
   metadataMode?: "device" | "minimal";
+  /** Stage-one codec (Config 2B lever). Defaults: 92 / 4:2:0. */
+  jpegQuality?: number;
+  jpegSubsampling?: "4:2:0" | "4:2:2" | "4:4:4";
 };
 
 export type QualityFinishOverrides = {
@@ -275,6 +278,8 @@ export async function createDeepCleanJob(params: {
             engine_mode: params.dsRemintV88.engineMode,
             wash_model: params.dsRemintV88.washModel,
             strength: params.dsRemintV88.strength,
+            jpeg_quality: params.dsRemintV88.jpegQuality,
+            jpeg_subsampling: params.dsRemintV88.jpegSubsampling,
             iphone_exif: params.dsRemintV88.iphoneExif,
             metadata_mode: params.dsRemintV88.metadataMode
           }
@@ -284,6 +289,8 @@ export async function createDeepCleanJob(params: {
             engine_mode: params.dsRemintV89.engineMode,
             wash_model: params.dsRemintV89.washModel,
             strength: params.dsRemintV89.strength,
+            jpeg_quality: params.dsRemintV89.jpegQuality,
+            jpeg_subsampling: params.dsRemintV89.jpegSubsampling,
             iphone_exif: params.dsRemintV89.iphoneExif,
             metadata_mode: params.dsRemintV89.metadataMode
           }
@@ -292,6 +299,7 @@ export async function createDeepCleanJob(params: {
         ? {
             preset: params.qualityFinish.preset,
             scale: params.qualityFinish.scale,
+            material_clean: params.qualityFinish.materialClean,
             overrides: params.qualityFinish.overrides
           }
         : undefined,
@@ -301,6 +309,8 @@ export async function createDeepCleanJob(params: {
               engine_mode: params.dsRemintV89Hd.remint.engineMode,
               wash_model: params.dsRemintV89Hd.remint.washModel,
               strength: params.dsRemintV89Hd.remint.strength,
+              jpeg_quality: params.dsRemintV89Hd.remint.jpegQuality,
+              jpeg_subsampling: params.dsRemintV89Hd.remint.jpegSubsampling,
               iphone_exif: params.dsRemintV89Hd.remint.iphoneExif,
               metadata_mode: params.dsRemintV89Hd.remint.metadataMode
             },
@@ -308,6 +318,7 @@ export async function createDeepCleanJob(params: {
               preset: params.dsRemintV89Hd.finish.preset,
               scale: params.dsRemintV89Hd.finish.scale,
               finish_mode: params.dsRemintV89Hd.finishMode,
+              material_clean: params.dsRemintV89Hd.finish.materialClean,
               overrides: params.dsRemintV89Hd.finish.overrides
             }
           }

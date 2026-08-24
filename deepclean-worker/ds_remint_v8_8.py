@@ -18,6 +18,7 @@ light at delivery. No neural restorer in the default path (its re-stamp never
 paid -- review confirmed).
 """
 
+import os
 import time
 from pathlib import Path
 
@@ -39,6 +40,24 @@ from ds_remint_v7 import (
 )
 from max_cx_remint import _histogram_match
 import iphone_exif
+
+
+# V10 checkpoint instrumentation (diagnostic-only, default OFF). Set
+# DEEPCLEAN_CHECKPOINT_DIR to export O0/O1/O2/O3 buffers for the
+# checkpoint_attribution.py tool. NO algorithm behaviour changes.
+_CKPT_DIR = os.environ.get("DEEPCLEAN_CHECKPOINT_DIR")
+
+
+def _ckpt_save(name, img):
+    if not _CKPT_DIR:
+        return
+    try:
+        os.makedirs(_CKPT_DIR, exist_ok=True)
+        Image.fromarray(np.asarray(img.convert("RGB"))).save(
+            os.path.join(_CKPT_DIR, name), format="PNG"
+        )
+    except Exception:
+        pass
 
 
 DEFAULT_SETTINGS = {
@@ -197,6 +216,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     original = Image.open(input_path).convert("RGB")
     src_long = max(original.size)
     report["source_long_edge"] = src_long
+    _ckpt_save("O0_source.png", original)
 
     adaptive = cfg["engine_mode"] == "adaptive"
     if adaptive and detector is None:
@@ -234,6 +254,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
             }
     else:
         report["layers"]["pre_wash"] = {"applied": False, "reason": "pre_regen_disabled"}
+    _ckpt_save("O1_postwash.png", base)
 
     # --- ONE resample to delivery (the lattice breaker) -----------------------
     delivery = cfg["output_target"] or min(src_long, 1250)
@@ -320,6 +341,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
             break  # least destructive that clears -> max quality
 
     final_image = chosen["image"]
+    _ckpt_save("O2_precamera.png", final_image)
 
     # --- final tone lock ------------------------------------------------------
     if cfg["color_restore"]:
@@ -352,6 +374,10 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
                                   "probe_matches_delivery": True}
 
     report["final_qc"] = _final_qc(original, output_path)
+    try:
+        _ckpt_save("O3_stage1.png", Image.open(output_path))
+    except Exception:
+        pass
     report["quality_floor_gate"] = {
         "min_ssim": cfg["min_ssim"],
         "ssim": _num(chosen["metrics"].get("ssim_luma_window11_mean")),

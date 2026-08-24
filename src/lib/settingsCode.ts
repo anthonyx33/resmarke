@@ -16,6 +16,8 @@ export interface SettingsCodeInput {
     washModel?: string;
     strength?: string;
     engineMode?: string;
+    jpegQuality?: number;
+    jpegSubsampling?: string;
   };
   finish: {
     preset?: string;
@@ -87,6 +89,8 @@ export function isConfigA(input: SettingsCodeInput): boolean {
     r.washModel === "qwen" &&
     r.strength === "deep" &&
     r.engineMode === "adaptive" &&
+    (r.jpegQuality === undefined || r.jpegQuality === 92) &&
+    (r.jpegSubsampling === undefined || r.jpegSubsampling === "4:2:0") &&
     f.preset === "strong" &&
     f.scale == null &&
     f.finishMode === "adaptive" &&
@@ -122,6 +126,32 @@ export function isConfig1A(input: SettingsCodeInput): boolean {
   );
 }
 
+/** Exact Config 2B detector: Config A with the stage-one codec moved to
+ * Q97 4:4:4 at the same lattice (the O2->O3 codec-offender A/B). Emits the
+ * SEQ-2B marker so test exports are self-describing. */
+export function isConfig2B(input: SettingsCodeInput): boolean {
+  const r = input.remint;
+  const f = input.finish;
+  const o = f.overrides ?? {};
+  const near = (x: number | undefined, target: number) =>
+    typeof x === "number" && Math.abs(x - target) < 1e-6;
+  return (
+    input.mode === "sequence" &&
+    r.washModel === "qwen" &&
+    r.strength === "deep" &&
+    r.engineMode === "adaptive" &&
+    r.jpegQuality === 97 &&
+    r.jpegSubsampling === "4:4:4" &&
+    f.preset === "strong" &&
+    f.scale == null &&
+    f.finishMode === "adaptive" &&
+    f.materialClean !== false &&
+    near(o.dither, 1) &&
+    near(o.smoothness, 1.25) &&
+    near(o.sharpen, 1)
+  );
+}
+
 export function buildSettingsCode(input: SettingsCodeInput): string {
   const m = { sequence: "SEQ", remint: "REM", finish: "QF" }[input.mode] ?? "SEQ";
   // Exact Config A gets the unmistakable CFA marker — no other setting emits
@@ -133,6 +163,11 @@ export function buildSettingsCode(input: SettingsCodeInput): string {
   // exports against Config A are self-describing.
   if (isConfig1A(input)) {
     return `${m}-1A-${settingsShortHash(canonicalJson(input), 12)}`;
+  }
+  // Config 2B: Config A with the stage-one codec moved to Q97 4:4:4 at the
+  // SAME lattice (the O2->O3 codec-offender A/B).
+  if (isConfig2B(input)) {
+    return `${m}-2B-${settingsShortHash(canonicalJson(input), 12)}`;
   }
   const p =
     { conservative: "CON", standard: "STD", strong: "STR", fidelity: "FID" }[

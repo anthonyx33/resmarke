@@ -47,6 +47,7 @@ ship the input bytes unchanged (quality never costs acceptance).
 import hashlib
 import io
 import math
+import os
 import shutil
 import time
 from pathlib import Path
@@ -178,6 +179,11 @@ ATROUS_KERNEL = np.array([1.0, 4.0, 6.0, 4.0, 1.0], dtype=np.float32) / 16.0
 # and deliberate dither disproportionately better in large smooth skies.
 FINAL_JPEG_QUALITY = 97
 FINAL_JPEG_SUBSAMPLING = 0  # 4:4:4
+
+# V10 checkpoint instrumentation (diagnostic-only, default OFF). Set
+# DEEPCLEAN_CHECKPOINT_DIR to export the O4 pre-encode buffer for the
+# checkpoint_attribution.py tool. NO algorithm behaviour changes.
+_QF_CKPT_DIR = os.environ.get("DEEPCLEAN_CHECKPOINT_DIR")
 
 # Delivery cap: passthrough shipping in the worker stays single-encode only
 # while the long edge is <= 2048, so enlargement is clamped to that ceiling.
@@ -1712,6 +1718,14 @@ def apply_quality_finish(
 
     runtime_ms = int((time.time() - started) * 1000)
     if passed:
+        if _QF_CKPT_DIR:
+            try:
+                os.makedirs(_QF_CKPT_DIR, exist_ok=True)
+                Image.fromarray(out_u8, mode="RGB").save(
+                    os.path.join(_QF_CKPT_DIR, "O4_preencode.png"), format="PNG"
+                )
+            except Exception:
+                pass
         out_img = Image.fromarray(out_u8, mode="RGB")
         save_kwargs = {
             "format": "JPEG",

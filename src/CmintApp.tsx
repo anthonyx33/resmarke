@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Download,
   Droplets,
+  Film,
   Gauge,
   GripVertical,
   Images,
@@ -165,6 +166,9 @@ export default function CmintApp() {
   const [engineMode, setEngineMode] = useState<CxRemintEngineMode>("adaptive");
   const [metadataMode, setMetadataMode] = useState<MetadataMode>("device");
   const [deviceExif, setDeviceExif] = useState(true);
+  // Stage-1 codec (Config 2B lever) — defaults are the frozen engine values.
+  const [stageJpegQ, setStageJpegQ] = useState(92);
+  const [stageJpegS, setStageJpegS] = useState<"4:2:0" | "4:2:2" | "4:4:4">("4:2:0");
   const [nameStyle, setNameStyle] = useState<NameStyle>("settings-code");
   const [nameCustom, setNameCustom] = useState("");
 
@@ -451,7 +455,12 @@ export default function CmintApp() {
       washModel,
       strength,
       iphoneExif: deviceExif,
-      metadataMode
+      metadataMode,
+      // Config 2B lever — only serialized when non-default so Config A /
+      // Config 1A settings hashes stay byte-stable with earlier exports.
+      ...(stageJpegQ !== 92 || stageJpegS !== "4:2:0"
+        ? { jpegQuality: stageJpegQ, jpegSubsampling: stageJpegS }
+        : {})
     };
   }
 
@@ -485,7 +494,9 @@ export default function CmintApp() {
     Math.abs(tuneDither - 1) < 0.001 &&
     Math.abs(tuneSharpen - 1) < 0.001 &&
     wallClean &&
-    finishMode === "adaptive";
+    finishMode === "adaptive" &&
+    stageJpegQ === 92 &&
+    stageJpegS === "4:2:0";
 
   function applyWavl() {
     setMode("sequence");
@@ -499,6 +510,8 @@ export default function CmintApp() {
     setTuneSharpen(1);
     setWallClean(true);
     setFinishMode("adaptive");
+    setStageJpegQ(92);
+    setStageJpegS("4:2:0");
   }
 
   // Config 1A — the V8 cross-wash test tuple: every Config A lever unchanged
@@ -530,6 +543,43 @@ export default function CmintApp() {
     setTuneSharpen(1);
     setWallClean(true);
     setFinishMode("adaptive");
+    setStageJpegQ(92);
+    setStageJpegS("4:2:0");
+  }
+
+  // Config 2B — stage-one codec variant: every Config A lever unchanged,
+  // the stage-1 encode moves q92 4:2:0 -> Q97 4:4:4 at the SAME lattice
+  // (targets the O2→O3 codec transition flagged by the V10 attribution plan).
+  // ONE variable moved vs Config A. Detection-coupled (V4's q97 warning).
+  const config2BActive =
+    mode === "sequence" &&
+    washModel === "qwen" &&
+    strength === "deep" &&
+    engineMode === "adaptive" &&
+    qfPreset === "strong" &&
+    qfScale <= 1.001 &&
+    Math.abs(tuneSmooth - 1.25) < 0.001 &&
+    Math.abs(tuneDither - 1) < 0.001 &&
+    Math.abs(tuneSharpen - 1) < 0.001 &&
+    wallClean &&
+    finishMode === "adaptive" &&
+    stageJpegQ === 97 &&
+    stageJpegS === "4:4:4";
+
+  function applyConfig2B() {
+    setMode("sequence");
+    setWashModel("qwen");
+    setStrength("deep");
+    setEngineMode("adaptive");
+    setQfPreset("strong");
+    setQfScale(1);
+    setTuneSmooth(1.25);
+    setTuneDither(1);
+    setTuneSharpen(1);
+    setWallClean(true);
+    setFinishMode("adaptive");
+    setStageJpegQ(97);
+    setStageJpegS("4:4:4");
   }
 
   function deliveredNameFor(position: number): {
@@ -1240,6 +1290,31 @@ export default function CmintApp() {
                     <span className="cm-toggle-pill-knob" />
                     <span className="cm-toggle-pill-label">
                       {config1AActive ? "ON" : "OFF"}
+                    </span>
+                  </span>
+                </button>
+
+                {/* Config 2B: the V8 stage-one codec test preset — toggle ON
+                    applies it, tapping again returns to Config A. */}
+                <button
+                  type="button"
+                  className={`cm-wavl cm-wavl-2b${config2BActive ? " is-active" : ""}`}
+                  disabled={running}
+                  onClick={() => (config2BActive ? applyWavl() : applyConfig2B())}
+                  title="Config 2B — stage-1 codec Q97 4:4:4 · rest identical to Config A"
+                >
+                  <span className="cm-wavl-badge">2B</span>
+                  <span className="cm-wavl-label">Config 2B · Codec test</span>
+                  <span className="cm-wavl-sub">Q97 4:4:4 stage-1 · rest = Config A</span>
+                  <span
+                    className={`cm-toggle-pill${config2BActive ? " is-on" : ""}`}
+                    role="switch"
+                    aria-checked={config2BActive}
+                    aria-label="Config 2B applied"
+                  >
+                    <span className="cm-toggle-pill-knob" />
+                    <span className="cm-toggle-pill-label">
+                      {config2BActive ? "ON" : "OFF"}
                     </span>
                   </span>
                 </button>

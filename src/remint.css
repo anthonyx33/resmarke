@@ -1549,6 +1549,59 @@ html[data-theme="dark"] .rx-toggle-pill.is-on {
   color: var(--rx-1a-hi);
 }
 
+/* ---------------- Config 2B preset — baby amber ---------------- */
+
+.remint {
+  /* Config 2B · baby amber — distinct from neon blue, Miami cyan, mint. */
+  --rx-2b: #f0a832;
+  --rx-2b-hi: #ffd98a;
+  --rx-2b-ink: #3a2604;
+  --rx-2b-soft: rgba(240, 168, 50, 0.14);
+  --rx-2b-line: rgba(240, 168, 50, 0.42);
+}
+
+html[data-theme="dark"] .remint {
+  --rx-2b: #ffc257;
+  --rx-2b-hi: #ffe3ab;
+  --rx-2b-ink: #332204;
+  --rx-2b-soft: rgba(255, 194, 87, 0.15);
+  --rx-2b-line: rgba(255, 194, 87, 0.45);
+}
+
+.rx-preset-2b {
+  border-color: var(--rx-2b-line);
+  background: linear-gradient(135deg, var(--rx-2b-soft), transparent 70%);
+}
+
+.rx-preset-2b:hover:not(:disabled) {
+  box-shadow: 0 0 0 3px var(--rx-2b-soft);
+}
+
+.rx-preset-2b.is-active {
+  border-color: var(--rx-2b);
+  box-shadow: 0 0 0 3px var(--rx-2b-soft);
+}
+
+.rx-preset-2b .rx-preset-mark {
+  color: var(--rx-2b-ink);
+  background: linear-gradient(150deg, var(--rx-2b-hi), var(--rx-2b));
+}
+
+.rx-preset-2b .rx-toggle-pill.is-on {
+  border-color: var(--rx-2b);
+  background: var(--rx-2b-soft);
+  color: var(--rx-2b-ink);
+}
+
+.rx-preset-2b .rx-toggle-pill.is-on .rx-toggle-pill-knob {
+  background: var(--rx-2b);
+  box-shadow: 0 0 0 3px rgba(240, 168, 50, 0.18);
+}
+
+html[data-theme="dark"] .rx-preset-2b .rx-toggle-pill.is-on {
+  color: var(--rx-2b-hi);
+}
+
 /* Mode picker */
 
 .rx-modes {

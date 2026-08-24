@@ -1,0 +1,245 @@
+"""checkpoint_attribution.py — V10 Priority-1 tool (zero vendor grades).
+
+Locates WHERE quality is lost in the remint chain by comparing each
+checkpoint against a GEOMETRY-MATCHED reference (the original resampled
+only to the checkpoint's lattice), so the measurements separate processing
+damage from resampling itself.
+
+Usage:
+  python checkpoint_attribution.py <checkpoint_dir> [--jsonl out.jsonl]
+
+The checkpoint dir (populated by setting DEEPCLEAN_CHECKPOINT_DIR on the
+worker) contains:
+  O0_source.png       the original
+  O1_postwash.png     post-wash, pre-camera
+  O2_precamera.png    post-camera, pre-stage-1-codec (chosen candidate)
+  O3_stage1.png       delivered stage-one file (decoded)
+  O4_preencode.png    finisher output pre-final-encode
+  O5_final.png        final delivery (decoded)
+
+For every checkpoint Oi: Ri = O0 resampled to Oi's geometry (LANCZOS).
+Metrics are computed on the full frame + fixed ROIs (center, top, left,
+bottom bands):
+  EATR        p95 Sobel magnitude ratio  edge(Oi) / edge(Ri)
+  HFTR_H0/H1/H2  band-RMS ratio (I-g0.7 / g0.7-g1.4 / g1.4-g4.0)
+  rho1, rho2  lag-1/2 autocorrelation of the smooth-region residual Oi-Ri
+  corr_len    first lag where smooth-residual autocorrelation < 0.1
+  luma_rms    smooth-region residual RMS (LSB)
+  chroma_rms  Cb/Cr residual RMS (LSB)
+
+Transition losses between consecutive checkpoints feed the dominance rule:
+  loss_i = max(|min(dEATR,0)|, |min(dHFTR,0)|)
+  dominant = loss_i >= 1.5 * second_largest  OR  loss_i >= 0.35 * total
+The dominant transition(s) are the PRIMARY offender(s) the next paid A/B
+must target. Report-only; no thresholds are production constants.
+"""
+
+import argparse
+import json
+import math
+import os
+import sys
+
+import numpy as np
+from PIL import Image, ImageFilter
+
+CHECKPOINTS = [
+    ("O0", "O0_source.png"),
+    ("O1", "O1_postwash.png"),
+    ("O2", "O2_precamera.png"),
+    ("O3", "O3_stage1.png"),
+    ("O4", "O4_preencode.png"),
+    ("O5", "O5_final.png"),
+]
+
+# Fixed ROIs (normalized boxes x0,y0,x1,y1) — hand-auditable, registration-
+# free (the chain is generative; geometry drifts slightly).
+ROIS = {
+    "full": (0.0, 0.0, 1.0, 1.0),
+    "center": (0.25, 0.25, 0.75, 0.75),
+    "top": (0.15, 0.02, 0.85, 0.35),
+    "left": (0.02, 0.25, 0.35, 0.75),
+    "bottom": (0.15, 0.65, 0.85, 0.98),
+}
+
+
+def _load(path):
+    return np.asarray(Image.open(path).convert("RGB")).astype(np.float64) / 255.0
+
+
+def _luma(a):
+    return 0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]
+
+
+def _resample_to(a, shape):
+    h, w = shape[:2]
+    img = Image.fromarray((np.clip(a, 0.0, 1.0) * 255.0).astype(np.uint8))
+    img = img.resize((w, h), Image.Resampling.LANCZOS)
+    return np.asarray(img).astype(np.float64) / 255.0
+
+
+def _gauss(y, sigma):
+    """Box-free gaussian via PIL."""
+    img = Image.fromarray((np.clip(y, 0.0, 1.0) * 255.0).astype(np.uint8))
+    img = img.filter(ImageFilter.GaussianBlur(radius=sigma))
+    return np.asarray(img).astype(np.float64) / 255.0
+
+
+def _crop(a, box):
+    h, w = a.shape[:2]
+    x0, y0, x1, y1 = box
+    return a[int(y0 * h) : int(y1 * h), int(x0 * w) : int(x1 * w)]
+
+
+def _edge_mag(y):
+    gy, gx = np.gradient(y)
+    return np.hypot(gx, gy)
+
+
+def _metrics_for(oi, ri):
+    """oi / ri must be same geometry. Returns dict of metrics."""
+    yo, yref = _luma(oi), _luma(ri)
+    eo, er = _edge_mag(yo), _edge_mag(yref)
+    eatr = float(np.percentile(eo, 95) / max(np.percentile(er, 95), 1e-9))
+
+    bands_o = {"H0": yo - _gauss(yo, 0.7), "H1": _gauss(yo, 0.7) - _gauss(yo, 1.4),
+               "H2": _gauss(yo, 1.4) - _gauss(yo, 4.0)}
+    bands_r = {"H0": yref - _gauss(yref, 0.7), "H1": _gauss(yref, 0.7) - _gauss(yref, 1.4),
+               "H2": _gauss(yref, 1.4) - _gauss(yref, 4.0)}
+    hftr = {k: float(np.sqrt(np.mean(bands_o[k] ** 2)) / max(np.sqrt(np.mean(bands_r[k] ** 2)), 1e-9))
+            for k in bands_o}
+
+    residual = yo - yref
+    # smooth mask: low edge energy in the REFERENCE (structure-poor regions)
+    smooth = _edge_mag(yref) < np.percentile(_edge_mag(yref), 30)
+    if smooth.sum() < 64:
+        smooth = np.ones_like(smooth)
+    res_s = residual[smooth]
+    if float(np.var(res_s)) < 1e-12:
+        rho1 = rho2 = 0.0
+    else:
+        rho1 = float(np.corrcoef(res_s[:-1], res_s[1:])[0, 1]) if len(res_s) > 2 else 0.0
+        rho2 = float(np.corrcoef(res_s[:-2], res_s[2:])[0, 1]) if len(res_s) > 4 else 0.0
+
+    # correlation length: first lag where autocorrelation drops below 0.1
+    res_c = res_s - res_s.mean()
+    var = float(np.var(res_c)) + 1e-12
+    corr_len = 0
+    for lag in range(1, 32):
+        if len(res_c) <= lag:
+            break
+        r = float(np.mean(res_c[:-lag] * res_c[lag:]) / var)
+        if r < 0.1:
+            corr_len = lag
+            break
+        corr_len = lag
+
+    luma_rms = float(np.sqrt(np.mean(res_s ** 2))) * 255.0
+    co = oi[..., 1:3] - ri[..., 1:3]
+    chroma_rms = float(np.sqrt(np.mean(co ** 2))) * 255.0
+    return {
+        "eatr": eatr,
+        "hftr": hftr,
+        "rho1": rho1,
+        "rho2": rho2,
+        "corr_len": corr_len,
+        "luma_rms_lsb": luma_rms,
+        "chroma_rms_lsb": chroma_rms,
+    }
+
+
+def _combine(roi_metrics):
+    """Average metrics across ROIs; eatr/hftr averaged per band."""
+    out = {"eatr": float(np.mean([m["eatr"] for m in roi_metrics]))}
+    for band in ("H0", "H1", "H2"):
+        out[f"hftr_{band}"] = float(np.mean([m["hftr"][band] for m in roi_metrics]))
+    for k in ("rho1", "rho2", "corr_len", "luma_rms_lsb", "chroma_rms_lsb"):
+        out[k] = float(np.mean([m[k] for m in roi_metrics]))
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("checkpoint_dir")
+    ap.add_argument("--jsonl", default=None)
+    args = ap.parse_args()
+
+    files = {}
+    for name, fname in CHECKPOINTS:
+        path = os.path.join(args.checkpoint_dir, fname)
+        if os.path.exists(path):
+            files[name] = path
+    if "O0" not in files:
+        print("O0_source.png missing — cannot build references.", file=sys.stderr)
+        sys.exit(2)
+    present = [n for n, _ in CHECKPOINTS if n in files]
+    if len(present) < 2:
+        print("Need at least O0 + one checkpoint.", file=sys.stderr)
+        sys.exit(2)
+
+    o0 = _load(files["O0"])
+    rows = {}
+    for name in present:
+        oi = _load(files[name])
+        ri = _resample_to(o0, oi.shape)
+        roi_metrics = {}
+        for roi, box in ROIS.items():
+            roi_metrics[roi] = _metrics_for(_crop(oi, box), _crop(ri, box))
+        rows[name] = {"rois": roi_metrics, "combined": _combine(roi_metrics.values()),
+                      "dims": list(oi.shape[:2])}
+
+    # transition losses + dominance
+    order = [n for n, _ in CHECKPOINTS if n in files]
+    losses = {}
+    for a, b in zip(order, order[1:]):
+        da = rows[b]["combined"]["eatr"] - rows[a]["combined"]["eatr"]
+        dh = rows[b]["combined"]["hftr_H1"] - rows[a]["combined"]["hftr_H1"]
+        losses[f"{a}->{b}"] = {
+            "dEATR": round(da, 4),
+            "dHFTR_H1": round(dh, 4),
+            "loss": round(max(abs(min(da, 0.0)), abs(min(dh, 0.0))), 4),
+        }
+    total = sum(v["loss"] for v in losses.values()) or 1e-9
+    ranked = sorted(losses.items(), key=lambda kv: -kv[1]["loss"])
+    nz = [v["loss"] for _, v in ranked if v["loss"] > 1e-4]
+    second = nz[1] if len(nz) > 1 else 0.0
+    dominant = []
+    for name, v in ranked:
+        if v["loss"] > 1e-4 and (v["loss"] >= 1.5 * second or v["loss"] >= 0.35 * total):
+            dominant.append(name)
+
+    print("Checkpoint metrics (ROI-averaged):")
+    for name in order:
+        c = rows[name]["combined"]
+        print(f"  {name} dims={rows[name]['dims']} EATR={c['eatr']:.3f} "
+              f"HFTR H0/H1/H2={c['hftr_H0']:.3f}/{c['hftr_H1']:.3f}/{c['hftr_H2']:.3f} "
+              f"rho1={c['rho1']:.3f} rho2={c['rho2']:.3f} corr_len={c['corr_len']:.1f} "
+              f"lumaRMS={c['luma_rms_lsb']:.2f}LSB chromaRMS={c['chroma_rms_lsb']:.2f}LSB")
+    print("\nTransition losses (negative = detail lost):")
+    for name, v in ranked:
+        tag = "  <-- DOMINANT OFFENDER" if name in dominant else ""
+        print(f"  {name}: dEATR={v['dEATR']:+.3f} dHFTR_H1={v['dHFTR_H1']:+.3f} "
+              f"loss={v['loss']:.3f}{tag}")
+    if dominant:
+        print("\nPRIMARY OFFENDERS:", ", ".join(dominant))
+        print("Next paid A/B must target the largest measured loss — budget "
+              "follows evidence (V10 §8).")
+    else:
+        print("\nNo single dominant transition (losses spread) — treat the "
+              "largest loss as the first target anyway.")
+
+    if args.jsonl:
+        record = {
+            "checkpoints": {n: {"metrics": rows[n]["combined"], "rois": rows[n]["rois"],
+                                "dims": rows[n]["dims"]} for n in order},
+            "transitions": losses,
+            "dominant_offenders": dominant,
+        }
+        with open(args.jsonl, "a") as fh:
+            fh.write(json.dumps(record) + "\n")
+        print(f"\nJSONL appended: {args.jsonl}")
+
+
+if __name__ == "__main__":
+    main()

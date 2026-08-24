@@ -6,6 +6,7 @@ import {
   Copy,
   Download,
   Droplets,
+  Film,
   Gauge,
   GripVertical,
   Images,
@@ -192,6 +193,9 @@ export default function RemintApp() {
   const [engineMode, setEngineMode] = useState<CxRemintEngineMode>("adaptive");
   const [metadataMode, setMetadataMode] = useState<MetadataMode>("device");
   const [deviceExif, setDeviceExif] = useState(true);
+  // Stage-1 codec (Config 2B lever) — defaults are the frozen engine values.
+  const [stageJpegQ, setStageJpegQ] = useState(92);
+  const [stageJpegS, setStageJpegS] = useState<"4:2:0" | "4:2:2" | "4:4:4">("4:2:0");
   const [nameStyle, setNameStyle] = useState<NameStyle>("settings-code");
   const [nameCustom, setNameCustom] = useState("");
 
@@ -503,7 +507,12 @@ export default function RemintApp() {
       washModel,
       strength,
       iphoneExif: deviceExif,
-      metadataMode
+      metadataMode,
+      // Config 2B lever — only serialized when non-default so Config A /
+      // Config 1A settings hashes stay byte-stable with earlier exports.
+      ...(stageJpegQ !== 92 || stageJpegS !== "4:2:0"
+        ? { jpegQuality: stageJpegQ, jpegSubsampling: stageJpegS }
+        : {})
     };
   }
 
@@ -542,7 +551,9 @@ export default function RemintApp() {
     Math.abs(tuneDither - 1) < 0.001 &&
     Math.abs(tuneSharpen - 1) < 0.001 &&
     wallClean &&
-    finishMode === "adaptive";
+    finishMode === "adaptive" &&
+    stageJpegQ === 92 &&
+    stageJpegS === "4:2:0";
 
   function applyConfigA() {
     setMode("sequence");
@@ -556,6 +567,8 @@ export default function RemintApp() {
     setTuneSharpen(1);
     setWallClean(true);
     setFinishMode("adaptive");
+    setStageJpegQ(92);
+    setStageJpegS("4:2:0");
   }
 
   // Config 1A — the V8 cross-wash test tuple: every Config A lever unchanged
@@ -587,6 +600,43 @@ export default function RemintApp() {
     setTuneSharpen(1);
     setWallClean(true);
     setFinishMode("adaptive");
+    setStageJpegQ(92);
+    setStageJpegS("4:2:0");
+  }
+
+  // Config 2B — stage-one codec variant: every Config A lever unchanged,
+  // the stage-1 encode moves q92 4:2:0 -> Q97 4:4:4 at the SAME lattice
+  // (targets the O2→O3 codec transition flagged by the V10 attribution plan).
+  // ONE variable moved vs Config A. Detection-coupled (V4's q97 warning).
+  const config2BActive =
+    mode === "sequence" &&
+    washModel === "qwen" &&
+    strength === "deep" &&
+    engineMode === "adaptive" &&
+    qfPreset === "strong" &&
+    qfScale <= 1.001 &&
+    Math.abs(tuneSmooth - 1.25) < 0.001 &&
+    Math.abs(tuneDither - 1) < 0.001 &&
+    Math.abs(tuneSharpen - 1) < 0.001 &&
+    wallClean &&
+    finishMode === "adaptive" &&
+    stageJpegQ === 97 &&
+    stageJpegS === "4:4:4";
+
+  function applyConfig2B() {
+    setMode("sequence");
+    setWashModel("qwen");
+    setStrength("deep");
+    setEngineMode("adaptive");
+    setQfPreset("strong");
+    setQfScale(1);
+    setTuneSmooth(1.25);
+    setTuneDither(1);
+    setTuneSharpen(1);
+    setWallClean(true);
+    setFinishMode("adaptive");
+    setStageJpegQ(97);
+    setStageJpegS("4:4:4");
   }
 
   async function copyCode() {
@@ -1391,6 +1441,35 @@ export default function RemintApp() {
                     <span className="rx-toggle-pill-knob" />
                     <span className="rx-toggle-pill-label">
                       {config1AActive ? "ON" : "OFF"}
+                    </span>
+                  </span>
+                </button>
+
+                {/* Config 2B — stage-one codec variant: Q97 4:4:4 at the SAME
+                    lattice. One variable moved vs Config A (O2→O3 offender). */}
+                <button
+                  type="button"
+                  className={`rx-preset rx-preset-2b${config2BActive ? " is-active" : ""}`}
+                  disabled={running}
+                  onClick={() => (config2BActive ? applyConfigA() : applyConfig2B())}
+                  title="Config 2B — stage-1 codec Q97 4:4:4 · rest identical to Config A"
+                >
+                  <span className="rx-preset-mark">
+                    <Film size={15} aria-hidden="true" />
+                  </span>
+                  <span className="rx-preset-text">
+                    <b>Config 2B</b>
+                    <span>Stage-1 codec Q97 4:4:4 · Deep · Strong · S1.25</span>
+                  </span>
+                  <span
+                    className={`rx-toggle-pill${config2BActive ? " is-on" : ""}`}
+                    role="switch"
+                    aria-checked={config2BActive}
+                    aria-label="Config 2B applied"
+                  >
+                    <span className="rx-toggle-pill-knob" />
+                    <span className="rx-toggle-pill-label">
+                      {config2BActive ? "ON" : "OFF"}
                     </span>
                   </span>
                 </button>
