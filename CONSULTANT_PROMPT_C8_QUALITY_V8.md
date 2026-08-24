@@ -69,6 +69,63 @@ rendered/brick walls, fence downlights, solar spot lights on foliage, deep
 blue twilight skies, glowing interior windows. This is the beta content
 class. Harder than the rendered-wall set.
 
+## Config 1A cross-wash test (2026-08-24, WAVL-v1 Config 1A — the toggle preset)
+
+The operator ran the SAME 12 pairs through the new Config 1A preset (every
+Config A lever unchanged, ONE variable moved: `wash_model` qwen →
+qwen+zimage). G1 graded; G2 still missing. Side-by-side:
+
+| OG | OG AI% | Config A | A residual | Config 1A | 1A residual | head-to-head |
+|---|---|---|---|---|---|---|
+| 11 | 99.2 | 99.1 | wan 70.3 | 97.3 | ernie 58.1 / imagen4 21.8 | 1A (marginal, both fail) |
+| 10 | 99.9 | 0.5 | firefly 0.2 | 1.1 | gemini3 0.9 | A (both clear) |
+| 9 | 99.9 | 11.0 | gemini3 3.7 / flux 2.5 | 83.9 | gemini3 93.5 | A — 1A CATASTROPHIC |
+| 8 | 99.9 | 24.9 | flux 22.3 | 67.5\* | flux 33.4 / 4o 16.1 / kling 6.5 | A (\* same "24.9" headline cache appears in BOTH tests) |
+| 7 | 99.9 | 11.5 | flux 15.5 | 19.0 | flux 23.9 | A |
+| 6 | 99.9 | 51.2 | flux 74.4 | 15.5 | flux 23.6 | 1A — flips FAIL→border |
+| 5 | 99.9 | 83.2 | wan 78.0 | 12.3 | gemini3 5.5 / flux 5.4 | 1A — flips FAIL→near |
+| 4 | 99.9 | 91.1 | flux 35.4 / kling 28.1 | 99.9 | gemini 55 / kling 21.6 | A (both fail) |
+| 3 | 99.9 | 99.9 | SD 73.5 / kling 19.6 | 99.9 | stablecascade 64.6 / SD 18.7 | tie — both pure swap |
+| 2 | 99.9 | 96.3 | other 35.3 / kling 16.7 | 82.3 | kling 41.9 / other 13.3 | 1A (both fail) |
+| 1 | 99.9 | 8.9\* | ernie 37.5 | 99.6 | ernie 80.6 | A — 1A CATASTROPHIC |
+
+Scoreboards: **Config A** 2 clear / 2 near / 1 border / 6 fail (F10's 8.9\*
+is now strongly suspected false — its 1A sibling reads 99.6 and the "78.9"
+breakdown matches). **Config 1A** 1 clear / 1 near / 2 border / 7 fail.
+Head-to-head: A wins 6 pairs, 1A wins 4, 1 tie. **Config A remains the
+better single default — do NOT promote Config 1A.**
+
+The mechanism (both washes dissected):
+
+- **qwen (Config A) is a RELIABLE breaker, poor de-stamper.** Its failures
+always carry a NEW family (wan/flux/kling/SD) — the source fingerprint is
+gone, but a fresh detectable one replaces it.
+- **qwen+zimage (Config 1A) is an UNRELIABLE breaker.** Where it fails hard
+(#9: gemini3 93.5, #1: ernie 80.6, #11: ernie 58.1) the SOURCE fingerprint
+survives nearly intact — the zimage component dilutes the wash. Where it
+wins (#6, #5) it does what qwen could not. Wash efficacy is per-CONTENT,
+not per-source.
+- **Oracle (pick the better wash per image):** 2 clear / 3 near / 2 border /
+4 fail — it rescues #5 and #6 from the FAIL column. Probe-routed wash
+selection is therefore PROVEN as the architecture (ROUTING_V1), not
+hypothetical.
+- **Wash-proof rows:** #11, #3, #4, #2 fail ≥82% under BOTH washes. Four
+images need the non-generative escape hatch (no regen → no re-stamp) or
+manual QA — no wash variant will fix them.
+- **F4 conflict repeat:** the same "24.9%" headline appears in both tests
+while the breakdown says 67.5% — a grader-UI cache artifact. Conflicts
+must auto-trigger re-grade (hardened L3).
+
+**Quality verdict (unchanged and now measured):** the Config 1A outputs are
+"slightly darker and lower resolution than the first set" — the wash swap
+does nothing for the 360p complaint. The quality gap is born upstream of
+the finisher: HD source → single-Lanczos ≤1250px → q92 4:2:0 (≈84–96% of
+pixels discarded) → 1536-capped regen → finisher strong + S1.25 on a tiny
+file. The only fix with real magnitude is the stage-one lattice; the
+finisher cannot restore discarded detail (the V4 2000px lesson stands:
+lattice changes are detection-coupled and need a full-registry detector
+A/B).
+
 ## Audit of V7 — what the new data and a code read correct
 
 1. **V7's central premise is false for the beta class.** "Detection is
@@ -267,6 +324,30 @@ R0 must be completed before any V8 design decision is final.
     ladder + wash-variant escalation) with settings-code provenance per
     image, or fixed config + manual multipliers. Give the exact rule and
     thresholds; state what must be true for a fixed default to return.
+
+14. NEW (Config 1A data): the wash is a per-image coin flip — qwen swaps to
+    wan/flux/kling/SD, qwen+zimage sometimes leaves the SOURCE fingerprint
+    intact (gemini3 93.5 on #9, ernie 80.6 on #1). Design the pre-wash
+    routing rule that predicts WHICH wash will win from the OG probe: what
+    signal separates the rows where qwen wins (#9, #7, #1) from the rows
+    where qwen+zimage wins (#6, #5)? If no OG-probe signal predicts it,
+    state that honestly and make both-candidates-plus-probe (ROUTING_V1)
+    the answer, with the exact cost of the extra wash pass.
+
+15. NEW (Config 1A data): four rows fail ≥82% under BOTH washes (#11, #3,
+    #4, #2) — the wash-proof class. Specify the detection rule that sends
+    these to the non-generative profiles (camera_relife / max_optimised)
+    and what QC/QA gates apply. Quantify the expected quality gain of
+    skipping regen on these rows (the non-generative path does not resample
+    or regenerate — it may preserve MORE of the source's HD crispness).
+
+16. NEW (operator verdict): the quality gap is now measured as structural —
+    HD crisp source → ≤1250px lattice → "360p" delivery, unchanged by wash
+    choice. Specify the lattice experiment (output_target ∈ {1250, 1600,
+    2000} × wash variants on the full registry, both vendors + the 100%
+    zoom rubric) and state the exact acceptance criteria that would allow
+    raising the default lattice without repeating V4's detection
+    regression. This is the single highest-value experiment remaining.
 
 **Top five concrete changes ranked** across all three tracks, each with its
 trade-off and the minimal experiment (matrix row) to validate it. Flag the

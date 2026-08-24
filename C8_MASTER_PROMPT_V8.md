@@ -98,6 +98,20 @@ contradiction; do not "fix" it silently.
 - **G14 — Stage-one code is FROZEN.** Any change there requires a detector
   A/B on the full 20-image registry and owner sign-off. Track F is runtime
   routing only.
+- **G15 — Config 1A cross-wash test (Aug 24, G1 only).** Same 12 pairs,
+  ONE variable moved: `wash_model` qwen → qwen+zimage. Scoreboard: 1 clear
+  / 1 near / 2 border / 7 fail — WORSE than Config A (2 clear / 2 near / 1
+  border / 6 fail). Head-to-head: A wins 6, 1A wins 4, 1 tie. Config A
+  stays the default. Mechanism: qwen = reliable breaker that re-stamps
+  (wan/flux/kling/SD); qwen+zimage = unreliable breaker that sometimes
+  leaves the SOURCE fingerprint intact (gemini3 93.5 on #9, ernie 80.6 on
+  #1) yet wins on #6 and #5. Oracle (better wash per image) = 2 clear / 3
+  near / 2 border / 4 fail — rescues #5/#6 from FAIL, proving probe-routed
+  wash selection. Wash-proof rows failing ≥82% under BOTH washes: #11, #3,
+  #4, #2 → non-generative escape hatch. F4's "24.9%" headline repeats in
+  both tests while the breakdown reads 67.5% — grader UI cache artifact;
+  conflicts auto-trigger re-grade. Quality unchanged: outputs "darker and
+  lower resolution" — the 360p gap is the stage-one lattice, not the wash.
 
 ### Open uncertainties (design around them, do not guess)
 
@@ -105,10 +119,14 @@ contradiction; do not "fix" it silently.
   external vendors at all (G11 calibration pending). Until calibrated, the
   internal probe may drive ROUTING but not corpus verdicts; corpus verdicts
   come from the two external vendors.
-- Whether any wash variant avoids the flux/wan/kling/SD re-stamp on the
-  worst rows (F1, F5, F8). The wash-variant matrix (annex R1) answers this;
-  the routing ladder below is built to degrade gracefully if the answer is
-  "none".
+- PARTIALLY ANSWERED by G15: no single wash variant clears the corpus.
+  qwen+zimage wins per-image on some rows and catastrophically loses on
+  others. The routing ladder below is the only architecture the data
+  supports; the wash-variant matrix (annex R1) remains for zimage-only and
+  denoise sweeps.
+- The stage-one lattice (1250px default) is the suspected root of the 360p
+  quality verdict. Any lattice change is detection-coupled (V4 lesson) and
+  requires the full-registry detector A/B specified in annex Q16.
 
 ---
 
@@ -216,7 +234,11 @@ stdin/stdout, no network. This is how L2 is enforced mechanically.
 
 ### 4.2 Track F — routing (worker.py orchestration, runtime-only)
 
-**4.2.1 Wash-variant adaptive ladder** (`ROUTING_V1`). Replace the
+**4.2.1 Wash-variant adaptive ladder** (`ROUTING_V1`). The Config 1A test
+(G15) empirically proves per-image wash selection: the oracle (better wash
+per corpus image) rescues rows #5 and #6 from the FAIL column, which
+neither Config A nor Config 1A alone can do. `ROUTING_V1` below is the
+mechanism that ships the oracle. Replace the
 sequence-branch ladder invocation with a wash-axis loop around the EXISTING
 engine call (the engine itself is untouched):
 
