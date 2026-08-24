@@ -53,6 +53,20 @@ only when the router is proven; close hygiene; full-registry readmission.
   **Therefore ROUTING_V2 autonomous selection is mathematically BLOCKED
   under the 40-grade cap.** Shadow mode only until calibration; budget
   scenarios are explicit in §9.
+- **G19 (Config 2B test, Aug 25, G1 only; 2B file N = OG N — NEW mapping):**
+  stage-one codec q92 4:2:0 → Q97 4:4:4, same lattice, rest = Config A.
+  Scoreboard: 2 clear / 0 near / 1 border / 8 fail. Per-row: wins ONLY #9 —
+  the biggest single-row win of the project (2.1 vs A 11.0 vs 1A 83.9) —
+  and loses catastrophically on #6 (82.2, flux 82.9), #5 (85.5), #11
+  (99.6, wan 85.2 — the most extreme wan concentration yet). Three-config
+  oracle: 3 clear / 2 near / 2 border / 4 fail. Candidate diversity is now
+  TRIPLY confirmed — no static config; routing is the architecture.
+  **CONFLATION FLAG:** the adaptive ladder's internal probes run on the
+  stage-one-ENCODED file; changing the codec changes the probe bytes, so 2B
+  may have changed WHICH rungs executed, not just codec. The one-variable
+  claim holds at payload level only. Interpret 2B deltas ONLY after reading
+  the worker reports (attempts[] + finish_adaptive). Quality unchanged —
+  presets shuffle detection, never quality.
 
 ## 3. ARCHITECTURE (the pipeline)
 
