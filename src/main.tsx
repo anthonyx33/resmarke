@@ -19,7 +19,6 @@ import "./slash.css";
 const CmintApp = lazy(() => import("./CmintApp"));
 const RemintApp = lazy(() => import("./RemintApp"));
 const PrintApp = lazy(() => import("./PrintApp"));
-const CdxRemintApp = lazy(() => import("./CdxRemintApp"));
 
 const path = window.location.pathname;
 const lowerPath = path.toLowerCase().replace(/\/+$/, "") || "/";
@@ -27,7 +26,6 @@ const isCmint = lowerPath === "/cmint" || lowerPath.startsWith("/cmint/");
 const isSlash = path === "/slash" || path.startsWith("/slash/");
 const isPrint = lowerPath === "/print" || lowerPath.startsWith("/print/");
 const isRemint = lowerPath === "/remint" || lowerPath.startsWith("/remint/");
-const isCdxRemint = lowerPath === "/cdx-remint" || lowerPath.startsWith("/cdx-remint/");
 const isMint = path === "/" || path === "/mint" || path.startsWith("/mint/");
 const Root = isCmint
   ? CmintApp
@@ -37,11 +35,9 @@ const Root = isCmint
       ? PrintApp
       : isRemint
         ? RemintApp
-        : isCdxRemint
-          ? CdxRemintApp
-          : isMint
-            ? MintApp
-            : App;
+        : isMint
+          ? MintApp
+          : App;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

@@ -97,12 +97,42 @@ export function isConfigA(input: SettingsCodeInput): boolean {
   );
 }
 
+/** Exact Config 1A detector: the V8 cross-wash test tuple — every Config A
+ * lever unchanged except the wash model is the Qwen+Z-Image blend, the
+ * runtime lever that targets the fingerprint-swap failure on night content.
+ * Emits the SEQ-1A marker so test exports are self-describing. */
+export function isConfig1A(input: SettingsCodeInput): boolean {
+  const r = input.remint;
+  const f = input.finish;
+  const o = f.overrides ?? {};
+  const near = (x: number | undefined, target: number) =>
+    typeof x === "number" && Math.abs(x - target) < 1e-6;
+  return (
+    input.mode === "sequence" &&
+    r.washModel === "qwen+zimage" &&
+    r.strength === "deep" &&
+    r.engineMode === "adaptive" &&
+    f.preset === "strong" &&
+    f.scale == null &&
+    f.finishMode === "adaptive" &&
+    f.materialClean !== false &&
+    near(o.dither, 1) &&
+    near(o.smoothness, 1.25) &&
+    near(o.sharpen, 1)
+  );
+}
+
 export function buildSettingsCode(input: SettingsCodeInput): string {
   const m = { sequence: "SEQ", remint: "REM", finish: "QF" }[input.mode] ?? "SEQ";
   // Exact Config A gets the unmistakable CFA marker — no other setting emits
   // it, so a CFA filename is a guarantee the proven all-clear tuple ran.
   if (isConfigA(input)) {
     return `${m}-CFA-${settingsShortHash(canonicalJson(input), 12)}`;
+  }
+  // Config 1A gets its own marker — the V8 cross-wash test tuple — so A/B
+  // exports against Config A are self-describing.
+  if (isConfig1A(input)) {
+    return `${m}-1A-${settingsShortHash(canonicalJson(input), 12)}`;
   }
   const p =
     { conservative: "CON", standard: "STD", strong: "STR", fidelity: "FID" }[

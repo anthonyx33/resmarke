@@ -530,7 +530,6 @@ export default function CdxRemintApp() {
   }
 
   async function processBatch(items: QueueItem[], completionLabel: string) {
-    if (running || zipBusy) return;
     if (!items.length) return setStatus("Add an image to the queue first.");
     if (hasSupabaseConfig && !userId) return setStatus("Sign in before processing images.");
     const required = items.length * unitCost;

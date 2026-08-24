@@ -1748,3 +1748,62 @@ html[data-theme="dark"] body:has(.cmint) {
 .cm-wavl-label { font-weight: 700; font-size: 14px; color: #c4b5fd; }
 .cm-wavl-sub { font-size: 11px; color: var(--cm-dim); }
 .cm-wavl:disabled { opacity: 0.5; cursor: default; }
+
+/* Config 1A — baby miami blue cross-wash preset */
+.cm-wavl-1a {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  border-color: rgba(53, 199, 230, 0.55);
+  background: linear-gradient(135deg, rgba(53, 199, 230, 0.16), rgba(155, 234, 255, 0.07));
+}
+.cm-wavl-1a:hover { box-shadow: 0 0 0 3px rgba(53, 199, 230, 0.22); }
+.cm-wavl-1a.is-active { border-color: #35c7e6; box-shadow: 0 0 0 3px rgba(53, 199, 230, 0.32); }
+.cm-wavl-1a .cm-wavl-badge {
+  background: linear-gradient(135deg, #35c7e6, #9beaff);
+  color: #042c38;
+}
+.cm-wavl-1a .cm-wavl-label { color: #35c7e6; }
+html[data-theme="dark"] .cm-wavl-1a .cm-wavl-label { color: #7fe3f7; }
+
+/* Toggle indicator pill — knob flips side, ON fills baby Miami blue. */
+.cm-toggle-pill {
+  margin-left: auto;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-width: 54px;
+  height: 22px;
+  padding: 2px 8px 2px 2px;
+  border: 1px solid var(--cm-line);
+  border-radius: 999px;
+  background: var(--cm-pane);
+  color: var(--cm-faint);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+.cm-toggle-pill-knob {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--cm-faint);
+  transition: background 150ms ease;
+}
+.cm-toggle-pill.is-on {
+  flex-direction: row-reverse;
+  padding: 2px 2px 2px 8px;
+  border-color: #35c7e6;
+  background: rgba(53, 199, 230, 0.14);
+  color: #042c38;
+}
+.cm-toggle-pill.is-on .cm-toggle-pill-knob {
+  background: #35c7e6;
+  box-shadow: 0 0 0 3px rgba(53, 199, 230, 0.18);
+}
+html[data-theme="dark"] .cm-toggle-pill.is-on { color: #7fe3f7; }

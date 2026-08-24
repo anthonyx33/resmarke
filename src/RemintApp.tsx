@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Copy,
   Download,
+  Droplets,
   Gauge,
   GripVertical,
   Images,
@@ -546,6 +547,37 @@ export default function RemintApp() {
   function applyConfigA() {
     setMode("sequence");
     setWashModel("qwen");
+    setStrength("deep");
+    setEngineMode("adaptive");
+    setQfPreset("strong");
+    setQfScale(1);
+    setTuneSmooth(1.25);
+    setTuneDither(1);
+    setTuneSharpen(1);
+    setWallClean(true);
+    setFinishMode("adaptive");
+  }
+
+  // Config 1A — the V8 cross-wash test tuple: every Config A lever unchanged
+  // except the wash model swaps to the Qwen + Z-Image blend (the runtime
+  // lever that targets the fingerprint-swap failure on night content).
+  // Exactly ONE variable moves vs Config A, so the next test is a clean A/B.
+  const config1AActive =
+    mode === "sequence" &&
+    washModel === "qwen+zimage" &&
+    strength === "deep" &&
+    engineMode === "adaptive" &&
+    qfPreset === "strong" &&
+    qfScale <= 1.001 &&
+    Math.abs(tuneSmooth - 1.25) < 0.001 &&
+    Math.abs(tuneDither - 1) < 0.001 &&
+    Math.abs(tuneSharpen - 1) < 0.001 &&
+    wallClean &&
+    finishMode === "adaptive";
+
+  function applyConfig1A() {
+    setMode("sequence");
+    setWashModel("qwen+zimage");
     setStrength("deep");
     setEngineMode("adaptive");
     setQfPreset("strong");
@@ -1331,6 +1363,35 @@ export default function RemintApp() {
                     ) : (
                       "Restore"
                     )}
+                  </span>
+                </button>
+
+                {/* Config 1A — the V8 cross-wash test preset. A simple toggle:
+                    ON applies the tuple, tapping again returns to Config A. */}
+                <button
+                  type="button"
+                  className={`rx-preset rx-preset-1a${config1AActive ? " is-active" : ""}`}
+                  disabled={running}
+                  onClick={() => (config1AActive ? applyConfigA() : applyConfig1A())}
+                  title="Config 1A — Qwen+Z-Image wash · rest identical to Config A"
+                >
+                  <span className="rx-preset-mark">
+                    <Droplets size={15} aria-hidden="true" />
+                  </span>
+                  <span className="rx-preset-text">
+                    <b>Config 1A</b>
+                    <span>Qwen+Z-Image wash · Deep · Strong · S1.25</span>
+                  </span>
+                  <span
+                    className={`rx-toggle-pill${config1AActive ? " is-on" : ""}`}
+                    role="switch"
+                    aria-checked={config1AActive}
+                    aria-label="Config 1A applied"
+                  >
+                    <span className="rx-toggle-pill-knob" />
+                    <span className="rx-toggle-pill-label">
+                      {config1AActive ? "ON" : "OFF"}
+                    </span>
                   </span>
                 </button>
 

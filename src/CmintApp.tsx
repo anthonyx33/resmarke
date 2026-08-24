@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   Download,
+  Droplets,
   Gauge,
   GripVertical,
   Images,
@@ -489,6 +490,37 @@ export default function CmintApp() {
   function applyWavl() {
     setMode("sequence");
     setWashModel("qwen");
+    setStrength("deep");
+    setEngineMode("adaptive");
+    setQfPreset("strong");
+    setQfScale(1);
+    setTuneSmooth(1.25);
+    setTuneDither(1);
+    setTuneSharpen(1);
+    setWallClean(true);
+    setFinishMode("adaptive");
+  }
+
+  // Config 1A — the V8 cross-wash test tuple: every Config A lever unchanged
+  // except the wash model swaps to the Qwen + Z-Image blend (the runtime
+  // lever that targets the fingerprint-swap failure on night content).
+  // Exactly ONE variable moves vs Config A, so the next test is a clean A/B.
+  const config1AActive =
+    mode === "sequence" &&
+    washModel === "qwen+zimage" &&
+    strength === "deep" &&
+    engineMode === "adaptive" &&
+    qfPreset === "strong" &&
+    qfScale <= 1.001 &&
+    Math.abs(tuneSmooth - 1.25) < 0.001 &&
+    Math.abs(tuneDither - 1) < 0.001 &&
+    Math.abs(tuneSharpen - 1) < 0.001 &&
+    wallClean &&
+    finishMode === "adaptive";
+
+  function applyConfig1A() {
+    setMode("sequence");
+    setWashModel("qwen+zimage");
     setStrength("deep");
     setEngineMode("adaptive");
     setQfPreset("strong");
@@ -1185,6 +1217,31 @@ export default function CmintApp() {
                   <span className="cm-wavl-label">Config A · Proven all-clear</span>
                   <span className="cm-wavl-sub">Deep · Strong · S1.25 · Wall Clean</span>
                   {wavlActive ? <Check size={14} aria-hidden="true" /> : null}
+                </button>
+
+                {/* Config 1A: the V8 cross-wash test preset — toggle ON
+                    applies it, tapping again returns to Config A. */}
+                <button
+                  type="button"
+                  className={`cm-wavl cm-wavl-1a${config1AActive ? " is-active" : ""}`}
+                  disabled={running}
+                  onClick={() => (config1AActive ? applyWavl() : applyConfig1A())}
+                  title="Config 1A — Qwen+Z-Image wash · rest identical to Config A"
+                >
+                  <span className="cm-wavl-badge">1A</span>
+                  <span className="cm-wavl-label">Config 1A · Cross-wash test</span>
+                  <span className="cm-wavl-sub">Qwen+Z-Image · Deep · Strong · S1.25</span>
+                  <span
+                    className={`cm-toggle-pill${config1AActive ? " is-on" : ""}`}
+                    role="switch"
+                    aria-checked={config1AActive}
+                    aria-label="Config 1A applied"
+                  >
+                    <span className="cm-toggle-pill-knob" />
+                    <span className="cm-toggle-pill-label">
+                      {config1AActive ? "ON" : "OFF"}
+                    </span>
+                  </span>
                 </button>
 
                 {/* mode picker */}
