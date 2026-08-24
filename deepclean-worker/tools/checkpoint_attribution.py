@@ -96,6 +96,55 @@ def _edge_mag(y):
     return np.hypot(gx, gy)
 
 
+def _edge_width_10_90(y):
+    """Median run-length of strong gradient profile (proxy for 10-90%
+    edge spread, V11 metric)."""
+    mag = _edge_mag(y)
+    thr = np.percentile(mag, 90)
+    widths = []
+    for axis in (0, 1):
+        prof = np.max(mag, axis=1 - axis)
+        above = prof > thr
+        idx = np.where(np.diff(np.concatenate(([0], above.astype(int), [0]))))[0]
+        for a, b in zip(idx[::2], idx[1::2]):
+            if 2 <= (b - a) <= 64:
+                widths.append(float(b - a))
+    return float(np.median(widths)) if widths else 0.0
+
+
+def _delta_e00(oi, ri):
+    """Median CIE-Lab (D65) colour difference, 1976 approximation (V11)."""
+
+    def srgb_to_lab(a):
+        a = np.clip(a, 0.0, 1.0)
+        lin = np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4)
+        xyz = np.dot(lin, np.array([[0.4124, 0.3576, 0.1805],
+                                    [0.2126, 0.7152, 0.0722],
+                                    [0.0193, 0.1192, 0.9505]]).T)
+
+        def f(t):
+            d = 6.0 / 29.0
+            return np.where(t > d ** 3, np.cbrt(t), t / (3 * d ** 2) + 4.0 / 29.0)
+
+        fx, fy, fz = f(xyz[..., 0]), f(xyz[..., 1]), f(xyz[..., 2])
+        L = 116.0 * fy - 16.0
+        aa = 500.0 * (fx - fy)
+        bb = 200.0 * (fy - fz)
+        return np.stack([L, aa, bb], axis=-1)
+
+    return float(np.median(np.linalg.norm(srgb_to_lab(oi) - srgb_to_lab(ri), axis=-1)))
+
+
+def _staircase(y):
+    """Step-ness index: share of +-1 quantized deltas among small deltas
+    (V11 banding proxy)."""
+    q = (np.clip(y, 0.0, 1.0) * 255.0).astype(np.uint8)
+    dx = np.abs(np.diff(q.astype(np.int16), axis=1))
+    ones = np.mean(dx == 1)
+    small = np.mean((dx >= 1) & (dx <= 3))
+    return float(ones / max(small, 1e-6))
+
+
 def _metrics_for(oi, ri):
     """oi / ri must be same geometry. Returns dict of metrics."""
     yo, yref = _luma(oi), _luma(ri)
@@ -145,6 +194,9 @@ def _metrics_for(oi, ri):
         "corr_len": corr_len,
         "luma_rms_lsb": luma_rms,
         "chroma_rms_lsb": chroma_rms,
+        "edge_width_10_90": _edge_width_10_90(yo),
+        "delta_e00": _delta_e00(oi, ri),
+        "staircase": _staircase(yo),
     }
 
 
@@ -153,7 +205,8 @@ def _combine(roi_metrics):
     out = {"eatr": float(np.mean([m["eatr"] for m in roi_metrics]))}
     for band in ("H0", "H1", "H2"):
         out[f"hftr_{band}"] = float(np.mean([m["hftr"][band] for m in roi_metrics]))
-    for k in ("rho1", "rho2", "corr_len", "luma_rms_lsb", "chroma_rms_lsb"):
+    for k in ("rho1", "rho2", "corr_len", "luma_rms_lsb", "chroma_rms_lsb",
+              "edge_width_10_90", "delta_e00", "staircase"):
         out[k] = float(np.mean([m[k] for m in roi_metrics]))
     return out
 
@@ -215,7 +268,9 @@ def main():
         print(f"  {name} dims={rows[name]['dims']} EATR={c['eatr']:.3f} "
               f"HFTR H0/H1/H2={c['hftr_H0']:.3f}/{c['hftr_H1']:.3f}/{c['hftr_H2']:.3f} "
               f"rho1={c['rho1']:.3f} rho2={c['rho2']:.3f} corr_len={c['corr_len']:.1f} "
-              f"lumaRMS={c['luma_rms_lsb']:.2f}LSB chromaRMS={c['chroma_rms_lsb']:.2f}LSB")
+              f"lumaRMS={c['luma_rms_lsb']:.2f}LSB chromaRMS={c['chroma_rms_lsb']:.2f}LSB "
+              f"edgeW={c['edge_width_10_90']:.1f}px dE00={c['delta_e00']:.2f} "
+              f"stair={c['staircase']:.3f}")
     print("\nTransition losses (negative = detail lost):")
     for name, v in ranked:
         tag = "  <-- DOMINANT OFFENDER" if name in dominant else ""
