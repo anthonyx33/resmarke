@@ -140,6 +140,63 @@ R0 is mandatory even though rounds G/H exist: the endpoint was rebuilt
 during the outage and G/H may predate it. Re-prove the all-clear on the
 live worker before any V7 build.
 
+## Paired before/after dataset — Aug 24 (12 pairs, settings UNRECORDED)
+
+**Protocol note:** this batch shipped without settings-code filenames.
+Settings are UNKNOWN — assume the round-E defaults from the previous
+batch unless a `SEQ-...` filename exists. Paired grading finally lets us
+compute the DELTA (OG → remint) instead of absolutes.
+
+**Headline finding:** ALL 12 ORIGINALS score 99.2–99.9% AI. The source
+content is ITSELF AI-rendered (gemini/imagen/ernie/imagen4-dominant).
+This is a DE-STAMP product, not a prove-it's-real product — the remint's
+job is to strip the source fingerprint while preserving visual quality.
+
+| OG | OG AI% | OG top source | Remint AI% | Remint top source | Δ | verdict |
+|---|---|---|---|---|---|---|
+| 12 | 99.9 | ernie 84.7 | — | — | — | remint not recorded |
+| 11 | 99.2 | ernie 55.7 | 99.1 | wan 70.3 | −0.1 | FAIL (no-op) |
+| 10 | 99.9 | gemini3 99.3 | 0.5 | firefly 0.2 | −99.4 | CLEAR |
+| 9 | 99.9 | gemini3 50.1 / ernie 49.7 | 11.0 | gemini3 3.7 | −88.9 | NEAR-CLEAR |
+| 8 | 99.9 | gemini3 99.3 | 24.9 | flux 22.3 | −75.0 | BORDERLINE |
+| 7 | 99.9 | gemini3 99.1 | 11.5 | flux 15.5 | −88.4 | NEAR-CLEAR |
+| 6 | 99.9 | gemini3 99.3 | 51.2 | flux 74.4 | −48.7 | FAIL |
+| 5 | 99.9 | ernie 63.7 / gemini3 36.2 | 83.2 | wan 78.0 | −16.7 | FAIL |
+| 4 | 99.9 | gemini 70.4 | 91.1 | flux 35.4 / kling 28.1 | −8.8 | FAIL |
+| 3 | 99.9 | gemini 91.7 | 99.9 | SD 73.5 / kling 19.6 | 0 | FAIL (fingerprint SWAP) |
+| 2 | 99.9 | gemini3 65.0 | 96.3 | other 35.3 / kling 16.7 | −3.6 | FAIL |
+| 1 | 99.9 | imagen4 98.2 | 8.9\* | ernie 37.5 | −91.0 | near-clear\* |
+
+(\* pair #1's remint block reported both 8.9% and 78.9% — re-check.)
+
+Patterns (raw):
+
+- Same OG source, different outcome: gemini3-99.3% OGs → 0.5 (clear),
+  24.9, 51.2 (fail). De-stamp success is CONTENT-dependent, not
+  source-dependent.
+- Fingerprint SWAP: when remint fails, the residual is a NEW generator
+  family (flux / wan / kling / SD) — the Qwen wash re-stamps with its own
+  fingerprint. This is the same "regen re-stamps" trap the max profiles
+  fell into; here it is measured per-pair for the first time.
+- The clear win (99.9 → 0.5, firefly-residual) proves full de-stamp is
+  achievable at whatever settings were used — before ANY V7 work.
+
+## Systemization — protocol lock (applies to every future run, no exceptions)
+
+1. Every batch carries settings-code filenames; `SEQ-CFA-...` = exact
+   Config A, anything else is recorded and labeled as such.
+2. Every batch is PAIRED: OG + remint graded on the SAME vendor set,
+   BOTH vendors, with per-image mapping.
+3. Fixed corpus registry (12 SOLVARIA + 3 rendered walls + 5 real
+   photos); OG baselines recorded once and reused forever.
+4. Two-track V7:
+   - **Track Q** (quality): grain/pixelation — finisher-only changes on
+     top of Config A.
+   - **Track F** (fingerprint swap): probe-driven routing/escalation in
+     the worker (stage-one code frozen; RUNTIME parameters only — wash
+     strength, profile re-route to non-generative CX / max-optimised,
+     manual-QA flag).
+
 ## The open questions (answer with exact numbers and pseudo-code)
 
 1. Rank **Strategy A** (locked Config A), **Strategy B** (post-clean
@@ -184,6 +241,22 @@ live worker before any V7 build.
    gradients, hard speculars on lit fixtures, glowing warm sources. What
    must NOT be smoothed (beam edges, light falloff) vs what may (sky
    gradient, dark fence), with QC gates.
+10. NEW (paired data): design the de-stamp decision surface. Given the OG
+    source-mix (gemini / ernie / imagen4 / ...), what remint routing
+    maximizes Δ? When should the worker re-route from full regen to a
+    NON-generative profile instead of stamping a fresh fingerprint?
+    Give exact probe thresholds and the routing table.
+11. NEW (paired data): quantify fingerprint-swap. Of a 99.9→91.1 failure,
+    how much is wash-introduced flux/wan/kling fingerprint vs content the
+    wash failed to touch? Can the FINISHER measurably suppress a fresh
+    post-regen fingerprint (structure-preserving), or is re-stamping
+    irreducible without a stage-one debate? State the diagnostic that
+    separates the two.
+12. NEW (operator verdict): the operator rates current remint outputs as
+    UNACCEPTABLE quality (pixelated/grainy) even where detection wins.
+    Define the V7 quality pass that PRESERVES the 0.5 / 11 / 11.5 wins
+    while removing the grain — exact stages, targets, QC gates, and what
+    must survive (beam edges, fixture speculars, foliage detail).
 
 ## Constraints (frozen unless you argue with data)
 
