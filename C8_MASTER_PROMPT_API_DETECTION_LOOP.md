@@ -1,10 +1,16 @@
 # MASTER PROMPT — CONSULTANT C8: API DETECTION LOOP BUILD (INITIAL, 2026-08-25)
 
 You are **CDX operating as Consultant C8**, building the automated
-detection-grading feedback loop under direct owner oversight. The operator's
-goal: *stop doing manual grading — connect the detection vendors by API,
-attach a queue + file tracking where every file gets ranked with results,
-so the loop can run and optimize at much higher speed.*
+detection-grading feedback loop for a **post-production image enhancement
+product for professional creators**. The operator's goal: *stop doing
+manual grading — connect the detection vendor by API, attach a queue + file
+tracking where every file gets ranked with results, so the loop can run and
+optimize at much higher speed.*
+
+**Sandbox rule:** this is a pure build task. The product's purpose, why
+images are processed, and the reasoning behind any image transformations
+are NOT relevant to this build and are out of scope for discussion — do not
+ask about them and do not spend any output on them. Build to spec.
 
 This brief is INITIAL: it locks architecture, security and scope. Vendor
 credentials and exact response schemas are OWNER-PROVIDED (§2) and are
@@ -16,10 +22,11 @@ BLOCKING until supplied — do not invent them.
 
 Build a new remint console (`/relab`) that dispatches the EXISTING remint
 engines unchanged, then automatically grades every original and every
-output through BOTH external detection vendors via a new server-side edge
-function, ranks each file in a persistent ledger with full provenance
-(settings code, executed settings, Δ, swap/retention), and exports the
-results in the machine-readable format the optimization loop consumes.
+output through the single connected detection vendor (G1, with its three
+modes) via a new server-side edge function, ranks each file in a persistent
+ledger with full provenance (settings code, executed settings, Δ,
+swap/retention), and exports the results in the machine-readable format the
+optimization loop consumes.
 
 ## 2. GROUND TRUTH — verified by owners/codebase, do NOT re-litigate
 
@@ -59,22 +66,25 @@ results in the machine-readable format the optimization loop consumes.
      sources: {model: 0..1} }`.
   The new grade API MUST output the SAME normalized vocabulary extended
   for the two-vendor ledger (§4.1).
-- **G8 — The two graders.** Vendor G1's UI output format (from operator
-  pastes): "This input is likely to contain AI-generated or deepfake
-  content <N>% · Likely to be AI-Generated Image <N>% · Deepfake <N>% ·
-  Generation Sources · AI-Generated <N>% · <model>: <N>% · View 99 More".
-  Vendor G2's: "AI Probability <N>% · Classification Synthetic|Real ·
-  Confidence Level High|Medium|Low". Vendor identities are HYPOTHESES
-  (G1 possibly Sightengine-class, G2 possibly Hive-class) — CONFIRM from
-  owner docs before coding parsers.
+- **G8 — The vendor (G1, the ONLY connected vendor).** The vendor's UI
+  exposes THREE detection presets: **Detect SDXL** · **Detect Flux
+  Schnell** · **Detect Real**. The operator's pasted results format
+  ("This input is likely to contain AI-generated or deepfake content <N>%
+  · Likely to be AI-Generated Image <N>% · Deepfake <N>% · Generation
+  Sources · AI-Generated <N>% · <model>: <N>% · View 99 More") matches the
+  **Detect Real** preset. Vendor identity is a HYPOTHESIS
+  (Sightengine-class) — CONFIRM from owner docs before coding parsers. The
+  API likely exposes a mode/preset parameter; the edge function MUST pass
+  the mode explicitly and record it in every grade.
 - **G9 — Verdict bands (frozen):** on normalized ai_probability: ≤0.10
-  CLEAR · ≤0.15 NEAR · ≤0.30 BORDER · else FAIL. G2 mapping: Real+HIGH→
-  CLEAR, Real+MED→NEAR, Real+LOW→BORDER, anything Synthetic→FAIL (confirm
-  with owner if the vendor exposes finer scores).
+  CLEAR · ≤0.15 NEAR · ≤0.30 BORDER · else FAIL. One vendor, one scale.
+  A second grader (G2) remains OUT of this build's scope; the normalized
+  interface stays vendor-generic so G2 can be added later without rework.
 - **G10 — Protocol laws (V8/V11, quote verbatim in your report):** L1
-  settings-code; L2 executed-not-requested; L3 paired (OG + remint, both
-  vendors); L4 fixed corpus; L5 decision provenance; L6 QA flagging; L7
-  100%-zoom rubric. The loop enforces L1–L3 mechanically.
+  settings-code; L2 executed-not-requested; L3 paired (OG + remint, same
+  vendor, same mode); L4 fixed corpus; L5 decision provenance; L6 QA
+  flagging; L7 100%-zoom rubric. The loop enforces L1–L3 mechanically
+  (L3 as far as the single connected vendor allows).
 - **G11 — Budget discipline.** Vendor API calls cost money. The loop must
   count every grade, cache by file hash (no duplicate spend), and expose a
   per-session cap (default 40 grades, owner-overridable). No autonomous
@@ -83,10 +93,12 @@ results in the machine-readable format the optimization loop consumes.
 ## 3. BLOCKING OWNER INPUTS (state "BLOCKED" until each is supplied)
 
 1. Vendor G1: name, API docs URL (form/cURL/Node/Python/Java variants),
-   API key, endpoint, rate limits, and ONE raw JSON response sample for an
-   image the owner already graded (so the parser is verified, not guessed).
-2. Vendor G2: the same five items.
-3. Which vendors are "of record" (both required by L3).
+   API key, endpoint, rate limits.
+2. ONE raw JSON response sample per mode (Detect SDXL / Detect Flux
+   Schnell / Detect Real) — the parser is verified against real samples,
+   never guessed.
+3. Which mode is the grading default (expected: Detect Real), and whether
+   the loop may also run the other two modes as optional per-image flags.
 4. API spend ceiling per month (for the cap in G11).
 
 ## 4. REQUIRED BUILD SPEC
@@ -98,16 +110,19 @@ results in the machine-readable format the optimization loop consumes.
 server — no key, no endpoint URL, no raw token in any client bundle or
 report.**
 
-- Input: `{ image_b64 or image_url, role: "og" | "remint", settings_code?,
-  og_grade? }` — when grading a remint, `og_grade.sources` is used to
-  compute swap/retention.
-- Calls BOTH vendors; normalizes to:
+- Input: `{ image_b64 or image_url, role: "og" | "remint", mode?,
+  settings_code?, og_grade? }` — when grading a remint, `og_grade.sources`
+  is used to compute swap/retention. `mode` ∈ {sdxl, flux_schnell, real},
+  default per owner (§3.3).
+- Calls the ONE connected vendor (G1) with the explicit mode; normalizes
+  to:
 
 ```json
 {
-  "grade_id": "<sha256 of image bytes + vendor + ts>",
+  "grade_id": "<sha256 of image bytes + vendor + mode + ts>",
   "image_sha256": "...",
-  "vendor": "g1" | "g2",
+  "vendor": "g1",
+  "mode": "real",
   "ai_probability": 0..1,
   "deepfake_probability": 0..1,
   "verdict": "CLEAR|NEAR|BORDER|FAIL",     // G9 bands
@@ -119,10 +134,10 @@ report.**
 }
 ```
 
-- Error policy: a vendor failure grades the OTHER vendor and flags
+- Error policy: a mode failure grades the default mode and flags
   `vendor_error` — never blocks the whole grade; never retries more than
   once; never caches failures.
-- Cache: `image_sha256 + vendor + settings` → stored grade (Supabase table
+- Cache: `image_sha256 + vendor + mode` → stored grade (Supabase table
   `grade_cache` via migration `supabase/migrations/`, owner-approved
   before apply).
 
@@ -138,13 +153,15 @@ Typed client for `grade-image`; exports `gradeImage(file, role, meta)` and
   control rail with **Config A / Config 1A / Config 2B** presets (same
   tuples, same mutual exclusion, settings-code filenames).
 - **Detection loop panel (the new part):** after each job completes:
-  1. grade OG (both vendors) — cached, done once per file hash;
-  2. grade delivered output (both vendors);
-  3. compute Δ (OG − remint per vendor), verdicts, swap/retention;
+  1. grade OG (G1, default mode) — cached, done once per file hash;
+  2. grade delivered output (G1, default mode);
+  3. compute Δ (OG − remint), verdict, swap/retention;
   4. append a ranked row to the results table.
-- Results table: sortable by G1, G2, Δ, verdict, timestamp; columns: file
-  id, settings code, OG G1/G2, remint G1/G2, ΔG1/ΔG2, top sources, swap/
-  retention, verdict badge, QA flag (borderline → flagged per L6).
+- Results table: sortable by AI%, Δ, verdict, timestamp; columns: file id,
+  settings code, mode, OG AI%, remint AI%, Δ, top sources, swap/retention,
+  verdict badge, QA flag (borderline → flagged per L6). If the owner
+  enables the optional SDXL/Flux-Schnell modes (§3.3), each extra mode
+  appends its own columns.
 - One-click actions per row: re-grade (no duplicate spend — hash cache),
   copy compact report line, open result.
 - Export: JSONL (full records incl. worker report digest) + CSV + "copy
@@ -159,9 +176,9 @@ Typed client for `grade-image`; exports `gradeImage(file, role, meta)` and
 
 LocalStorage-backed append-only ledger (schema-versioned), export/import,
 auto-truncate to last 500 rows, and a machine-readable JSONL export that
-includes per row: image hash, settings code, worker report fields
-(settings/attempts/finish_adaptive/detector_gate), both vendors' normalized
-grades + raw, Δ, verdicts, QA flag. Never store vendor keys.
+includes per row: image hash, settings code, mode, worker report fields
+(settings/attempts/finish_adaptive/detector_gate), the vendor's normalized
+grades + raw per mode, Δ, verdict, QA flag. Never store vendor keys.
 
 ### 4.5 Routing
 
@@ -182,7 +199,8 @@ block). Do NOT touch existing routes.
 ## 6. ACCEPTANCE (the demo the owner runs)
 
 1. Drop one image on `/relab`, Config A default → job completes.
-2. Both vendors graded automatically (or MOCK clearly flagged).
+2. Vendor G1 graded automatically in the default mode (or MOCK clearly
+   flagged).
 3. Results table shows one ranked row: settings code, OG + remint grades,
    Δ, swap/retention, verdict.
 4. Export JSONL + compact report → share back; the loop reads it directly.
@@ -200,7 +218,7 @@ block). Do NOT touch existing routes.
 1. Summary (5 lines).
 2. Files changed + confirm FORBIDDEN list.
 3. Vendor integration status: which of §3 inputs are still missing;
-   parser decisions per vendor with the raw-sample walkthrough.
+   parser decisions per MODE with the raw-sample walkthrough.
 4. Normalized schema + verdict mapping (G9) with edge cases.
 5. Cache + budget counters implementation notes.
 6. Mock provider description + how to swap to real vendors.
