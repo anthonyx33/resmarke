@@ -41,12 +41,14 @@ import {
   appendDetectionOnlyLedgerRow,
   appendGradeLedgerRow,
   compactGradeReport,
+  exportDetectionOnlyLedgerCsv,
   exportDetectionOnlyLedgerJsonl,
   exportGradeLedgerCsv,
   exportGradeLedgerJsonl,
   importGradeLedger,
   loadDetectionOnlyLedger,
   loadGradeLedger,
+  topAiSources,
   workerReportProvenance,
   type DetectionOnlyLedgerRow,
   type GradeLedgerRow,
@@ -881,9 +883,17 @@ export default function RelabApp() {
                   {activeDetectionOnlyResult ? (
                     <div className="rl-detect-result">
                       <span><small>AI probability</small><b>{percent(activeDetectionOnlyResult.grade.ai_probability)}</b></span>
-                      <span><small>Mode</small><b>{modeLabel(activeDetectionOnlyResult.mode)}</b></span>
-                      <span><small>Top source</small><b>{activeDetectionOnlyResult.grade.top_source ?? "—"}</b></span>
+                      <span><small>Deepfake</small><b>{percent(activeDetectionOnlyResult.grade.deepfake_probability)}</b></span>
                       <span><small>Verdict</small><b className={`is-${activeDetectionOnlyResult.grade.verdict.toLowerCase()}`}>{activeDetectionOnlyResult.grade.verdict}</b></span>
+                      <span><small>API result</small><b>{gradeCallLabel(activeDetectionOnlyResult.grade)}</b></span>
+                      <div className="rl-detect-sources">
+                        <small>Top 5 AI source signals</small>
+                        <SourceRankList sources={activeDetectionOnlyResult.grade.sources} />
+                      </div>
+                      <div className="rl-detect-meta">
+                        <span>Hive unified</span>
+                        <code title={activeDetectionOnlyResult.grade.image_sha256}>SHA {shortId(activeDetectionOnlyResult.grade.image_sha256)}</code>
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -911,7 +921,7 @@ export default function RelabApp() {
           </div>
           <div className="rl-table-wrap">
             <table>
-              <thead><tr><th>#</th><th>File ID</th><th>Settings code</th><th>Mode</th><th><button onClick={() => sortBy("ai")}>OG AI% / Remint AI%</button></th><th><button onClick={() => sortBy("delta")}>Δ</button></th><th>Top sources</th>{auxiliaryModes.map((mode) => <th key={mode}>{modeLabel(mode)}<br />OG / Remint / Δ</th>)}<th>Swap / retention</th><th><button onClick={() => sortBy("verdict")}>Verdict</button></th><th>QA</th><th><button onClick={() => sortBy("timestamp")}>Timestamp</button></th><th>Actions</th></tr></thead>
+              <thead><tr><th>#</th><th>File ID</th><th>Settings code</th><th>Mode</th><th><button onClick={() => sortBy("ai")}>OG AI% / Remint AI%</button></th><th><button onClick={() => sortBy("delta")}>Δ</button></th><th>Deepfake OG / RM</th><th>Top 5 AI sources</th>{auxiliaryModes.map((mode) => <th key={mode}>{modeLabel(mode)}<br />OG / Remint / Δ</th>)}<th>Swap / retention</th><th><button onClick={() => sortBy("verdict")}>Verdict</button></th><th>QA</th><th>API provenance</th><th><button onClick={() => sortBy("timestamp")}>Timestamp</button></th><th>Actions</th></tr></thead>
               <tbody>
                 {sortedRows.map((row, index) => (
                   <tr key={row.id}>
@@ -921,7 +931,8 @@ export default function RelabApp() {
                     <td>{modeLabel(row.mode)}</td>
                     <td><span className="rl-pair"><b>{percent(row.og_grade.ai_probability)}</b><span>→</span><b>{percent(row.remint_grade.ai_probability)}</b></span></td>
                     <td className={row.delta >= 0 ? "is-good" : "is-bad"}>{signedPercent(row.delta)}</td>
-                    <td><small>OG</small> {row.og_grade.top_source ?? "—"}<br /><small>RM</small> {row.remint_grade.top_source ?? "—"}</td>
+                    <td><span className="rl-pair"><b>{percent(row.og_grade.deepfake_probability)}</b><span>→</span><b>{percent(row.remint_grade.deepfake_probability)}</b></span></td>
+                    <td><div className="rl-source-pair"><SourceRankList label="OG" sources={row.og_grade.sources} compact /><SourceRankList label="RM" sources={row.remint_grade.sources} compact /></div></td>
                     {auxiliaryModes.map((mode) => {
                       const pair = row.mode_results[mode];
                       return <td key={mode}>{pair ? <span className="rl-pair"><b>{percent(pair.og.ai_probability)}</b><span>→</span><b>{percent(pair.remint.ai_probability)}</b><span className={pair.delta >= 0 ? "is-good" : "is-bad"}>{signedPercent(pair.delta)}</span></span> : "—"}</td>;
@@ -929,11 +940,12 @@ export default function RelabApp() {
                     <td>{percent(row.swap_index)} / {percent(row.retention_index)}</td>
                     <td><span className={`rl-verdict is-${row.verdict.toLowerCase()}`}>{row.verdict}</span></td>
                     <td>{row.qa_flag ? <span className="rl-qa">FLAG</span> : "—"}</td>
+                    <td><div className="rl-api-meta"><span><small>OG</small> {gradeCallLabel(row.og_grade)}</span><span><small>RM</small> {gradeCallLabel(row.remint_grade)}</span><code title={row.image_sha256}>SHA {shortId(row.image_sha256)}</code></div></td>
                     <td>{new Date(row.timestamp).toLocaleString()}</td>
                     <td><div className="rl-actions"><button title="Re-grade (hash cache applies)" disabled={running} onClick={() => void regradeRow(row)}><RefreshCw size={13} /></button><button title="Copy compact report line" onClick={() => void copyText(compactGradeReport([row]), row.id)}>{copyState === row.id ? <Check size={13} /> : <Copy size={13} />}</button><button title="Open result" onClick={() => void openResult(row)}><ExternalLink size={13} /></button></div></td>
                   </tr>
                 ))}
-                {!rows.length ? <tr><td colSpan={12 + auxiliaryModes.length} className="rl-no-results">Completed paired grades will appear here.</td></tr> : null}
+                {!rows.length ? <tr><td colSpan={14 + auxiliaryModes.length} className="rl-no-results">Completed paired grades will appear here.</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -944,10 +956,11 @@ export default function RelabApp() {
             <div><b>Detection-only ledger</b><span>{detectionOnlyRows.length}/500 isolated API tests · no remint provenance</span></div>
             <span className="rl-spacer" />
             <button className="rl-btn rl-btn-small" type="button" disabled={!detectionOnlyRows.length} onClick={() => downloadText(exportDetectionOnlyLedgerJsonl(detectionOnlyRows), "relab-detection-only.jsonl", "application/x-ndjson")}><FileJson size={13} /> JSONL</button>
+            <button className="rl-btn rl-btn-small" type="button" disabled={!detectionOnlyRows.length} onClick={() => downloadText(exportDetectionOnlyLedgerCsv(detectionOnlyRows), "relab-detection-only.csv", "text/csv")}><Download size={13} /> CSV</button>
           </div>
           <div className="rl-table-wrap">
             <table>
-              <thead><tr><th>#</th><th>Selected image</th><th>Mode</th><th>AI%</th><th>Deepfake%</th><th>Top source</th><th>Verdict</th><th>Cache</th><th>Isolation proof</th><th>Timestamp</th><th>Copy</th></tr></thead>
+              <thead><tr><th>#</th><th>Selected image</th><th>Mode</th><th>AI%</th><th>Deepfake%</th><th>Top 5 AI sources</th><th>Verdict</th><th>API provenance</th><th>Isolation proof</th><th>Timestamp</th><th>Copy</th></tr></thead>
               <tbody>
                 {rankedDetectionOnlyRows.map((row, index) => (
                   <tr key={row.id}>
@@ -956,20 +969,49 @@ export default function RelabApp() {
                     <td>{modeLabel(row.mode)}</td>
                     <td><b>{percent(row.grade.ai_probability)}</b></td>
                     <td>{percent(row.grade.deepfake_probability)}</td>
-                    <td>{row.grade.top_source ?? "—"}</td>
+                    <td><SourceRankList sources={row.grade.sources} compact /></td>
                     <td><span className={`rl-verdict is-${row.grade.verdict.toLowerCase()}`}>{row.grade.verdict}</span></td>
-                    <td>{row.grade.cache_hit ? "HIT" : "MISS"}</td>
+                    <td><div className="rl-api-meta"><b>{gradeCallLabel(row.grade)}</b><span>{row.grade.provider_calls} provider call{row.grade.provider_calls === 1 ? "" : "s"}</span><code title={row.grade.image_sha256}>SHA {shortId(row.grade.image_sha256)}</code></div></td>
                     <td><span className="rl-isolation-proof">No job · 0 credits</span></td>
                     <td>{new Date(row.timestamp).toLocaleString()}</td>
                     <td><div className="rl-actions"><button title="Copy standalone JSON record" onClick={() => void copyText(JSON.stringify(row), `detect-${row.id}`)}>{copyState === `detect-${row.id}` ? <Check size={13} /> : <Copy size={13} />}</button></div></td>
                   </tr>
                 ))}
-                {!detectionOnlyRows.length ? <tr><td colSpan={11} className="rl-no-results">Select a queued image and press “Run detection only.”</td></tr> : null}
+                {!detectionOnlyRows.length ? <tr><td colSpan={11} className="rl-no-results">Select a queued image and press “Run API detection only.”</td></tr> : null}
               </tbody>
             </table>
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function SourceRankList({
+  sources,
+  label,
+  compact = false
+}: {
+  sources: Record<string, number>;
+  label?: string;
+  compact?: boolean;
+}) {
+  const ranked = topAiSources(sources, 5);
+  return (
+    <div className={`rl-source-list${compact ? " is-compact" : ""}`}>
+      {label ? <small className="rl-source-list-label">{label}</small> : null}
+      {ranked.length ? (
+        <ol>
+          {ranked.map((source) => (
+            <li key={source.family} title={`${source.family}: ${percent(source.probability)}`}>
+              <span className="rl-source-rank">{source.rank}</span>
+              <span className="rl-source-name">{sourceLabel(source.family)}</span>
+              <span className="rl-source-track"><i style={{ width: `${source.probability * 100}%` }} /></span>
+              <b>{percent(source.probability)}</b>
+            </li>
+          ))}
+        </ol>
+      ) : <span className="rl-source-empty">No source signals</span>}
     </div>
   );
 }
@@ -1012,6 +1054,36 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function modeLabel(mode: GradeMode): string {
   return mode === "real" ? "Hive unified" : mode === "sdxl" ? "Legacy SDXL preset" : "Legacy Flux preset";
+}
+
+function gradeCallLabel(grade: NormalizedGrade): string {
+  if (grade.mock) return "MOCK";
+  if (grade.cache_hit) return "CACHE HIT";
+  if (grade.provider_calls === 1) return "1 API CALL";
+  return `${grade.provider_calls} API CALLS`;
+}
+
+function shortId(value: string): string {
+  return value ? `${value.slice(0, 10)}…` : "—";
+}
+
+function sourceLabel(value: string): string {
+  const known: Record<string, string> = {
+    adobe_firefly: "Adobe Firefly",
+    dalle: "DALL·E",
+    dalle2: "DALL·E 2",
+    dalle3: "DALL·E 3",
+    flux: "Flux",
+    midjourney: "Midjourney",
+    stable_diffusion: "Stable Diffusion",
+    stable_diffusion_xl: "Stable Diffusion XL",
+    stablediffusion: "Stable Diffusion",
+    stablediffusionxl: "Stable Diffusion XL"
+  };
+  const key = value.trim().toLowerCase();
+  return known[key] ?? key
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function statusLabel(status: QueueStatus): string {

@@ -9,7 +9,7 @@ Consultant: C8
 - The authenticated `grade-image` Edge Function is connected to Hive's unified AI-generated/deepfake detector with credentials stored only as Supabase server secrets.
 - The production cache/budget migration is applied: first live grade used one provider call; an identical second grade was a cache hit with zero provider calls.
 - The website's SDXL, Flux Schnell, and Real controls are example-image presets, not separate API parameters; the ledger records the unified API as canonical mode `real` and preserves `requested_mode` for compatibility.
-- All required local checks pass, the function is deployed with JWT verification, and unauthenticated requests return 401.
+- The UI and CSV exports rank the top five AI source families, alongside deepfake probability and cache/call/hash provenance; full normalized sources and raw data remain in JSONL.
 
 Protocol laws (verbatim): **L1 settings-code; L2 executed-not-requested; L3 paired (OG + remint, same vendor, same mode); L4 fixed corpus; L5 decision provenance; L6 QA flagging; L7 100%-zoom rubric.** The implementation mechanically enforces L1-L3. L4-L7 remain operator protocol; BORDER results and provider fallback errors are mechanically QA-flagged for L6.
 
@@ -20,7 +20,8 @@ Current integration changes:
 - `supabase/functions/grade-image/index.ts` - live Hive request, retry policy, canonical unified mode, cache/budget integration, portable base64 upload, and server-safe errors.
 - `supabase/functions/grade-image/hive.ts` - strict verified Hive response parser.
 - `supabase/functions/grade-image/hive_test.ts` - parser success and rejection tests.
-- `src/RelabApp.tsx` - unified Hive detector UI and isolated detection-only action.
+- `src/RelabApp.tsx` - unified Hive detector UI, isolated detection-only action, top-five source rankings, and compact API provenance views.
+- `src/lib/gradeLedger.ts` - stable top-five source derivation plus richer paired and detection-only CSV exports; the full source map remains the ledger ground truth.
 - `src/relab.css` - live-provider status styles.
 - `supabase/migrations/20260825000000_grade_cache.sql` - applied cache, session counter, RLS, and atomic reservation RPC.
 - `deno.lock` - locked Deno test dependencies.

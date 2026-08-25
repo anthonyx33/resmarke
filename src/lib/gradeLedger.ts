@@ -4,10 +4,25 @@ export const GRADE_LEDGER_SCHEMA_VERSION = 1 as const;
 export const GRADE_LEDGER_LIMIT = 500;
 const STORAGE_KEY = "resmarke:relab:grade-ledger:v1";
 const DETECTION_ONLY_STORAGE_KEY = "resmarke:relab:detection-only-ledger:v1";
+const NON_SOURCE_FAMILIES = new Set([
+  "ai_generated",
+  "not_ai_generated",
+  "deepfake",
+  "none",
+  "inconclusive",
+  "ai_generated_audio",
+  "not_ai_generated_audio"
+]);
 
 export type GradeMode = "sdxl" | "flux_schnell" | "real";
 export type GradeRole = "og" | "remint";
 export type GradeVerdict = "CLEAR" | "NEAR" | "BORDER" | "FAIL";
+
+export type RankedAiSource = {
+  rank: number;
+  family: string;
+  probability: number;
+};
 
 export type NormalizedGrade = {
   grade_id: string;
@@ -157,6 +172,56 @@ export function exportDetectionOnlyLedgerJsonl(
   return rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
 }
 
+export function exportDetectionOnlyLedgerCsv(
+  rows = loadDetectionOnlyLedger()
+): string {
+  const header = [
+    "timestamp",
+    "file_id",
+    "file_name",
+    "image_sha256",
+    "grade_id",
+    "vendor",
+    "mode",
+    "ai_probability",
+    "deepfake_probability",
+    "verdict",
+    "qa_flag",
+    "cache_hit",
+    "provider_calls",
+    "session_vendor_calls",
+    "session_cap",
+    "top_5_sources_json",
+    "vendor_error",
+    "remint_dispatched",
+    "remint_credits_spent"
+  ];
+  const lines = rows.map((row) =>
+    [
+      row.timestamp,
+      row.file_id,
+      row.file_name,
+      row.image_sha256,
+      row.grade.grade_id,
+      row.vendor,
+      row.mode,
+      row.grade.ai_probability,
+      row.grade.deepfake_probability,
+      row.grade.verdict,
+      row.qa_flag,
+      row.grade.cache_hit,
+      row.grade.provider_calls,
+      row.grade.session_usage?.vendor_calls ?? "",
+      row.grade.session_usage?.cap ?? "",
+      JSON.stringify(topAiSources(row.grade.sources)),
+      row.grade.vendor_error ?? "",
+      row.remint_dispatched,
+      row.remint_credits_spent
+    ].map(csvCell).join(",")
+  );
+  return [header.join(","), ...lines].join("\n") + "\n";
+}
+
 /** Import accepts this module's JSONL export or a JSON array. Valid rows are
  * appended, duplicate ids are ignored, and the same 500-row retention rule
  * is applied. */
@@ -212,9 +277,17 @@ export function exportGradeLedgerCsv(rows = loadGradeLedger()): string {
     "mock",
     "image_sha256",
     "og_ai_probability",
+    "og_deepfake_probability",
     "og_top_source",
+    "og_top_5_sources_json",
+    "og_cache_hit",
+    "og_provider_calls",
     "remint_ai_probability",
+    "remint_deepfake_probability",
     "remint_top_source",
+    "remint_top_5_sources_json",
+    "remint_cache_hit",
+    "remint_provider_calls",
     "delta",
     "swap_index",
     "retention_index",
@@ -234,9 +307,17 @@ export function exportGradeLedgerCsv(rows = loadGradeLedger()): string {
       row.mock,
       row.image_sha256,
       row.og_grade.ai_probability,
+      row.og_grade.deepfake_probability,
       row.og_grade.top_source ?? "",
+      JSON.stringify(topAiSources(row.og_grade.sources)),
+      row.og_grade.cache_hit,
+      row.og_grade.provider_calls,
       row.remint_grade.ai_probability,
+      row.remint_grade.deepfake_probability,
       row.remint_grade.top_source ?? "",
+      JSON.stringify(topAiSources(row.remint_grade.sources)),
+      row.remint_grade.cache_hit,
+      row.remint_grade.provider_calls,
       row.delta,
       row.swap_index,
       row.retention_index,
@@ -269,6 +350,30 @@ export function verdictFor(probability: number): GradeVerdict {
   if (value <= 0.15) return "NEAR";
   if (value <= 0.3) return "BORDER";
   return "FAIL";
+}
+
+/** Stable, machine-readable ranking derived from the full normalized source
+ * map. The ledger keeps every source; displays and CSVs surface the top five. */
+export function topAiSources(
+  sources: Record<string, number>,
+  limit = 5
+): RankedAiSource[] {
+  const safeLimit = Math.max(0, Math.min(100, Math.floor(limit)));
+  return Object.entries(sources)
+    .filter(
+      ([family, probability]) =>
+        family.trim().length > 0 &&
+        !NON_SOURCE_FAMILIES.has(family.trim().toLowerCase()) &&
+        Number.isFinite(probability) &&
+        probability >= 0
+    )
+    .map(([family, probability]) => ({
+      family,
+      probability: clamp01(probability > 1 ? probability / 100 : probability)
+    }))
+    .sort((a, b) => b.probability - a.probability || a.family.localeCompare(b.family))
+    .slice(0, safeLimit)
+    .map((source, index) => ({ rank: index + 1, ...source }));
 }
 
 export async function workerReportProvenance(
