@@ -58,8 +58,16 @@ import {
   type NormalizedGrade
 } from "./lib/gradeLedger";
 import { getGradeSessionId, gradeImage, gradeOutputUrl } from "./lib/graderClient";
+import {
+  createCorpusRunIntent,
+  fetchCorpusSnapshot,
+  registerCorpusRun,
+  type CorpusExperiment,
+  type CorpusImage,
+  type CorpusSnapshot
+} from "./lib/corpusClient";
 import { readLocalCredits, spendLocalPrivacyCredit, type CreditSnapshot } from "./lib/localCredits";
-import { buildSettingsCode } from "./lib/settingsCode";
+import { buildSettingsCode, type SettingsCodeInput } from "./lib/settingsCode";
 import { supabase } from "./lib/supabase";
 import "./relab.css";
 
@@ -87,6 +95,14 @@ type QueueItem = {
   job?: DeepCleanJob;
   error?: string;
   ledgerId?: string;
+  corpus?: {
+    imageId: string;
+    experimentId: string;
+    intentId?: string;
+    registrationStatus: "idle" | "intent" | "pending" | "registered" | "failed";
+    registrationRunId?: string;
+    registrationError?: string;
+  };
 };
 
 type PresetDefinition = {
@@ -211,6 +227,10 @@ export default function RelabApp() {
     vendorCalls: 0,
     cap: SESSION_CAP_FALLBACK
   });
+  const [corpusSnapshot, setCorpusSnapshot] = useState<CorpusSnapshot | null>(null);
+  const [corpusPickerOpen, setCorpusPickerOpen] = useState(false);
+  const [corpusExperimentId, setCorpusExperimentId] = useState("");
+  const [corpusLoading, setCorpusLoading] = useState(false);
 
   const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
   const [userId, setUserId] = useState("");
@@ -256,6 +276,20 @@ export default function RelabApp() {
     }
     return (["sdxl", "flux_schnell", "real"] as GradeMode[]).filter((mode) => modes.has(mode));
   }, [rows]);
+
+  const corpusExperiment = useMemo(
+    () => corpusSnapshot?.experiments.find((experiment) => experiment.id === corpusExperimentId) ?? null,
+    [corpusExperimentId, corpusSnapshot]
+  );
+  const corpusPickerImages = useMemo(() => {
+    if (!corpusSnapshot || !corpusExperiment) return [];
+    const imageIds = new Set(
+      corpusSnapshot.members
+        .filter((member) => member.corpus_set_id === corpusExperiment.corpus_set_id)
+        .map((member) => member.corpus_image_id)
+    );
+    return corpusSnapshot.images.filter((image) => imageIds.has(image.id));
+  }, [corpusExperiment, corpusSnapshot]);
 
   const rankedDetectionOnlyRows = useMemo(
     () =>
@@ -421,6 +455,57 @@ export default function RelabApp() {
     setNotice(skipped ? `${skipped} file${skipped === 1 ? "" : "s"} skipped.` : "");
   }
 
+  async function openCorpusPicker() {
+    if (!userId) {
+      setNotice("Sign in before loading a fixed-corpus image.");
+      return;
+    }
+    setCorpusPickerOpen(true);
+    setCorpusLoading(true);
+    try {
+      const next = await fetchCorpusSnapshot();
+      setCorpusSnapshot(next);
+      setCorpusExperimentId((current) => current || next.experiments[0]?.id || "");
+      if (!next.experiments.length) setNotice("Create a locked corpus set and experiment on /corpus first.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not load the corpus picker.");
+    } finally {
+      setCorpusLoading(false);
+    }
+  }
+
+  async function addCorpusImage(image: CorpusImage, experiment: CorpusExperiment) {
+    if (running || queue.length >= MAX_QUEUE || !image.signed_url) return;
+    setCorpusLoading(true);
+    try {
+      const response = await fetch(image.signed_url, { credentials: "omit" });
+      if (!response.ok) throw new Error(`Could not download corpus original (HTTP ${response.status}).`);
+      const blob = await response.blob();
+      const file = new File([blob], image.file_name, { type: image.content_type });
+      const item: QueueItem = {
+        id: `corpus-${image.id}-${Date.now()}-${sequence.current++}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        width: image.width,
+        height: image.height,
+        status: "ready",
+        corpus: {
+          imageId: image.id,
+          experimentId: experiment.id,
+          registrationStatus: "idle"
+        }
+      };
+      setQueue((current) => [...current, item]);
+      setActiveId(item.id);
+      setCorpusPickerOpen(false);
+      setNotice(`Loaded fixed-corpus original · ${image.file_name} · experiment ${shortId(experiment.id)}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not load the corpus original.");
+    } finally {
+      setCorpusLoading(false);
+    }
+  }
+
   function removeItem(id: string) {
     if (running) return;
     const target = queue.find((item) => item.id === id);
@@ -457,6 +542,7 @@ export default function RelabApp() {
     const runPreset = structuredClone(preset);
     const runSettingsCode = settingsCodeForPreset(runPreset);
     let created: DeepCleanJob | null = null;
+    let corpusIntentId: string | null = null;
     let workerCompleted = false;
     patchItem(item.id, { status: "preparing", error: undefined, job: undefined });
     setActiveId(item.id);
@@ -476,6 +562,22 @@ export default function RelabApp() {
         outputNameCustom: position > 1 ? `${runSettingsCode}-${position}` : runSettingsCode
       });
       created = job;
+      if (item.corpus) {
+        patchItem(item.id, {
+          corpus: { ...item.corpus, registrationStatus: "intent", registrationError: undefined }
+        });
+        setStatus(`Recording corpus run intent ${position}/${total}…`);
+        corpusIntentId = await createCorpusRunIntent({
+          corpusImageId: item.corpus.imageId,
+          experimentId: item.corpus.experimentId,
+          configLabel: configLabelForPreset(runPreset),
+          requestedSettingsCode: runSettingsCode,
+          requestedSettingsCanonical: settingsCanonicalForPreset(runPreset)
+        });
+        patchItem(item.id, {
+          corpus: { ...item.corpus, intentId: corpusIntentId, registrationStatus: "pending" }
+        });
+      }
       patchItem(item.id, { status: "uploading", job });
       setStatus(`Uploading ${position}/${total} privately…`);
       await uploadDeepCleanInput(job, item.file);
@@ -495,6 +597,7 @@ export default function RelabApp() {
         ledgerId: row.id,
         error: undefined
       });
+      if (corpusIntentId) void registerCorpusItem(item.id, corpusIntentId, completed.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : "The item could not be completed.";
       if (created && !workerCompleted) {
@@ -503,6 +606,44 @@ export default function RelabApp() {
       patchItem(item.id, { status: "failed", error: message, job: created ?? undefined });
       throw error;
     }
+  }
+
+  async function registerCorpusItem(itemId: string, intentId: string, workerJobId: string) {
+    const current = queueRef.current.find((item) => item.id === itemId);
+    if (!current?.corpus) return;
+    patchItem(itemId, {
+      corpus: { ...current.corpus, intentId, registrationStatus: "pending", registrationError: undefined }
+    });
+    try {
+      const result = await registerCorpusRun(intentId, workerJobId);
+      const latest = queueRef.current.find((item) => item.id === itemId);
+      if (!latest?.corpus) return;
+      patchItem(itemId, {
+        corpus: {
+          ...latest.corpus,
+          intentId,
+          registrationStatus: "registered",
+          registrationRunId: result.corpus_run_id,
+          registrationError: undefined
+        }
+      });
+    } catch (error) {
+      const latest = queueRef.current.find((item) => item.id === itemId);
+      if (!latest?.corpus) return;
+      patchItem(itemId, {
+        corpus: {
+          ...latest.corpus,
+          intentId,
+          registrationStatus: "failed",
+          registrationError: error instanceof Error ? error.message : "Corpus registration failed."
+        }
+      });
+    }
+  }
+
+  function retryCorpusRegistration(item: QueueItem) {
+    if (!item.corpus?.intentId || !item.job?.id || item.job.status !== "completed") return;
+    void registerCorpusItem(item.id, item.corpus.intentId, item.job.id);
   }
 
   async function gradeCompletedItem(
@@ -813,8 +954,19 @@ export default function RelabApp() {
           <aside className="rl-panel rl-queue-panel">
             <div className="rl-panel-head">
               <b>Queue</b><span>{queue.length}/{MAX_QUEUE}</span><span className="rl-spacer" />
+              <button className="rl-btn rl-btn-small" type="button" disabled={running || corpusLoading || !userId || queue.length >= MAX_QUEUE} onClick={() => void openCorpusPicker()}>{corpusLoading ? <Loader2 className="rl-spin" size={13} /> : <ImageIcon size={13} />} Corpus</button>
               <button className="rl-btn rl-btn-small" type="button" disabled={running || queue.length >= MAX_QUEUE} onClick={() => fileInput.current?.click()}><Upload size={13} /> Add</button>
             </div>
+            {corpusPickerOpen ? (
+              <div className="rl-corpus-picker">
+                <div><b>Fixed-corpus picker</b><button className="rl-icon" type="button" onClick={() => setCorpusPickerOpen(false)}><X size={12} /></button></div>
+                <label><span>Comparable experiment</span><select value={corpusExperimentId} onChange={(event) => setCorpusExperimentId(event.target.value)}><option value="">Select experiment</option>{corpusSnapshot?.experiments.map((experiment) => <option key={experiment.id} value={experiment.id}>{shortId(experiment.id)} · {experiment.detector_vendor}/{experiment.detector_mode}</option>)}</select></label>
+                <div className="rl-corpus-images">
+                  {corpusPickerImages.map((image) => <button key={image.id} type="button" disabled={corpusLoading || queue.some((item) => item.corpus?.imageId === image.id && item.corpus.experimentId === corpusExperimentId)} onClick={() => { if (corpusExperiment) void addCorpusImage(image, corpusExperiment); }}>{image.signed_url ? <img src={image.signed_url} alt="" /> : <span />}<span><b>{image.file_name}</b><small>{image.width}×{image.height} · {shortId(image.sha256)}</small></span></button>)}
+                  {!corpusPickerImages.length ? <p>No active images in this experiment's locked set.</p> : null}
+                </div>
+              </div>
+            ) : null}
             <div className="rl-panel-scroll">
               <button
                 type="button"
@@ -831,7 +983,7 @@ export default function RelabApp() {
                 {queue.map((item) => (
                   <div key={item.id} role="button" tabIndex={0} className={`rl-qitem${active?.id === item.id ? " is-active" : ""}`} onClick={() => setActiveId(item.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setActiveId(item.id); }}>
                     <img src={item.previewUrl} alt="" />
-                    <span><b>{item.file.name}</b><small><i className={`rl-status-dot is-${item.status}`} />{statusLabel(item.status)}{item.width ? ` · ${item.width}×${item.height}` : ""}</small>{item.error ? <em>{item.error}</em> : null}</span>
+                    <span><b>{item.file.name}</b><small><i className={`rl-status-dot is-${item.status}`} />{statusLabel(item.status)}{item.width ? ` · ${item.width}×${item.height}` : ""}</small>{item.corpus ? <small className={`rl-registration is-${item.corpus.registrationStatus}`}>{registrationLabel(item.corpus.registrationStatus)}{item.corpus.registrationRunId ? ` · ${shortId(item.corpus.registrationRunId)}` : ""}</small> : null}{item.corpus?.registrationStatus === "failed" ? <button className="rl-registration-retry" type="button" onClick={(event) => { event.stopPropagation(); retryCorpusRegistration(item); }}><RefreshCw size={10} /> Retry registration</button> : null}{item.error || item.corpus?.registrationError ? <em>{item.error ?? item.corpus?.registrationError}</em> : null}</span>
                     <button className="rl-icon" type="button" aria-label="Remove image" disabled={running} onClick={(event) => { event.stopPropagation(); removeItem(item.id); }}><X size={13} /></button>
                   </div>
                 ))}
@@ -1017,11 +1169,19 @@ function SourceRankList({
 }
 
 function settingsCodeForPreset(preset: PresetDefinition): string {
-  return buildSettingsCode({
+  return buildSettingsCode(settingsCanonicalForPreset(preset));
+}
+
+function settingsCanonicalForPreset(preset: PresetDefinition): SettingsCodeInput {
+  return {
     mode: "sequence",
     remint: preset.remint,
     finish: { ...preset.finish, finishMode: preset.finishMode }
-  });
+  };
+}
+
+function configLabelForPreset(preset: PresetDefinition): "A" | "1A" | "2B" {
+  return preset.id === "config-1a" ? "1A" : preset.id === "config-2b" ? "2B" : "A";
 }
 
 function pairFor(requestedMode: GradeMode, og: NormalizedGrade, remint: NormalizedGrade): ModeGradePair {
@@ -1096,6 +1256,16 @@ function statusLabel(status: QueueStatus): string {
     grading: "Grading pair",
     completed: "Graded",
     failed: "Failed"
+  }[status];
+}
+
+function registrationLabel(status: NonNullable<QueueItem["corpus"]>["registrationStatus"]): string {
+  return {
+    idle: "CORPUS · ready",
+    intent: "CORPUS · recording intent",
+    pending: "CORPUS · registration pending",
+    registered: "CORPUS · registered",
+    failed: "CORPUS · registration failed"
   }[status];
 }
 

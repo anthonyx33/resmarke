@@ -15,13 +15,26 @@
       "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
     }
   },
+  "redirects": {
+    "https://esm.sh/iceberg-js@^0.8.1?target=denonext": "https://esm.sh/iceberg-js@0.8.1?target=denonext"
+  },
   "remote": {
-    "https://esm.sh/@supabase/supabase-js@2.88.0": "970ab311466eae157789aad084936f7441312963198b2a7e0b7926ad32f96b9d"
+    "https://esm.sh/@supabase/auth-js@2.88.0/denonext/auth-js.mjs": "78b4ee0af024d453a9d9719768348f68caebb670b4197b4deb6e2cd9002be7d8",
+    "https://esm.sh/@supabase/functions-js@2.88.0/denonext/functions-js.mjs": "01bbf2d2393c6e73b822584ce6da3709652fa69f60abf84575e21c8ab36dcf8c",
+    "https://esm.sh/@supabase/postgrest-js@2.88.0/denonext/postgrest-js.mjs": "fe8314d8892efc93be789a0934af1bb31fb9ee59a96fc8aa89911739978dac2d",
+    "https://esm.sh/@supabase/realtime-js@2.88.0/denonext/realtime-js.mjs": "33a96b471bd11011d60d69abbb536abc8ba765c957f601162a5a6d2940666544",
+    "https://esm.sh/@supabase/storage-js@2.88.0/denonext/storage-js.mjs": "ee330ec1a97d013141cb723979631853bf73dd670b442f4939a0cb9a78f8811c",
+    "https://esm.sh/@supabase/supabase-js@2.88.0": "970ab311466eae157789aad084936f7441312963198b2a7e0b7926ad32f96b9d",
+    "https://esm.sh/@supabase/supabase-js@2.88.0/denonext/supabase-js.mjs": "bbdb0bc06058152f086f867a81510b38095d54e2785d7a570c954e135a52f967",
+    "https://esm.sh/iceberg-js@0.8.1/denonext/iceberg-js.mjs": "d839d81a2e3966500ca2cdd0c1cb458e9608bacfc91f7bb67a69b2e878dcdb4f",
+    "https://esm.sh/iceberg-js@0.8.1?target=denonext": "58c849d7fe2bf4eca4a84eb501e83c161a7d8c34ca1bec15a962b3bec3062633",
+    "https://esm.sh/tslib@2.8.1/denonext/tslib.mjs": "c38da5dd6da6281964435002ce204cd586634fe3bdfb24a0ee116f48cf3292e9"
   },
   "workspace": {
     "packageJson": {
       "dependencies": [
         "npm:@supabase/supabase-js@^2.88.0",
+        "npm:@types/node@^24.13.3",
         "npm:@types/react-dom@^19.2.3",
         "npm:@types/react@^19.2.7",
         "npm:@vitejs/plugin-react@^5.1.2",
@@ -29,6 +42,7 @@
         "npm:lucide-react@0.562",
         "npm:react-dom@^19.2.3",
         "npm:react@^19.2.3",
+        "npm:tus-js-client@^4.3.1",
         "npm:typescript@^5.9.3",
         "npm:vite@^7.3.0"
       ]

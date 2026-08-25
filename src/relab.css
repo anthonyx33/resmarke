@@ -69,6 +69,19 @@
 .rl-panel-head > span { color: var(--rl-muted); font-size: 11px; }
 .rl-panel-scroll { min-height: 0; flex: 1; overflow: auto; padding: 9px; }
 .rl-panel-foot { padding: 9px; border-top: 1px solid var(--rl-line); }
+.rl-corpus-picker { max-height: 260px; display: grid; gap: 7px; padding: 9px; border-bottom: 1px solid var(--rl-line); background: var(--rl-panel-2); }
+.rl-corpus-picker > div:first-child { display: flex; align-items: center; justify-content: space-between; }
+.rl-corpus-picker > label { display: grid; gap: 4px; color: var(--rl-muted); font-size: 9px; }
+.rl-corpus-picker select { width: 100%; height: 31px; padding: 0 7px; border: 1px solid var(--rl-line); border-radius: 6px; color: var(--rl-text); background: var(--rl-panel); }
+.rl-corpus-images { min-height: 0; display: grid; gap: 4px; overflow: auto; }
+.rl-corpus-images > button { min-width: 0; display: grid; grid-template-columns: 35px minmax(0, 1fr); align-items: center; gap: 7px; padding: 5px; text-align: left; border: 1px solid var(--rl-line); border-radius: 6px; color: var(--rl-text); background: var(--rl-panel); cursor: pointer; }
+.rl-corpus-images > button:hover:not(:disabled) { border-color: var(--rl-accent); }
+.rl-corpus-images > button:disabled { opacity: .45; }
+.rl-corpus-images img, .rl-corpus-images > button > span:first-child { width: 35px; height: 35px; object-fit: cover; border-radius: 4px; background: #000; }
+.rl-corpus-images > button > span:last-child { min-width: 0; display: flex; flex-direction: column; }
+.rl-corpus-images b, .rl-corpus-images small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rl-corpus-images small, .rl-corpus-images p { color: var(--rl-muted); font-size: 8px; }
+.rl-corpus-images p { margin: 8px 0; text-align: center; }
 .rl-btn { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--rl-line); border-radius: 7px; background: var(--rl-panel-2); cursor: pointer; }
 .rl-btn:hover:not(:disabled), .rl-icon:hover:not(:disabled) { border-color: var(--rl-accent); }
 .rl-btn:disabled, .rl-icon:disabled { cursor: not-allowed; opacity: .45; }
@@ -89,6 +102,10 @@
 .rl-qitem b { font-size: 11px; }
 .rl-qitem small { color: var(--rl-muted); font-size: 9px; }
 .rl-qitem em { color: var(--rl-danger); font-size: 9px; font-style: normal; }
+.rl-registration { color: var(--rl-blue) !important; }
+.rl-registration.is-registered { color: var(--rl-accent) !important; }
+.rl-registration.is-failed { color: var(--rl-danger) !important; }
+.rl-registration-retry { width: fit-content; display: inline-flex; align-items: center; gap: 3px; margin-top: 2px; padding: 2px 5px; border: 1px solid var(--rl-danger); border-radius: 4px; color: var(--rl-danger); background: transparent; font-size: 8px !important; cursor: pointer; }
 .rl-status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: var(--rl-muted); }
 .rl-status-dot.is-completed { background: var(--rl-accent); }
 .rl-status-dot.is-failed { background: var(--rl-danger); }
