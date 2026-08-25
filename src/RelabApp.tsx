@@ -17,6 +17,7 @@ import {
   Moon,
   Play,
   RefreshCw,
+  ScanSearch,
   SlidersHorizontal,
   Sun,
   Trash2,
@@ -37,13 +38,17 @@ import {
   type DsRemintV8_9HdOptions
 } from "./lib/deepcleanClient";
 import {
+  appendDetectionOnlyLedgerRow,
   appendGradeLedgerRow,
   compactGradeReport,
+  exportDetectionOnlyLedgerJsonl,
   exportGradeLedgerCsv,
   exportGradeLedgerJsonl,
   importGradeLedger,
+  loadDetectionOnlyLedger,
   loadGradeLedger,
   workerReportProvenance,
+  type DetectionOnlyLedgerRow,
   type GradeLedgerRow,
   type GradeMode,
   type GradeVerdict,
@@ -194,11 +199,14 @@ export default function RelabApp() {
   const [primaryMode, setPrimaryMode] = useState<GradeMode>(configuredDefaultMode);
   const [extraModes, setExtraModes] = useState<GradeMode[]>([]);
   const [running, setRunning] = useState(false);
+  const [detecting, setDetecting] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState("");
   const [notice, setNotice] = useState("");
   const [batch, setBatch] = useState({ done: 0, total: 0 });
   const [rows, setRows] = useState<GradeLedgerRow[]>(loadGradeLedger);
+  const [detectionOnlyRows, setDetectionOnlyRows] =
+    useState<DetectionOnlyLedgerRow[]>(loadDetectionOnlyLedger);
   const [sortKey, setSortKey] = useState<SortKey>("timestamp");
   const [sortAscending, setSortAscending] = useState(false);
   const [copyState, setCopyState] = useState("");
@@ -225,6 +233,7 @@ export default function RelabApp() {
   const canRun =
     pending.length > 0 &&
     !running &&
+    !detecting &&
     hasSupabaseConfig &&
     !!userId &&
     credits.privacyCredits >= totalCost;
@@ -253,6 +262,24 @@ export default function RelabApp() {
     }
     return (["sdxl", "flux_schnell", "real"] as GradeMode[]).filter((mode) => modes.has(mode));
   }, [extraModes, rows]);
+
+  const rankedDetectionOnlyRows = useMemo(
+    () =>
+      [...detectionOnlyRows].sort(
+        (left, right) =>
+          left.grade.ai_probability - right.grade.ai_probability ||
+          right.timestamp.localeCompare(left.timestamp)
+      ),
+    [detectionOnlyRows]
+  );
+
+  const activeDetectionOnlyResult = useMemo(
+    () =>
+      active
+        ? [...detectionOnlyRows].reverse().find((row) => row.file_id === active.id) ?? null
+        : null,
+    [active, detectionOnlyRows]
+  );
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -556,9 +583,65 @@ export default function RelabApp() {
     }));
   }
 
+  async function runSelectedDetectionOnly() {
+    const item = active;
+    if (!item || running || detecting) return;
+    if (!hasSupabaseConfig || !userId) {
+      setNotice("Sign in before running detection-only grading.");
+      return;
+    }
+
+    setDetecting(true);
+    setNotice(`Detection only · testing ${item.file.name} · no remint job will run…`);
+    try {
+      const sessionId = getGradeSessionId();
+      const requestedModes = [primaryMode, ...extraModes.filter((mode) => mode !== primaryMode)];
+      const modeResults: Partial<Record<GradeMode, NormalizedGrade>> = {};
+      let primaryGrade: NormalizedGrade | null = null;
+
+      for (const mode of requestedModes) {
+        const grade = await gradeImage(item.file, "og", { mode, sessionId });
+        recordGradeResponse(grade);
+        modeResults[mode] = grade;
+        if (!primaryGrade) primaryGrade = grade;
+      }
+
+      if (!primaryGrade) throw new Error("No detector mode was selected.");
+      const row: DetectionOnlyLedgerRow = {
+        schema_version: 1,
+        run_kind: "detection_only",
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        file_id: item.id,
+        file_name: item.file.name,
+        image_sha256: primaryGrade.image_sha256,
+        mode: primaryGrade.mode,
+        vendor: primaryGrade.vendor,
+        mock: primaryGrade.mock,
+        grade: primaryGrade,
+        mode_results: modeResults,
+        qa_flag: primaryGrade.verdict === "BORDER" || Boolean(primaryGrade.vendor_error),
+        settings_code: null,
+        worker_job_id: null,
+        remint_dispatched: false,
+        remint_credits_spent: 0
+      };
+      setDetectionOnlyRows(appendDetectionOnlyLedgerRow(row));
+      setNotice(
+        `Detection only complete · ${modeLabel(row.mode)} · ${percent(
+          row.grade.ai_probability
+        )} · ${row.grade.verdict} · remint not dispatched · 0 remint credits.`
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Detection-only grading failed.");
+    } finally {
+      setDetecting(false);
+    }
+  }
+
   async function runQueue() {
     const items = queue.filter((item) => item.status !== "completed");
-    if (!items.length || running) return;
+    if (!items.length || running || detecting) return;
     if (!hasSupabaseConfig || !userId) return setStatus("Sign in before running the queue.");
     if (credits.privacyCredits < items.length * UNIT_COST) {
       return setStatus(`Not enough credits — this run needs ${items.length * UNIT_COST}.`);
@@ -795,15 +878,30 @@ export default function RelabApp() {
 
               <section className="rl-detector-card">
                 <div className="rl-section-title"><FlaskConical size={14} /><b>Detection loop</b></div>
-                <label className="rl-field"><span>Primary explicit mode</span><select value={primaryMode} disabled={running} onChange={(event) => setPrimaryMode(event.target.value as GradeMode)}><option value="real">Detect Real</option><option value="sdxl">Detect SDXL</option><option value="flux_schnell">Detect Flux Schnell</option></select><ChevronDown size={13} /></label>
+                <label className="rl-field"><span>Primary explicit mode</span><select value={primaryMode} disabled={running || detecting} onChange={(event) => setPrimaryMode(event.target.value as GradeMode)}><option value="real">Detect Real</option><option value="sdxl">Detect SDXL</option><option value="flux_schnell">Detect Flux Schnell</option></select><ChevronDown size={13} /></label>
                 <p className="rl-help">{HAS_OWNER_DEFAULT ? "Owner-configured UI default." : "Real is selected for the MOCK demo only. The production default remains owner-blocked."}</p>
                 {OPTIONAL_MODES_ENABLED ? (
                   <div className="rl-mode-checks">
                     {(["sdxl", "flux_schnell", "real"] as GradeMode[]).filter((mode) => mode !== primaryMode).map((mode) => (
-                      <label key={mode}><input type="checkbox" checked={extraModes.includes(mode)} disabled={running} onChange={(event) => setExtraModes((current) => event.target.checked ? [...current, mode] : current.filter((value) => value !== mode))} /> Also {modeLabel(mode)}</label>
+                      <label key={mode}><input type="checkbox" checked={extraModes.includes(mode)} disabled={running || detecting} onChange={(event) => setExtraModes((current) => event.target.checked ? [...current, mode] : current.filter((value) => value !== mode))} /> Also {modeLabel(mode)}</label>
                     ))}
                   </div>
                 ) : <p className="rl-help">Optional SDXL/Flux multi-mode grading is disabled until owner approval.</p>}
+                <div className="rl-detect-only-block">
+                  <button className="rl-btn rl-detect-only" type="button" disabled={!active || running || detecting || !hasSupabaseConfig || !userId} onClick={() => void runSelectedDetectionOnly()}>
+                    {detecting ? <><Loader2 className="rl-spin" size={15} /> Testing selected image…</> : <><ScanSearch size={15} /> Run detection only</>}
+                  </button>
+                  <small>{active ? `Selected original: ${active.file.name}` : "Select an image from the queue."}</small>
+                  <small>No remint job · no worker dispatch · 0 remint credits</small>
+                  {activeDetectionOnlyResult ? (
+                    <div className="rl-detect-result">
+                      <span><small>AI probability</small><b>{percent(activeDetectionOnlyResult.grade.ai_probability)}</b></span>
+                      <span><small>Mode</small><b>{modeLabel(activeDetectionOnlyResult.mode)}</b></span>
+                      <span><small>Top source</small><b>{activeDetectionOnlyResult.grade.top_source ?? "—"}</b></span>
+                      <span><small>Verdict</small><b className={`is-${activeDetectionOnlyResult.grade.verdict.toLowerCase()}`}>{activeDetectionOnlyResult.grade.verdict}</b></span>
+                    </div>
+                  ) : null}
+                </div>
                 <div className="rl-budget"><span><b>{gradeStats.vendorCalls}</b> / {gradeStats.cap}<small>vendor calls this session</small></span><span><b>{gradeStats.cacheHits}</b><small>cache hits</small></span><span><b>{gradeStats.grades}</b><small>grades returned</small></span></div>
                 <div className="rl-warning"><b>MOCK</b><span>No real vendor request or parser is enabled.</span></div>
               </section>
@@ -851,6 +949,37 @@ export default function RelabApp() {
                   </tr>
                 ))}
                 {!rows.length ? <tr><td colSpan={12 + auxiliaryModes.length} className="rl-no-results">Completed paired grades will appear here.</td></tr> : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rl-ledger rl-detection-only-ledger">
+          <div className="rl-ledger-head">
+            <div><b>Detection-only ledger</b><span>{detectionOnlyRows.length}/500 isolated API tests · no remint provenance</span></div>
+            <span className="rl-spacer" />
+            <button className="rl-btn rl-btn-small" type="button" disabled={!detectionOnlyRows.length} onClick={() => downloadText(exportDetectionOnlyLedgerJsonl(detectionOnlyRows), "relab-detection-only.jsonl", "application/x-ndjson")}><FileJson size={13} /> JSONL</button>
+          </div>
+          <div className="rl-table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Selected image</th><th>Mode</th><th>AI%</th><th>Deepfake%</th><th>Top source</th><th>Verdict</th><th>Cache</th><th>Isolation proof</th><th>Timestamp</th><th>Copy</th></tr></thead>
+              <tbody>
+                {rankedDetectionOnlyRows.map((row, index) => (
+                  <tr key={row.id}>
+                    <td className="rl-rank">{index + 1}</td>
+                    <td><b>{row.file_name}</b><small>{row.file_id}</small>{row.mock ? <span className="rl-mini-mock">MOCK</span> : null}</td>
+                    <td>{modeLabel(row.mode)}</td>
+                    <td><b>{percent(row.grade.ai_probability)}</b></td>
+                    <td>{percent(row.grade.deepfake_probability)}</td>
+                    <td>{row.grade.top_source ?? "—"}</td>
+                    <td><span className={`rl-verdict is-${row.grade.verdict.toLowerCase()}`}>{row.grade.verdict}</span></td>
+                    <td>{row.grade.cache_hit ? "HIT" : "MISS"}</td>
+                    <td><span className="rl-isolation-proof">No job · 0 credits</span></td>
+                    <td>{new Date(row.timestamp).toLocaleString()}</td>
+                    <td><div className="rl-actions"><button title="Copy standalone JSON record" onClick={() => void copyText(JSON.stringify(row), `detect-${row.id}`)}>{copyState === `detect-${row.id}` ? <Check size={13} /> : <Copy size={13} />}</button></div></td>
+                  </tr>
+                ))}
+                {!detectionOnlyRows.length ? <tr><td colSpan={11} className="rl-no-results">Select a queued image and press “Run detection only.”</td></tr> : null}
               </tbody>
             </table>
           </div>

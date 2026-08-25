@@ -5,7 +5,7 @@ Consultant: C8
 
 ## 1. Summary
 
-- Added a new lazy `/relab` console that dispatches the frozen `ds-remint-v8.9-hd` job payload and automatically runs paired OG/output grading.
+- Added a new lazy `/relab` console that supports both frozen `ds-remint-v8.9-hd` paired grading and a separately persisted detection-only action for the selected original.
 - Added an authenticated server-only `grade-image` contract with explicit modes, normalization, provenance-safe raw output, fallback policy, cache hooks, and an atomic session call cap.
 - Added a schema-versioned, append-only browser ledger with 500-row retention, import, JSONL, CSV, and the fixed compact-report table export.
 - Added a deterministic, unmistakably labelled MOCK provider; no real vendor request or speculative response parser exists in this build.
@@ -17,10 +17,10 @@ Protocol laws (verbatim): **L1 settings-code; L2 executed-not-requested; L3 pair
 
 New:
 
-- `src/RelabApp.tsx` — `/relab` queue, auth/credits, frozen presets, run loop, paired grading, ranked table, actions, exports, and import.
+- `src/RelabApp.tsx` — `/relab` queue, auth/credits, frozen presets, paired run loop, isolated selected-image detection run, two separate ranked ledgers, actions, exports, and import.
 - `src/relab.css` — isolated `/relab` styling.
 - `src/lib/graderClient.ts` — typed `gradeImage(file, role, meta)` and `gradeOutputUrl(url, role, meta)` callers.
-- `src/lib/gradeLedger.ts` — normalized types, append-only LocalStorage persistence, worker-report provenance/digest, import/export, verdict helper, CSV/JSONL/compact format.
+- `src/lib/gradeLedger.ts` — normalized types, separate append-only paired and detection-only LocalStorage ledgers, worker-report provenance/digest, import/export, verdict helper, CSV/JSONL/compact format.
 - `supabase/functions/grade-image/index.ts` — authenticated server-side grade function and mock/real provider boundary.
 - `supabase/migrations/20260825000000_grade_cache.sql` — **draft only; not applied**. Adds `grade_cache`, `grade_sessions`, RLS lockdown, and the atomic service-role `reserve_grade_call` function.
 - `C8_API_LOOP_BUILD_REPORT.md` — this handoff.
@@ -96,6 +96,8 @@ Verdicts use the frozen inclusive boundaries:
 Provider probabilities in either `0..1` or `0..100` are converted to `0..1`; non-finite, negative, or above-100 values are rejected and never cached. Source keys are trimmed/lower-cased and values are normalized to `0..1`. An empty source map yields `top_source: null`. For a remint grade, its source mass is split by membership in the OG top three families: absent mass becomes `swap_index`, present mass becomes `retention_index`; they sum to 1 when remint source mass is non-zero. OG grades have both indices set to zero.
 
 The ledger captures requested settings separately from the executed worker report. It stores the full received report plus a SHA-256 digest and explicit extracts for `settings`, `attempts`, `finish_adaptive`, `detector_gate`, `rating_88`, and Quality Finish `qc`. This preserves executed-not-requested provenance. Vendor raw response keys matching API-key/token/authorization/secret/endpoint patterns are redacted server-side before cache or export.
+
+The selected-image **Run detection only** event has a separate schema and storage key. It calls `gradeImage(file, "og")` only, passes no settings code, and records `settings_code: null`, `worker_job_id: null`, `remint_dispatched: false`, and `remint_credits_spent: 0`. It cannot be exported as, imported into, or rendered as an OG/remint pair.
 
 ## 5. Cache and budget counters
 

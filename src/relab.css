@@ -122,6 +122,17 @@
 .rl-field > svg { position: absolute; right: 10px; bottom: 10px; pointer-events: none; }
 .rl-help { margin: 6px 0 0; color: var(--rl-muted); font-size: 9px; }
 .rl-mode-checks { display: grid; gap: 5px; margin-top: 9px; color: var(--rl-muted); font-size: 10px; }
+.rl-detect-only-block { display: grid; gap: 5px; margin-top: 10px; padding: 9px; border: 1px solid color-mix(in srgb, var(--rl-blue) 45%, var(--rl-line)); border-radius: 8px; background: color-mix(in srgb, var(--rl-blue) 6%, var(--rl-panel)); }
+.rl-detect-only { width: 100%; min-height: 38px; color: #06121f !important; border-color: var(--rl-blue); background: var(--rl-blue); font-weight: 800; }
+.rl-detect-only-block > small { color: var(--rl-muted); font-size: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rl-detect-result { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; margin-top: 3px; }
+.rl-detect-result > span { min-width: 0; display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--rl-line); border-radius: 6px; background: var(--rl-panel-2); }
+.rl-detect-result small { color: var(--rl-muted); font-size: 8px; }
+.rl-detect-result b { overflow: hidden; color: var(--rl-text); font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
+.rl-detect-result b.is-clear { color: var(--rl-accent); }
+.rl-detect-result b.is-near { color: var(--rl-blue); }
+.rl-detect-result b.is-border { color: var(--rl-warn); }
+.rl-detect-result b.is-fail { color: var(--rl-danger); }
 .rl-budget { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 10px; }
 .rl-budget > span { display: flex; flex-direction: column; padding: 7px; border: 1px solid var(--rl-line); border-radius: 7px; }
 .rl-budget b { color: var(--rl-blue); font-size: 14px; }
@@ -163,6 +174,8 @@
 .rl-actions button { width: 27px; height: 27px; display: grid; place-items: center; padding: 0; border: 1px solid var(--rl-line); border-radius: 6px; background: var(--rl-panel-2); cursor: pointer; }
 .rl-actions button:hover:not(:disabled) { border-color: var(--rl-accent); }
 .rl-no-results { height: 80px; text-align: center; color: var(--rl-muted); }
+.rl-detection-only-ledger { margin-bottom: 8px; }
+.rl-isolation-proof { color: var(--rl-accent); font-size: 9px; font-weight: 800; }
 
 @media (max-width: 1100px) {
   .rl-shell { min-width: 0; overflow-x: auto; }

@@ -3,6 +3,7 @@ import { canonicalJson } from "./settingsCode";
 export const GRADE_LEDGER_SCHEMA_VERSION = 1 as const;
 export const GRADE_LEDGER_LIMIT = 500;
 const STORAGE_KEY = "resmarke:relab:grade-ledger:v1";
+const DETECTION_ONLY_STORAGE_KEY = "resmarke:relab:detection-only-ledger:v1";
 
 export type GradeMode = "sdxl" | "flux_schnell" | "real";
 export type GradeRole = "og" | "remint";
@@ -76,9 +77,34 @@ export type GradeLedgerRow = {
   retention_index: number;
 };
 
+export type DetectionOnlyLedgerRow = {
+  schema_version: typeof GRADE_LEDGER_SCHEMA_VERSION;
+  run_kind: "detection_only";
+  id: string;
+  timestamp: string;
+  file_id: string;
+  file_name: string;
+  image_sha256: string;
+  mode: GradeMode;
+  vendor: string;
+  mock: boolean;
+  grade: NormalizedGrade;
+  mode_results: Partial<Record<GradeMode, NormalizedGrade>>;
+  qa_flag: boolean;
+  settings_code: null;
+  worker_job_id: null;
+  remint_dispatched: false;
+  remint_credits_spent: 0;
+};
+
 type StoredLedger = {
   schema_version: typeof GRADE_LEDGER_SCHEMA_VERSION;
   rows: GradeLedgerRow[];
+};
+
+type StoredDetectionOnlyLedger = {
+  schema_version: typeof GRADE_LEDGER_SCHEMA_VERSION;
+  rows: DetectionOnlyLedgerRow[];
 };
 
 export function loadGradeLedger(): GradeLedgerRow[] {
@@ -100,6 +126,35 @@ export function appendGradeLedgerRow(row: GradeLedgerRow): GradeLedgerRow[] {
   const rows = [...loadGradeLedger(), assertLedgerRow(row)].slice(-GRADE_LEDGER_LIMIT);
   persist(rows);
   return rows;
+}
+
+export function loadDetectionOnlyLedger(): DetectionOnlyLedgerRow[] {
+  if (typeof localStorage === "undefined") return [];
+  const raw = localStorage.getItem(DETECTION_ONLY_STORAGE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isStoredDetectionOnlyLedger(parsed)) return [];
+    return parsed.rows.slice(-GRADE_LEDGER_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+export function appendDetectionOnlyLedgerRow(
+  row: DetectionOnlyLedgerRow
+): DetectionOnlyLedgerRow[] {
+  const rows = [...loadDetectionOnlyLedger(), assertDetectionOnlyRow(row)].slice(
+    -GRADE_LEDGER_LIMIT
+  );
+  persistDetectionOnly(rows);
+  return rows;
+}
+
+export function exportDetectionOnlyLedgerJsonl(
+  rows = loadDetectionOnlyLedger()
+): string {
+  return rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
 }
 
 /** Import accepts this module's JSONL export or a JSON array. Valid rows are
@@ -252,6 +307,15 @@ function persist(rows: GradeLedgerRow[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }
 
+function persistDetectionOnly(rows: DetectionOnlyLedgerRow[]) {
+  if (typeof localStorage === "undefined") return;
+  const stored: StoredDetectionOnlyLedger = {
+    schema_version: GRADE_LEDGER_SCHEMA_VERSION,
+    rows
+  };
+  localStorage.setItem(DETECTION_ONLY_STORAGE_KEY, JSON.stringify(stored));
+}
+
 function assertLedgerRow(value: unknown): GradeLedgerRow {
   if (!isRecord(value) || value.schema_version !== GRADE_LEDGER_SCHEMA_VERSION) {
     throw new Error(`Unsupported grade-ledger schema; expected v${GRADE_LEDGER_SCHEMA_VERSION}.`);
@@ -274,6 +338,42 @@ function isStoredLedger(value: unknown): value is StoredLedger {
     value.rows.every((row) => {
       try {
         assertLedgerRow(row);
+        return true;
+      } catch {
+        return false;
+      }
+    })
+  );
+}
+
+function assertDetectionOnlyRow(value: unknown): DetectionOnlyLedgerRow {
+  if (
+    !isRecord(value) ||
+    value.schema_version !== GRADE_LEDGER_SCHEMA_VERSION ||
+    value.run_kind !== "detection_only" ||
+    value.settings_code !== null ||
+    value.worker_job_id !== null ||
+    value.remint_dispatched !== false ||
+    value.remint_credits_spent !== 0 ||
+    typeof value.id !== "string" ||
+    typeof value.timestamp !== "string" ||
+    typeof value.file_id !== "string" ||
+    typeof value.file_name !== "string" ||
+    !isNormalizedGrade(value.grade)
+  ) {
+    throw new Error("Detection-only ledger row is invalid.");
+  }
+  return value as DetectionOnlyLedgerRow;
+}
+
+function isStoredDetectionOnlyLedger(value: unknown): value is StoredDetectionOnlyLedger {
+  return (
+    isRecord(value) &&
+    value.schema_version === GRADE_LEDGER_SCHEMA_VERSION &&
+    Array.isArray(value.rows) &&
+    value.rows.every((row) => {
+      try {
+        assertDetectionOnlyRow(row);
         return true;
       } catch {
         return false;
