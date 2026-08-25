@@ -1,4 +1,4 @@
--- DRAFT ONLY. Owner approval is required before this migration is applied.
+-- Applied to resmarke-prod on 2026-08-25 with owner authorization.
 -- Server-side grade cache and per-session vendor-call budget for /relab.
 
 create table if not exists public.grade_cache (

@@ -178,13 +178,7 @@ function initialTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function configuredDefaultMode(): GradeMode {
-  const value = String(import.meta.env.VITE_RELAB_DEFAULT_MODE ?? "").toLowerCase();
-  return value === "sdxl" || value === "flux_schnell" || value === "real" ? value : "real";
-}
-
-const HAS_OWNER_DEFAULT = Boolean(import.meta.env.VITE_RELAB_DEFAULT_MODE);
-const OPTIONAL_MODES_ENABLED = import.meta.env.VITE_RELAB_OPTIONAL_MODES === "true";
+const HIVE_GRADE_MODE: GradeMode = "real";
 
 export default function RelabApp() {
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -196,8 +190,7 @@ export default function RelabApp() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [activeId, setActiveId] = useState("");
   const [presetId, setPresetId] = useState<PresetId>("config-a");
-  const [primaryMode, setPrimaryMode] = useState<GradeMode>(configuredDefaultMode);
-  const [extraModes, setExtraModes] = useState<GradeMode[]>([]);
+  const primaryMode = HIVE_GRADE_MODE;
   const [running, setRunning] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -253,15 +246,14 @@ export default function RelabApp() {
   }, [rows, sortAscending, sortKey]);
 
   const auxiliaryModes = useMemo(() => {
-    if (!OPTIONAL_MODES_ENABLED) return [];
-    const modes = new Set<GradeMode>(extraModes);
+    const modes = new Set<GradeMode>();
     for (const row of rows) {
       for (const mode of Object.keys(row.mode_results) as GradeMode[]) {
         if (mode !== row.mode) modes.add(mode);
       }
     }
     return (["sdxl", "flux_schnell", "real"] as GradeMode[]).filter((mode) => modes.has(mode));
-  }, [extraModes, rows]);
+  }, [rows]);
 
   const rankedDetectionOnlyRows = useMemo(
     () =>
@@ -519,7 +511,7 @@ export default function RelabApp() {
   ): Promise<GradeLedgerRow> {
     if (!job.outputUrl) throw new Error("Completed job is missing a secure output URL.");
     const sessionId = getGradeSessionId();
-    const requestedModes = [primaryMode, ...extraModes.filter((mode) => mode !== primaryMode)];
+    const requestedModes = [primaryMode];
     const modeResults: Partial<Record<GradeMode, ModeGradePair>> = {};
     let firstPair: ModeGradePair | null = null;
 
@@ -595,7 +587,7 @@ export default function RelabApp() {
     setNotice(`Detection only · testing ${item.file.name} · no remint job will run…`);
     try {
       const sessionId = getGradeSessionId();
-      const requestedModes = [primaryMode, ...extraModes.filter((mode) => mode !== primaryMode)];
+      const requestedModes = [primaryMode];
       const modeResults: Partial<Record<GradeMode, NormalizedGrade>> = {};
       let primaryGrade: NormalizedGrade | null = null;
 
@@ -785,7 +777,7 @@ export default function RelabApp() {
             {copyState === "code" ? <Check size={12} /> : <Copy size={12} />}
             <code>{settingsCode}</code>
           </button>
-          <span className="rl-badge rl-badge-mock">MOCK PROVIDER</span>
+          <span className="rl-badge rl-badge-live">HIVE API</span>
           <span className="rl-credits"><Wallet size={13} /><b>{credits.privacyCredits}</b></span>
           {needsSignIn ? (
             <details className="rl-account">
@@ -878,18 +870,11 @@ export default function RelabApp() {
 
               <section className="rl-detector-card">
                 <div className="rl-section-title"><FlaskConical size={14} /><b>Detection loop</b></div>
-                <label className="rl-field"><span>Primary explicit mode</span><select value={primaryMode} disabled={running || detecting} onChange={(event) => setPrimaryMode(event.target.value as GradeMode)}><option value="real">Detect Real</option><option value="sdxl">Detect SDXL</option><option value="flux_schnell">Detect Flux Schnell</option></select><ChevronDown size={13} /></label>
-                <p className="rl-help">{HAS_OWNER_DEFAULT ? "Owner-configured UI default." : "Real is selected for the MOCK demo only. The production default remains owner-blocked."}</p>
-                {OPTIONAL_MODES_ENABLED ? (
-                  <div className="rl-mode-checks">
-                    {(["sdxl", "flux_schnell", "real"] as GradeMode[]).filter((mode) => mode !== primaryMode).map((mode) => (
-                      <label key={mode}><input type="checkbox" checked={extraModes.includes(mode)} disabled={running || detecting} onChange={(event) => setExtraModes((current) => event.target.checked ? [...current, mode] : current.filter((value) => value !== mode))} /> Also {modeLabel(mode)}</label>
-                    ))}
-                  </div>
-                ) : <p className="rl-help">Optional SDXL/Flux multi-mode grading is disabled until owner approval.</p>}
+                <label className="rl-field"><span>Vendor detector</span><select value={primaryMode} disabled><option value="real">Hive unified detector</option></select><ChevronDown size={13} /></label>
+                <p className="rl-help">Hive exposes one detector API. SDXL, Flux Schnell, and Real are website example presets—not separate API modes.</p>
                 <div className="rl-detect-only-block">
                   <button className="rl-btn rl-detect-only" type="button" disabled={!active || running || detecting || !hasSupabaseConfig || !userId} onClick={() => void runSelectedDetectionOnly()}>
-                    {detecting ? <><Loader2 className="rl-spin" size={15} /> Testing selected image…</> : <><ScanSearch size={15} /> Run detection only</>}
+                    {detecting ? <><Loader2 className="rl-spin" size={15} /> Testing selected image…</> : <><ScanSearch size={15} /> Run API detection only</>}
                   </button>
                   <small>{active ? `Selected original: ${active.file.name}` : "Select an image from the queue."}</small>
                   <small>No remint job · no worker dispatch · 0 remint credits</small>
@@ -903,7 +888,7 @@ export default function RelabApp() {
                   ) : null}
                 </div>
                 <div className="rl-budget"><span><b>{gradeStats.vendorCalls}</b> / {gradeStats.cap}<small>vendor calls this session</small></span><span><b>{gradeStats.cacheHits}</b><small>cache hits</small></span><span><b>{gradeStats.grades}</b><small>grades returned</small></span></div>
-                <div className="rl-warning"><b>MOCK</b><span>No real vendor request or parser is enabled.</span></div>
+                <div className="rl-warning is-live"><b>LIVE</b><span>Server-side Hive adapter · credentials never enter the browser or ledger.</span></div>
               </section>
             </div>
             <div className="rl-runbar">
@@ -1026,7 +1011,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function modeLabel(mode: GradeMode): string {
-  return mode === "real" ? "Detect Real" : mode === "sdxl" ? "Detect SDXL" : "Detect Flux Schnell";
+  return mode === "real" ? "Hive unified" : mode === "sdxl" ? "Legacy SDXL preset" : "Legacy Flux preset";
 }
 
 function statusLabel(status: QueueStatus): string {

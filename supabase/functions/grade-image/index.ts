@@ -1,5 +1,6 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { adminClient, userFromRequest } from "../_shared/supabase.ts";
+import { parseHiveResponse } from "./hive.ts";
 
 type GradeMode = "sdxl" | "flux_schnell" | "real";
 type GradeRole = "og" | "remint";
@@ -48,11 +49,11 @@ type ProviderExecution = {
 
 const MODES = new Set<GradeMode>(["sdxl", "flux_schnell", "real"]);
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+const HIVE_MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const DEFAULT_SESSION_CAP = 40;
-
-/* This must stay false until owners supply the exact G1 docs plus one raw
- * response for every mode. No request shape or parser is guessed. */
-const REAL_G1_PARSER_VERIFIED = false;
+const HIVE_API_MODE: GradeMode = "real";
+const HIVE_ENDPOINT =
+  "https://api.thehive.ai/api/v3/hive/ai-generated-and-deepfake-content-detection";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -68,16 +69,6 @@ Deno.serve(async (request) => {
     const validated = validateInput(input);
     const provider = providerName();
 
-    if (provider === "g1" && !REAL_G1_PARSER_VERIFIED) {
-      return jsonResponse(
-        {
-          error:
-            "G1 is BLOCKED: verified vendor docs, credentials, rate limits, and raw responses for sdxl, flux_schnell, and real are required. Set GRADE_PROVIDER=mock for the test provider.",
-        },
-        503,
-      );
-    }
-
     const bytes = await readImageBytes(validated);
     const imageSha256 = await sha256Hex(bytes);
     const sessionId = validated.grade_session_id ?? crypto.randomUUID();
@@ -87,6 +78,7 @@ Deno.serve(async (request) => {
       bytes,
       imageSha256,
       requestedMode: validated.mode,
+      gradeMode: provider === "g1" ? HIVE_API_MODE : validated.mode,
       ownerDefaultMode: ownerDefaultMode(),
       provider,
       sessionId,
@@ -154,6 +146,7 @@ async function gradeWithFallback(input: {
   bytes: Uint8Array;
   imageSha256: string;
   requestedMode: GradeMode;
+  gradeMode: GradeMode;
   ownerDefaultMode: GradeMode | null;
   provider: "mock" | "g1";
   sessionId: string;
@@ -163,7 +156,7 @@ async function gradeWithFallback(input: {
   const initial = await cachedGrade(
     input.imageSha256,
     input.provider,
-    input.requestedMode,
+    input.gradeMode,
   );
   if (initial) {
     return {
@@ -176,13 +169,13 @@ async function gradeWithFallback(input: {
   }
 
   try {
-    const result = await callWithOneRetry(input, input.requestedMode);
+    const result = await callWithOneRetry(input, input.gradeMode);
     const grade = await normalizeAndCache(
       result.result,
       input.bytes,
       input.imageSha256,
       input.provider,
-      input.requestedMode,
+      input.gradeMode,
     );
     return {
       grade,
@@ -193,7 +186,7 @@ async function gradeWithFallback(input: {
     };
   } catch (error) {
     const defaultMode = input.ownerDefaultMode;
-    if (!defaultMode || defaultMode === input.requestedMode) throw error;
+    if (!defaultMode || defaultMode === input.gradeMode) throw error;
 
     const message = safeError(error);
     const failedCalls = error instanceof VendorAttemptError ? error.calls : 0;
@@ -209,7 +202,7 @@ async function gradeWithFallback(input: {
         usage: await currentUsage(input.sessionId, input.userId, input.cap),
         cacheHit: true,
         vendorError:
-          `${input.requestedMode}: ${message}; used cached ${defaultMode}`,
+          `${input.gradeMode}: ${message}; used cached ${defaultMode}`,
         requestedMode: input.requestedMode,
       };
     }
@@ -227,7 +220,7 @@ async function gradeWithFallback(input: {
       providerCalls: failedCalls + fallback.calls,
       usage: fallback.usage,
       cacheHit: false,
-      vendorError: `${input.requestedMode}: ${message}; graded ${defaultMode}`,
+      vendorError: `${input.gradeMode}: ${message}; graded ${defaultMode}`,
       requestedMode: input.requestedMode,
     };
   }
@@ -250,8 +243,15 @@ async function callWithOneRetry(
       usage: await currentUsage(context.sessionId, context.userId, context.cap),
     };
   }
+  if (context.bytes.length > HIVE_MAX_IMAGE_BYTES) {
+    throw badRequest("Hive base64 uploads are limited to 20 MB.");
+  }
+  if (!Deno.env.get("HIVE_SECRET_KEY")?.trim()) {
+    throw serviceUnavailable("Hive server credential is not configured.");
+  }
 
   let lastError: unknown;
+  let calls = 0;
   let usage = await currentUsage(
     context.sessionId,
     context.userId,
@@ -263,26 +263,67 @@ async function callWithOneRetry(
       context.userId,
       context.cap,
     );
+    calls += 1;
     try {
-      const result = await callVerifiedG1(context.bytes, mode);
-      return { result, calls: attempt + 1, usage };
+      const result = await callVerifiedG1(context.bytes);
+      return { result, calls, usage };
     } catch (error) {
       lastError = error;
+      if (!shouldRetryVendorError(error)) break;
     }
   }
   throw new VendorAttemptError(
-    `G1 ${mode} failed after one retry: ${safeError(lastError)}`,
-    2,
+    `G1 ${mode} failed after ${calls} attempt${calls === 1 ? "" : "s"}: ${
+      safeError(lastError)
+    }`,
+    calls,
   );
 }
 
 async function callVerifiedG1(
-  _bytes: Uint8Array,
-  _mode: GradeMode,
+  bytes: Uint8Array,
 ): Promise<ProviderResult> {
-  // OWNER INPUT GATE: implement only after all §3 inputs and raw samples are
-  // supplied. Do not add a speculative Hive/Sightengine request or parser.
-  throw serviceUnavailable("G1 parser is not verified.");
+  if (bytes.length > HIVE_MAX_IMAGE_BYTES) {
+    throw badRequest("Hive base64 uploads are limited to 20 MB.");
+  }
+  const secret = Deno.env.get("HIVE_SECRET_KEY")?.trim();
+  if (!secret) {
+    throw serviceUnavailable("Hive server credential is not configured.");
+  }
+
+  const response = await fetch(HIVE_ENDPOINT, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${secret}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      input: [{ media_base64: encodeBase64(bytes) }],
+      processing_mode: "sync_with_fallback",
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  const responseText = await response.text();
+  let raw: unknown;
+  try {
+    raw = JSON.parse(responseText);
+  } catch {
+    if (!response.ok) {
+      throw new HiveRequestError(
+        `Hive returned non-JSON (HTTP ${response.status}).`,
+        response.status,
+      );
+    }
+    throw new Error(`Hive returned non-JSON (HTTP ${response.status}).`);
+  }
+  if (!response.ok) {
+    throw new HiveRequestError(
+      `Hive request failed (HTTP ${response.status}): ${vendorMessage(raw)}`,
+      response.status,
+    );
+  }
+  return parseHiveResponse(raw);
 }
 
 function mockProvider(bytes: Uint8Array, mode: GradeMode): ProviderResult {
@@ -511,6 +552,17 @@ function decodeBase64(value: string): Uint8Array {
   }
 }
 
+function encodeBase64(bytes: Uint8Array): string {
+  const chunks: string[] = [];
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    chunks.push(
+      String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)),
+    );
+  }
+  return btoa(chunks.join(""));
+}
+
 function safeRemoteUrl(value: string): URL {
   let url: URL;
   try {
@@ -685,6 +737,26 @@ function safeError(error: unknown): string {
     : "Vendor request failed.";
 }
 
+function vendorMessage(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "Vendor rejected the request.";
+  }
+  const record = value as Record<string, unknown>;
+  const message = [record.message, record.error, record.detail].find((item) =>
+    typeof item === "string" && item.length > 0
+  );
+  return typeof message === "string"
+    ? message.replace(/[\r\n]+/g, " ").slice(0, 240)
+    : "Vendor rejected the request.";
+}
+
+function shouldRetryVendorError(error: unknown): boolean {
+  if (error instanceof HiveRequestError) {
+    return error.status === 408 || error.status === 429 || error.status >= 500;
+  }
+  return error instanceof TypeError || error instanceof DOMException;
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -702,6 +774,16 @@ class VendorAttemptError extends Error {
     super(message);
     this.name = "VendorAttemptError";
     this.calls = calls;
+  }
+}
+
+class HiveRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "HiveRequestError";
+    this.status = status;
   }
 }
 

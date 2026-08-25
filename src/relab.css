@@ -49,6 +49,7 @@
 .rl-code code { color: var(--rl-blue); font-size: 11px; }
 .rl-badge { font-size: 9px; font-weight: 800; letter-spacing: .08em; }
 .rl-badge-mock { color: var(--rl-warn); border-color: color-mix(in srgb, var(--rl-warn) 45%, var(--rl-line)); }
+.rl-badge-live { color: var(--rl-accent); border-color: color-mix(in srgb, var(--rl-accent) 45%, var(--rl-line)); }
 .rl-credits svg { color: var(--rl-accent); }
 .rl-icon { width: 29px; height: 29px; padding: 0; display: inline-grid; place-items: center; border: 1px solid var(--rl-line); background: var(--rl-panel-2); border-radius: 7px; cursor: pointer; }
 .rl-account { position: relative; }
@@ -138,6 +139,7 @@
 .rl-budget b { color: var(--rl-blue); font-size: 14px; }
 .rl-budget small { color: var(--rl-muted); font-size: 8px; }
 .rl-warning { display: flex; gap: 7px; margin-top: 8px; padding: 7px; border: 1px solid color-mix(in srgb, var(--rl-warn) 40%, var(--rl-line)); border-radius: 7px; color: var(--rl-warn); font-size: 9px; }
+.rl-warning.is-live { color: var(--rl-accent); border-color: color-mix(in srgb, var(--rl-accent) 40%, var(--rl-line)); }
 .rl-runbar { display: grid; gap: 7px; padding: 9px; border-top: 1px solid var(--rl-line); }
 .rl-runbar > div:not(.rl-progress) { display: flex; justify-content: space-between; color: var(--rl-muted); font-size: 10px; }
 .rl-runbar small { color: var(--rl-warn); text-align: center; font-size: 9px; }
