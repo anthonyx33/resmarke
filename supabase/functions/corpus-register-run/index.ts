@@ -7,6 +7,7 @@ import {
   corpusMaxOutputsPerImage,
   corpusStorageByteLimit,
   CorpusHttpError,
+  downloadStorageBytes,
   errorResponse,
   requireCorpusAdmin,
   sha256Hex,
@@ -63,32 +64,41 @@ Deno.serve(async (request) => {
     if (membershipError) throw membershipError;
     if (!membership) throw new CorpusHttpError("Image is no longer a member of the experiment corpus set.", 409);
 
-    const { data: source, error: sourceError } = await client.storage.from("deepclean-outputs").download(job.output_path);
-    if (sourceError) throw sourceError;
-    if (source.size < 1 || source.size > MAX_BYTES) throw new CorpusHttpError("Delivered output size is invalid.", 422);
-    const outputBytes = new Uint8Array(await source.arrayBuffer());
-    const outputHeader = inspectImage(outputBytes);
-    if (await sha256Hex(outputBytes) !== outputSha256) {
+    const { bytes: sourceBytes, error: sourceError } =
+      await downloadStorageBytes(client, "deepclean-outputs", job.output_path);
+    if (sourceError || !sourceBytes) {
+      throw new CorpusHttpError(
+        `Delivered output could not be read from storage (${job.output_path}): ${sourceError ?? "empty object"}`,
+        409,
+      );
+    }
+    if (sourceBytes.length < 1 || sourceBytes.length > MAX_BYTES) {
+      throw new CorpusHttpError("Delivered output size is invalid.", 422);
+    }
+    const outputHeader = inspectImage(sourceBytes);
+    if (await sha256Hex(sourceBytes) !== outputSha256) {
       throw new CorpusHttpError("Delivered output hash does not match the completed job report.", 409);
     }
     const outputPath = canonicalOutputPath(image.sha256, outputSha256, outputHeader.extension);
     const bucket = corpusBucket();
-    const { data: existingObject, error: existingObjectError } = await client.storage.from(bucket).download(outputPath);
-    if (existingObject) {
-      const existingBytes = new Uint8Array(await existingObject.arrayBuffer());
+    const { bytes: existingBytes } =
+      await downloadStorageBytes(client, bucket, outputPath);
+    if (existingBytes) {
       if (await sha256Hex(existingBytes) !== outputSha256) {
         throw new CorpusHttpError("Existing content-addressed output failed integrity verification.", 409);
       }
     } else {
-      if (existingObjectError && !/not found|does not exist|404/i.test(existingObjectError.message)) {
-        throw existingObjectError;
-      }
-      const { error: uploadError } = await client.storage.from(bucket).upload(outputPath, outputBytes, {
+      const { error: uploadError } = await client.storage.from(bucket).upload(outputPath, sourceBytes, {
         contentType: outputHeader.contentType,
         cacheControl: "31536000",
         upsert: false,
       });
-      if (uploadError && !/already exists|duplicate/i.test(uploadError.message)) throw uploadError;
+      if (uploadError && !/already exists|duplicate/i.test(uploadError.message)) {
+        throw new CorpusHttpError(
+          `Corpus output upload failed (${outputPath}): ${uploadError.message}`,
+          500,
+        );
+      }
       if (!uploadError) {
         cleanupCopiedOutput = async () => {
           const { data: reference } = await client.from("corpus_runs").select("id")
@@ -129,7 +139,7 @@ Deno.serve(async (request) => {
       runtime_ms: job.runtime_ms,
       output_sha256: outputSha256,
       output_storage_path: outputPath,
-      output_byte_size: outputBytes.length,
+      output_byte_size: sourceBytes.length,
       output_copy_status: "COPIED",
       grade_status: grades.gradeStatus,
       og_grade: grades.ogGrade,

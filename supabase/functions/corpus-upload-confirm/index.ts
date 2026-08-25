@@ -5,6 +5,7 @@ import {
   corpusMaxImages,
   corpusStorageByteLimit,
   CorpusHttpError,
+  downloadStorageBytes,
   errorResponse,
   requireCorpusAdmin,
   safeFileName,
@@ -33,13 +34,16 @@ Deno.serve(async (request) => {
         .eq("storage_path", storagePath).maybeSingle();
       if (!data) await client.storage.from(bucket).remove([storagePath]);
     };
-
-    const { data: object, error: downloadError } = await client.storage.from(bucket).download(storagePath);
-    if (downloadError) throw downloadError;
-    if (object.size < 1 || object.size > MAX_BYTES) {
+    const { bytes, error: downloadError } = await downloadStorageBytes(client, bucket, storagePath);
+    if (downloadError || !bytes) {
+      throw new CorpusHttpError(
+        `Stored object could not be re-read for verification: ${downloadError ?? "empty object"}`,
+        422,
+      );
+    }
+    if (bytes.length < 1 || bytes.length > MAX_BYTES) {
       throw new CorpusHttpError("Stored object exceeds the 25 MB corpus limit.", 422);
     }
-    const bytes = new Uint8Array(await object.arrayBuffer());
     const header = inspectImage(bytes);
     const actualSha256 = await sha256Hex(bytes);
     if (actualSha256 !== claimedSha256) throw new CorpusHttpError("Stored object SHA-256 does not match the claim.", 422);

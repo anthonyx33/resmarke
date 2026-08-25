@@ -1,4 +1,5 @@
 import { userFromRequest } from "./supabase.ts";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.88.0";
 
 export class CorpusHttpError extends Error {
   constructor(message: string, readonly status: number) {
@@ -134,11 +135,78 @@ export function errorResponse(error: unknown): { status: number; message: string
     if (candidate.code === "23503" || candidate.code === "23514" || candidate.code === "P0002") {
       return { status: candidate.code === "P0002" ? 404 : 409, message };
     }
+    if (message && message !== "{}" && message !== "Corpus request failed.") {
+      return { status: 500, message };
+    }
   }
   return {
     status: 500,
-    message: error instanceof Error ? error.message : "Corpus request failed.",
+    message: describeUnknownError(error),
   };
+}
+
+function describeUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    const candidate = error as Error & {
+      statusCode?: unknown;
+      code?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      context?: unknown;
+    };
+    const extras: Record<string, unknown> = {};
+    for (const key of ["statusCode", "code", "details", "hint"] as const) {
+      if (candidate[key] !== undefined && candidate[key] !== null) extras[key] = candidate[key];
+    }
+    const suffix = Object.keys(extras).length ? ` | ${JSON.stringify(extras)}` : "";
+    return `${candidate.name}: ${candidate.message}${suffix}`;
+  }
+  try {
+    return `non-error: ${JSON.stringify(error)}`;
+  } catch {
+    return "Corpus request failed with an unknown non-serializable error.";
+  }
+}
+
+// storage-js v2 `download()` resolves `{ data: Blob | null, error }` — it does
+// NOT reject on missing objects, and its error message for a missing object is
+// an opaque `StorageUnknownError: {}`. Callers must therefore treat
+// `{ bytes: null }` as "object absent" and only surface errors where relevant.
+export async function downloadStorageBytes(
+  client: SupabaseClient,
+  bucket: string,
+  path: string,
+): Promise<{ bytes: Uint8Array | null; error: string | null }> {
+  const { data, error } = await client.storage.from(bucket).download(path);
+  if (error) return { bytes: null, error: storageErrorText(error) };
+  if (!data) return { bytes: null, error: null };
+  return { bytes: new Uint8Array(await data.arrayBuffer()), error: null };
+}
+
+export function storageErrorText(error: unknown): string {
+  const candidate = error as {
+    name?: unknown;
+    message?: unknown;
+    status?: unknown;
+    statusCode?: unknown;
+    originalError?: unknown;
+  };
+  const parts: string[] = [];
+  if (typeof candidate.name === "string") parts.push(candidate.name);
+  const httpStatus = candidate.statusCode ?? candidate.status;
+  if (typeof httpStatus === "number") parts.push(`HTTP ${httpStatus}`);
+  if (typeof candidate.message === "string" && candidate.message && candidate.message !== "{}") {
+    parts.push(candidate.message);
+  }
+  if (candidate.originalError !== undefined) {
+    try {
+      const text = JSON.stringify(candidate.originalError);
+      if (text && text !== "{}") parts.push(text.slice(0, 200));
+    } catch {
+      parts.push("<original error not serializable>");
+    }
+  }
+  return parts.join(" · ") || "unknown storage error";
 }
 
 function envList(name: string): string[] {
