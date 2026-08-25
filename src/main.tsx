@@ -18,6 +18,7 @@ import "./slash.css";
 // the same two engines as "/cmint" — its own lazy chunk and stylesheet.
 const CmintApp = lazy(() => import("./CmintApp"));
 const RemintApp = lazy(() => import("./RemintApp"));
+const RelabApp = lazy(() => import("./RelabApp"));
 const PrintApp = lazy(() => import("./PrintApp"));
 
 const path = window.location.pathname;
@@ -26,6 +27,7 @@ const isCmint = lowerPath === "/cmint" || lowerPath.startsWith("/cmint/");
 const isSlash = path === "/slash" || path.startsWith("/slash/");
 const isPrint = lowerPath === "/print" || lowerPath.startsWith("/print/");
 const isRemint = lowerPath === "/remint" || lowerPath.startsWith("/remint/");
+const isRelab = lowerPath === "/relab" || lowerPath.startsWith("/relab/");
 const isMint = path === "/" || path === "/mint" || path.startsWith("/mint/");
 const Root = isCmint
   ? CmintApp
@@ -33,11 +35,13 @@ const Root = isCmint
     ? SlashImage
     : isPrint
       ? PrintApp
-      : isRemint
-        ? RemintApp
-        : isMint
-          ? MintApp
-          : App;
+      : isRelab
+        ? RelabApp
+        : isRemint
+          ? RemintApp
+          : isMint
+            ? MintApp
+            : App;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

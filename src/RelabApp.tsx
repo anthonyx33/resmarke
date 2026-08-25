@@ -1,0 +1,923 @@
+import {
+  Check,
+  ChevronDown,
+  ClipboardCopy,
+  Copy,
+  Download,
+  ExternalLink,
+  FileJson,
+  Film,
+  FlaskConical,
+  Gauge,
+  Image as ImageIcon,
+  KeyRound,
+  Loader2,
+  LogOut,
+  Mail,
+  Moon,
+  Play,
+  RefreshCw,
+  SlidersHorizontal,
+  Sun,
+  Trash2,
+  Upload,
+  UserRound,
+  Wallet,
+  X
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { config, hasSupabaseConfig } from "./lib/config";
+import {
+  cancelDeepCleanJob,
+  createDeepCleanJob,
+  dispatchDeepCleanJob,
+  getDeepCleanJob,
+  uploadDeepCleanInput,
+  type DeepCleanJob,
+  type DsRemintV8_9HdOptions
+} from "./lib/deepcleanClient";
+import {
+  appendGradeLedgerRow,
+  compactGradeReport,
+  exportGradeLedgerCsv,
+  exportGradeLedgerJsonl,
+  importGradeLedger,
+  loadGradeLedger,
+  workerReportProvenance,
+  type GradeLedgerRow,
+  type GradeMode,
+  type GradeVerdict,
+  type ModeGradePair,
+  type NormalizedGrade
+} from "./lib/gradeLedger";
+import { getGradeSessionId, gradeImage, gradeOutputUrl } from "./lib/graderClient";
+import { readLocalCredits, spendLocalPrivacyCredit, type CreditSnapshot } from "./lib/localCredits";
+import { buildSettingsCode } from "./lib/settingsCode";
+import { supabase } from "./lib/supabase";
+import "./relab.css";
+
+type PresetId = "config-a" | "config-1a" | "config-2b";
+type Theme = "light" | "dark";
+type QueueStatus =
+  | "ready"
+  | "preparing"
+  | "uploading"
+  | "queued"
+  | "processing"
+  | "grading"
+  | "completed"
+  | "failed";
+type SortKey = "ai" | "delta" | "verdict" | "timestamp";
+type AuthMode = "signin" | "signup";
+
+type QueueItem = {
+  id: string;
+  file: File;
+  previewUrl: string;
+  width?: number;
+  height?: number;
+  status: QueueStatus;
+  job?: DeepCleanJob;
+  error?: string;
+  ledgerId?: string;
+};
+
+type PresetDefinition = {
+  id: PresetId;
+  label: string;
+  detail: string;
+  remint: DsRemintV8_9HdOptions["remint"];
+  finish: DsRemintV8_9HdOptions["finish"];
+  finishMode: "adaptive";
+};
+
+const MAX_QUEUE = 20;
+const MAX_BYTES = 25 * 1024 * 1024;
+const UNIT_COST = 23;
+const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
+const SESSION_CAP_FALLBACK = 40;
+
+const PRESETS: Record<PresetId, PresetDefinition> = {
+  "config-a": {
+    id: "config-a",
+    label: "Config A",
+    detail: "Qwen · Deep · Strong · Native · S1.25 · Adaptive",
+    remint: {
+      engineMode: "adaptive",
+      washModel: "qwen",
+      strength: "deep",
+      iphoneExif: true,
+      metadataMode: "device"
+    },
+    finish: {
+      preset: "strong",
+      scale: null,
+      overrides: { dither: 1, smoothness: 1.25, sharpen: 1 },
+      materialClean: true
+    },
+    finishMode: "adaptive"
+  },
+  "config-1a": {
+    id: "config-1a",
+    label: "Config 1A",
+    detail: "Qwen + Z-Image · rest identical to Config A",
+    remint: {
+      engineMode: "adaptive",
+      washModel: "qwen+zimage",
+      strength: "deep",
+      iphoneExif: true,
+      metadataMode: "device"
+    },
+    finish: {
+      preset: "strong",
+      scale: null,
+      overrides: { dither: 1, smoothness: 1.25, sharpen: 1 },
+      materialClean: true
+    },
+    finishMode: "adaptive"
+  },
+  "config-2b": {
+    id: "config-2b",
+    label: "Config 2B",
+    detail: "Stage-1 Q97 4:4:4 · rest identical to Config A",
+    remint: {
+      engineMode: "adaptive",
+      washModel: "qwen",
+      strength: "deep",
+      jpegQuality: 97,
+      jpegSubsampling: "4:4:4",
+      iphoneExif: true,
+      metadataMode: "device"
+    },
+    finish: {
+      preset: "strong",
+      scale: null,
+      overrides: { dither: 1, smoothness: 1.25, sharpen: 1 },
+      materialClean: true
+    },
+    finishMode: "adaptive"
+  }
+};
+
+const VERDICT_RANK: Record<GradeVerdict, number> = {
+  CLEAR: 0,
+  NEAR: 1,
+  BORDER: 2,
+  FAIL: 3
+};
+
+function initialTheme(): Theme {
+  if (typeof window === "undefined") return "dark";
+  const saved = localStorage.getItem("resmarke:theme");
+  if (saved === "light" || saved === "dark") return saved;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function configuredDefaultMode(): GradeMode {
+  const value = String(import.meta.env.VITE_RELAB_DEFAULT_MODE ?? "").toLowerCase();
+  return value === "sdxl" || value === "flux_schnell" || value === "real" ? value : "real";
+}
+
+const HAS_OWNER_DEFAULT = Boolean(import.meta.env.VITE_RELAB_DEFAULT_MODE);
+const OPTIONAL_MODES_ENABLED = import.meta.env.VITE_RELAB_OPTIONAL_MODES === "true";
+
+export default function RelabApp() {
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const importInput = useRef<HTMLInputElement | null>(null);
+  const sequence = useRef(0);
+  const queueRef = useRef<QueueItem[]>([]);
+
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [activeId, setActiveId] = useState("");
+  const [presetId, setPresetId] = useState<PresetId>("config-a");
+  const [primaryMode, setPrimaryMode] = useState<GradeMode>(configuredDefaultMode);
+  const [extraModes, setExtraModes] = useState<GradeMode[]>([]);
+  const [running, setRunning] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [status, setStatus] = useState("");
+  const [notice, setNotice] = useState("");
+  const [batch, setBatch] = useState({ done: 0, total: 0 });
+  const [rows, setRows] = useState<GradeLedgerRow[]>(loadGradeLedger);
+  const [sortKey, setSortKey] = useState<SortKey>("timestamp");
+  const [sortAscending, setSortAscending] = useState(false);
+  const [copyState, setCopyState] = useState("");
+  const [gradeStats, setGradeStats] = useState({
+    grades: 0,
+    cacheHits: 0,
+    vendorCalls: 0,
+    cap: SESSION_CAP_FALLBACK
+  });
+
+  const [credits, setCredits] = useState<CreditSnapshot>(() => readLocalCredits());
+  const [userId, setUserId] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authStatus, setAuthStatus] = useState("");
+
+  const preset = PRESETS[presetId];
+  const settingsCode = useMemo(() => settingsCodeForPreset(preset), [preset]);
+  const pending = queue.filter((item) => item.status !== "completed");
+  const active = queue.find((item) => item.id === activeId) ?? queue[0] ?? null;
+  const totalCost = pending.length * UNIT_COST;
+  const canRun =
+    pending.length > 0 &&
+    !running &&
+    hasSupabaseConfig &&
+    !!userId &&
+    credits.privacyCredits >= totalCost;
+
+  const sortedRows = useMemo(() => {
+    const direction = sortAscending ? 1 : -1;
+    return [...rows].sort((left, right) => {
+      if (sortKey === "timestamp") {
+        return direction * left.timestamp.localeCompare(right.timestamp);
+      }
+      if (sortKey === "ai") {
+        return direction * (left.remint_grade.ai_probability - right.remint_grade.ai_probability);
+      }
+      if (sortKey === "delta") return direction * (left.delta - right.delta);
+      return direction * (VERDICT_RANK[left.verdict] - VERDICT_RANK[right.verdict]);
+    });
+  }, [rows, sortAscending, sortKey]);
+
+  const auxiliaryModes = useMemo(() => {
+    if (!OPTIONAL_MODES_ENABLED) return [];
+    const modes = new Set<GradeMode>(extraModes);
+    for (const row of rows) {
+      for (const mode of Object.keys(row.mode_results) as GradeMode[]) {
+        if (mode !== row.mode) modes.add(mode);
+      }
+    }
+    return (["sdxl", "flux_schnell", "real"] as GradeMode[]).filter((mode) => modes.has(mode));
+  }, [extraModes, rows]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("resmarke:theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    document.title = "/RELAB — Remint Detection Lab";
+  }, []);
+
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
+  useEffect(
+    () => () => queueRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl)),
+    []
+  );
+
+  useEffect(() => {
+    if (!supabase) return;
+    void supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user;
+      setUserId(user?.id ?? "");
+      setUserEmail(user?.email ?? "");
+      if (user) void refreshCredits(user.id);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user;
+      setUserId(user?.id ?? "");
+      setUserEmail(user?.email ?? "");
+      if (user) void refreshCredits(user.id);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!copyState) return;
+    const timer = window.setTimeout(() => setCopyState(""), 1400);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  async function refreshCredits(nextUserId: string) {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("creator_profiles")
+      .select("privacy_exports_remaining, deepclean_credits")
+      .eq("user_id", nextUserId)
+      .single();
+    if (error) return;
+    setCredits({
+      privacyCredits: data.privacy_exports_remaining,
+      deepCleanCredits: data.deepclean_credits,
+      mode: "supabase"
+    });
+  }
+
+  async function submitAuth() {
+    if (!supabase) return;
+    const email = authEmail.trim();
+    if (!email || !authPassword) return setAuthStatus("Enter an email and password.");
+    setAuthStatus(authMode === "signin" ? "Signing in…" : "Creating account…");
+    if (authMode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password: authPassword });
+      setAuthStatus(error ? error.message : "Signed in.");
+      if (!error) setAuthPassword("");
+      return;
+    }
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: authPassword,
+      options: { emailRedirectTo: window.location.href }
+    });
+    setAuthStatus(
+      error
+        ? error.message
+        : data.session
+          ? "Account created. You are signed in."
+          : "Account created. Confirm by email before signing in."
+    );
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setUserId("");
+    setUserEmail("");
+    setCredits(readLocalCredits());
+  }
+
+  async function spendCredits(amount: number) {
+    if (!supabase || !userId) {
+      let next = readLocalCredits();
+      for (let index = 0; index < amount; index += 1) next = spendLocalPrivacyCredit();
+      setCredits(next);
+      return;
+    }
+    const { data, error } = await supabase.functions.invoke("spend-privacy-credit", {
+      body: { amount }
+    });
+    if (error) throw error;
+    setCredits({
+      privacyCredits: data.privacyCredits,
+      deepCleanCredits: data.deepCleanCredits,
+      mode: "supabase"
+    });
+  }
+
+  function patchItem(id: string, patch: Partial<QueueItem>) {
+    setQueue((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function addFiles(files: File[]) {
+    if (!files.length || running) return;
+    const supported = files.filter(
+      (file) => ACCEPTED.has(file.type) && file.size > 0 && file.size <= MAX_BYTES
+    );
+    const slots = Math.max(0, MAX_QUEUE - queue.length);
+    const accepted = supported.slice(0, slots);
+    if (!accepted.length) {
+      setNotice(
+        slots === 0
+          ? `Queue full (maximum ${MAX_QUEUE}).`
+          : "Use JPEG, PNG, or WebP files up to 25 MB."
+      );
+      return;
+    }
+    const added: QueueItem[] = accepted.map((file) => ({
+      id: `og-${Date.now()}-${sequence.current++}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      status: "ready"
+    }));
+    setQueue((current) => [...current, ...added]);
+    if (!activeId) setActiveId(added[0].id);
+    for (const item of added) {
+      void createImageBitmap(item.file)
+        .then((bitmap) => {
+          patchItem(item.id, { width: bitmap.width, height: bitmap.height });
+          bitmap.close();
+        })
+        .catch(() => undefined);
+    }
+    const skipped = files.length - accepted.length;
+    setNotice(skipped ? `${skipped} file${skipped === 1 ? "" : "s"} skipped.` : "");
+  }
+
+  function removeItem(id: string) {
+    if (running) return;
+    const target = queue.find((item) => item.id === id);
+    if (!target) return;
+    URL.revokeObjectURL(target.previewUrl);
+    const next = queue.filter((item) => item.id !== id);
+    setQueue(next);
+    if (activeId === id) setActiveId(next[0]?.id ?? "");
+  }
+
+  function clearQueue() {
+    if (running) return;
+    queue.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    setQueue([]);
+    setActiveId("");
+    setNotice("");
+    setStatus("");
+  }
+
+  async function waitForJob(jobId: string, itemId: string, position: number, total: number) {
+    for (;;) {
+      const job = await getDeepCleanJob(jobId);
+      if (job.status === "completed") return job;
+      if (job.status === "failed") {
+        throw new Error(job.failureReason || "The worker could not process this image.");
+      }
+      patchItem(itemId, { status: job.status === "queued" ? "queued" : "processing", job });
+      setStatus(`Processing ${position}/${total} · ${job.status}`);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 3500));
+    }
+  }
+
+  async function processItem(item: QueueItem, position: number, total: number) {
+    const runPreset = structuredClone(preset);
+    const runSettingsCode = settingsCodeForPreset(runPreset);
+    let created: DeepCleanJob | null = null;
+    let workerCompleted = false;
+    patchItem(item.id, { status: "preparing", error: undefined, job: undefined });
+    setActiveId(item.id);
+    try {
+      setStatus(`Preparing ${position}/${total} · ${item.file.name}`);
+      const job = await createDeepCleanJob({
+        file: item.file,
+        creatorId: userEmail || "creator@example.com",
+        profile: "ds-remint-v8.9-hd",
+        outputMode: "stripped",
+        dsRemintV89Hd: {
+          remint: runPreset.remint,
+          finish: runPreset.finish,
+          finishMode: runPreset.finishMode
+        },
+        outputNameStyle: "settings-code",
+        outputNameCustom: position > 1 ? `${runSettingsCode}-${position}` : runSettingsCode
+      });
+      created = job;
+      patchItem(item.id, { status: "uploading", job });
+      setStatus(`Uploading ${position}/${total} privately…`);
+      await uploadDeepCleanInput(job, item.file);
+      patchItem(item.id, { status: "queued", job });
+      await dispatchDeepCleanJob(job.id);
+      await spendCredits(UNIT_COST);
+      patchItem(item.id, { status: "processing", job });
+      const completed = await waitForJob(job.id, item.id, position, total);
+      workerCompleted = true;
+      patchItem(item.id, { status: "grading", job: completed });
+      setStatus(`Grading OG + remint ${position}/${total}…`);
+      const row = await gradeCompletedItem(item, completed, runPreset, runSettingsCode);
+      setRows(appendGradeLedgerRow(row));
+      patchItem(item.id, {
+        status: "completed",
+        job: completed,
+        ledgerId: row.id,
+        error: undefined
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The item could not be completed.";
+      if (created && !workerCompleted) {
+        await cancelDeepCleanJob(created.id).catch(() => undefined);
+      }
+      patchItem(item.id, { status: "failed", error: message, job: created ?? undefined });
+      throw error;
+    }
+  }
+
+  async function gradeCompletedItem(
+    item: QueueItem,
+    job: DeepCleanJob,
+    runPreset: PresetDefinition,
+    runSettingsCode: string
+  ): Promise<GradeLedgerRow> {
+    if (!job.outputUrl) throw new Error("Completed job is missing a secure output URL.");
+    const sessionId = getGradeSessionId();
+    const requestedModes = [primaryMode, ...extraModes.filter((mode) => mode !== primaryMode)];
+    const modeResults: Partial<Record<GradeMode, ModeGradePair>> = {};
+    let firstPair: ModeGradePair | null = null;
+
+    for (const mode of requestedModes) {
+      const og = await gradeImage(item.file, "og", {
+        mode,
+        settingsCode: runSettingsCode,
+        sessionId
+      });
+      recordGradeResponse(og);
+      const remint = await gradeOutputUrl(job.outputUrl, "remint", {
+        mode,
+        settingsCode: runSettingsCode,
+        ogGrade: og,
+        sessionId
+      });
+      recordGradeResponse(remint);
+      const pair = pairFor(mode, og, remint);
+      modeResults[mode] = pair;
+      if (!firstPair) firstPair = pair;
+    }
+
+    if (!firstPair) throw new Error("No detector mode was selected.");
+    const executed = await workerReportProvenance(job.report);
+    return {
+      schema_version: 1,
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      file_id: item.id,
+      file_name: item.file.name,
+      job_id: job.id,
+      image_sha256: firstPair.og.image_sha256,
+      settings_code: runSettingsCode,
+      requested_settings: {
+        profile: "ds-remint-v8.9-hd",
+        remint: runPreset.remint,
+        finish: runPreset.finish,
+        finish_mode: runPreset.finishMode
+      },
+      executed,
+      mode: firstPair.remint.mode,
+      vendor: firstPair.remint.vendor,
+      mock: firstPair.og.mock || firstPair.remint.mock,
+      og_grade: firstPair.og,
+      remint_grade: firstPair.remint,
+      mode_results: modeResults,
+      delta: firstPair.delta,
+      verdict: firstPair.verdict,
+      qa_flag: firstPair.qa_flag,
+      swap_index: firstPair.remint.swap_index,
+      retention_index: firstPair.remint.retention_index
+    };
+  }
+
+  function recordGradeResponse(grade: NormalizedGrade) {
+    setGradeStats((current) => ({
+      grades: current.grades + 1,
+      cacheHits: current.cacheHits + (grade.cache_hit ? 1 : 0),
+      vendorCalls: Math.max(current.vendorCalls, grade.session_usage?.vendor_calls ?? 0),
+      cap: grade.session_usage?.cap ?? current.cap
+    }));
+  }
+
+  async function runQueue() {
+    const items = queue.filter((item) => item.status !== "completed");
+    if (!items.length || running) return;
+    if (!hasSupabaseConfig || !userId) return setStatus("Sign in before running the queue.");
+    if (credits.privacyCredits < items.length * UNIT_COST) {
+      return setStatus(`Not enough credits — this run needs ${items.length * UNIT_COST}.`);
+    }
+    setRunning(true);
+    setNotice("");
+    setBatch({ done: 0, total: items.length });
+    let failed = 0;
+    for (const [index, item] of items.entries()) {
+      try {
+        await processItem(item, index + 1, items.length);
+      } catch {
+        failed += 1;
+      }
+      setBatch({ done: index + 1, total: items.length });
+    }
+    setRunning(false);
+    setBatch({ done: 0, total: 0 });
+    if (userId) await refreshCredits(userId);
+    setStatus(failed ? `Complete with ${failed} failed item(s).` : "Jobs and paired grades complete.");
+  }
+
+  async function regradeRow(row: GradeLedgerRow) {
+    if (running) return;
+    const item = queue.find((candidate) => candidate.job?.id === row.job_id);
+    if (!item?.job?.id) return setNotice("Re-grade is available while the source file is in this queue.");
+    setRunning(true);
+    setActiveId(item.id);
+    patchItem(item.id, { status: "grading", error: undefined });
+    try {
+      const fresh = await getDeepCleanJob(item.job.id);
+      if (fresh.status !== "completed" || !fresh.outputUrl) throw new Error("Output is not ready.");
+      const runPreset = presetFromRequested(row.requested_settings) ?? preset;
+      const next = await gradeCompletedItem(item, fresh, runPreset, row.settings_code);
+      setRows(appendGradeLedgerRow(next));
+      patchItem(item.id, { status: "completed", job: fresh, ledgerId: next.id });
+      const providerCalls = next.og_grade.provider_calls + next.remint_grade.provider_calls;
+      setNotice(
+        providerCalls === 0 && next.og_grade.cache_hit && next.remint_grade.cache_hit
+          ? "Re-grade complete · both hashes were cache hits · 0 provider calls."
+          : `Re-grade complete · ${providerCalls} provider call(s).`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Re-grade failed.";
+      patchItem(item.id, { status: "failed", error: message });
+      setNotice(message);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function openResult(row: GradeLedgerRow) {
+    const item = queue.find((candidate) => candidate.job?.id === row.job_id);
+    if (!item?.job?.id) return setNotice("Open result is available while the job is in this queue.");
+    try {
+      const fresh = await getDeepCleanJob(item.job.id);
+      if (!fresh.outputUrl) throw new Error("The output link is not ready.");
+      window.open(fresh.outputUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not open the output.");
+    }
+  }
+
+  function sortBy(next: SortKey) {
+    if (sortKey === next) setSortAscending((current) => !current);
+    else {
+      setSortKey(next);
+      setSortAscending(next === "ai" || next === "verdict");
+    }
+  }
+
+  function downloadText(text: string, name: string, type: string) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function copyText(text: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyState(key);
+    } catch {
+      setNotice("Clipboard access was denied.");
+    }
+  }
+
+  async function importLedgerFile(file: File) {
+    try {
+      setRows(importGradeLedger(await file.text()));
+      setNotice("Ledger imported and truncated to the newest 500 rows.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Ledger import failed.");
+    }
+  }
+
+  const activeResultUrl = active?.job?.status === "completed" ? active.job.outputUrl : undefined;
+  const needsSignIn = hasSupabaseConfig && !userId;
+
+  return (
+    <div className="relab">
+      <input
+        ref={fileInput}
+        hidden
+        type="file"
+        multiple
+        accept="image/jpeg,image/png,image/webp"
+        onChange={(event) => {
+          addFiles(Array.from(event.target.files ?? []));
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={importInput}
+        hidden
+        type="file"
+        accept="application/json,.jsonl"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void importLedgerFile(file);
+          event.target.value = "";
+        }}
+      />
+
+      <div className="rl-shell">
+        <header className="rl-topbar">
+          <div className="rl-brand">
+            <span className="rl-brand-mark"><FlaskConical size={16} /></span>
+            <span><b>/RELAB</b><small>Remint detection lab</small></span>
+          </div>
+          <span className="rl-flow"><Check size={12} /> Frozen V11 engines <span>→</span> paired grading</span>
+          <span className="rl-spacer" />
+          <button
+            className="rl-code"
+            type="button"
+            onClick={() => void copyText(settingsCode, "code")}
+            title="Copy settings code"
+          >
+            {copyState === "code" ? <Check size={12} /> : <Copy size={12} />}
+            <code>{settingsCode}</code>
+          </button>
+          <span className="rl-badge rl-badge-mock">MOCK PROVIDER</span>
+          <span className="rl-credits"><Wallet size={13} /><b>{credits.privacyCredits}</b></span>
+          {needsSignIn ? (
+            <details className="rl-account">
+              <summary><UserRound size={14} /> Sign in</summary>
+              <div className="rl-account-panel">
+                <div className="rl-segment">
+                  <button className={authMode === "signin" ? "is-active" : ""} onClick={() => setAuthMode("signin")}>Sign in</button>
+                  <button className={authMode === "signup" ? "is-active" : ""} onClick={() => setAuthMode("signup")}>Sign up</button>
+                </div>
+                <label><Mail size={13} /><input type="email" placeholder="you@email.com" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} /></label>
+                <label><KeyRound size={13} /><input type="password" placeholder="Password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitAuth(); }} /></label>
+                <button className="rl-btn rl-btn-primary" type="button" onClick={() => void submitAuth()}>{authMode === "signin" ? "Sign in" : "Create account"}</button>
+                {authStatus ? <p>{authStatus}</p> : null}
+              </div>
+            </details>
+          ) : userId ? (
+            <details className="rl-account">
+              <summary><UserRound size={14} /> {userEmail}</summary>
+              <div className="rl-account-panel">
+                <p>{credits.privacyCredits} credits</p>
+                <button className="rl-btn" type="button" onClick={() => void signOut()}><LogOut size={13} /> Sign out</button>
+              </div>
+            </details>
+          ) : null}
+          <button className="rl-icon" type="button" aria-label="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+        </header>
+
+        <div className="rl-console">
+          <aside className="rl-panel rl-queue-panel">
+            <div className="rl-panel-head">
+              <b>Queue</b><span>{queue.length}/{MAX_QUEUE}</span><span className="rl-spacer" />
+              <button className="rl-btn rl-btn-small" type="button" disabled={running || queue.length >= MAX_QUEUE} onClick={() => fileInput.current?.click()}><Upload size={13} /> Add</button>
+            </div>
+            <div className="rl-panel-scroll">
+              <button
+                type="button"
+                className={`rl-drop${dragging ? " is-drag" : ""}`}
+                disabled={running}
+                onClick={() => fileInput.current?.click()}
+                onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(event) => { event.preventDefault(); setDragging(false); addFiles(Array.from(event.dataTransfer.files)); }}
+              >
+                <Upload size={18} /><b>Drop images</b><span>JPEG · PNG · WebP · 25 MB</span>
+              </button>
+              <div className="rl-queue">
+                {queue.map((item) => (
+                  <div key={item.id} role="button" tabIndex={0} className={`rl-qitem${active?.id === item.id ? " is-active" : ""}`} onClick={() => setActiveId(item.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setActiveId(item.id); }}>
+                    <img src={item.previewUrl} alt="" />
+                    <span><b>{item.file.name}</b><small><i className={`rl-status-dot is-${item.status}`} />{statusLabel(item.status)}{item.width ? ` · ${item.width}×${item.height}` : ""}</small>{item.error ? <em>{item.error}</em> : null}</span>
+                    <button className="rl-icon" type="button" aria-label="Remove image" disabled={running} onClick={(event) => { event.stopPropagation(); removeItem(item.id); }}><X size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {queue.length ? <div className="rl-panel-foot"><button className="rl-btn" type="button" disabled={running} onClick={clearQueue}><Trash2 size={13} /> Clear queue</button></div> : null}
+          </aside>
+
+          <main className="rl-panel rl-viewer">
+            <div className="rl-panel-head">
+              <b>{active?.file.name ?? "Viewer"}</b>
+              {active ? <span>{(active.file.size / 1_000_000).toFixed(2)} MB</span> : null}
+            </div>
+            <div className="rl-stage">
+              {active ? (
+                <div className="rl-frame">
+                  <img src={activeResultUrl || active.previewUrl} alt={activeResultUrl ? "Remint output" : "Original"} />
+                  {activeResultUrl ? <span className="rl-image-tag">Remint output</span> : <span className="rl-image-tag">Original</span>}
+                  {["preparing", "uploading", "queued", "processing", "grading"].includes(active.status) ? <div className="rl-veil"><Loader2 className="rl-spin" size={26} /><b>{statusLabel(active.status)}</b></div> : null}
+                </div>
+              ) : (
+                <div className="rl-empty"><ImageIcon size={32} /><h2>Load a fixed-corpus image</h2><p>Config A is selected. Every completed output is paired with its original and graded in the same explicit detector mode.</p><button className="rl-btn rl-btn-primary" type="button" onClick={() => fileInput.current?.click()}><Upload size={14} /> Add images</button></div>
+              )}
+            </div>
+            <div className="rl-stage-status">{notice || status || (!hasSupabaseConfig ? "Supabase environment is not configured." : "Ready.")}</div>
+          </main>
+
+          <aside className="rl-panel rl-controls">
+            <div className="rl-panel-head"><SlidersHorizontal size={13} /><b>Frozen presets</b><span className="rl-spacer" /><span>{UNIT_COST} cr/image</span></div>
+            <div className="rl-panel-scroll rl-control-body">
+              {(Object.values(PRESETS) as PresetDefinition[]).map((next) => (
+                <button key={next.id} className={`rl-preset${presetId === next.id ? " is-active" : ""}`} type="button" disabled={running} onClick={() => setPresetId(next.id)}>
+                  <span className="rl-preset-icon">{next.id === "config-2b" ? <Film size={15} /> : next.id === "config-1a" ? <Gauge size={15} /> : <Check size={15} />}</span>
+                  <span><b>{next.label}</b><small>{next.detail}</small></span>
+                  <span>{presetId === next.id ? "ACTIVE" : "SELECT"}</span>
+                </button>
+              ))}
+
+              <section className="rl-detector-card">
+                <div className="rl-section-title"><FlaskConical size={14} /><b>Detection loop</b></div>
+                <label className="rl-field"><span>Primary explicit mode</span><select value={primaryMode} disabled={running} onChange={(event) => setPrimaryMode(event.target.value as GradeMode)}><option value="real">Detect Real</option><option value="sdxl">Detect SDXL</option><option value="flux_schnell">Detect Flux Schnell</option></select><ChevronDown size={13} /></label>
+                <p className="rl-help">{HAS_OWNER_DEFAULT ? "Owner-configured UI default." : "Real is selected for the MOCK demo only. The production default remains owner-blocked."}</p>
+                {OPTIONAL_MODES_ENABLED ? (
+                  <div className="rl-mode-checks">
+                    {(["sdxl", "flux_schnell", "real"] as GradeMode[]).filter((mode) => mode !== primaryMode).map((mode) => (
+                      <label key={mode}><input type="checkbox" checked={extraModes.includes(mode)} disabled={running} onChange={(event) => setExtraModes((current) => event.target.checked ? [...current, mode] : current.filter((value) => value !== mode))} /> Also {modeLabel(mode)}</label>
+                    ))}
+                  </div>
+                ) : <p className="rl-help">Optional SDXL/Flux multi-mode grading is disabled until owner approval.</p>}
+                <div className="rl-budget"><span><b>{gradeStats.vendorCalls}</b> / {gradeStats.cap}<small>vendor calls this session</small></span><span><b>{gradeStats.cacheHits}</b><small>cache hits</small></span><span><b>{gradeStats.grades}</b><small>grades returned</small></span></div>
+                <div className="rl-warning"><b>MOCK</b><span>No real vendor request or parser is enabled.</span></div>
+              </section>
+            </div>
+            <div className="rl-runbar">
+              {running && batch.total ? <div className="rl-progress"><span style={{ width: `${(batch.done / batch.total) * 100}%` }} /></div> : null}
+              <div><span>{pending.length} pending · {queue.length - pending.length} done</span><b>{totalCost} credits</b></div>
+              <button className="rl-btn rl-btn-primary rl-run" type="button" disabled={!canRun} onClick={() => void runQueue()}>{running ? <><Loader2 className="rl-spin" size={15} /> Running loop…</> : <><Play size={15} /> Run {pending.length || 0} image{pending.length === 1 ? "" : "s"}</>}</button>
+              {needsSignIn ? <small>Sign in to dispatch jobs and grades.</small> : null}
+            </div>
+          </aside>
+        </div>
+
+        <section className="rl-ledger">
+          <div className="rl-ledger-head">
+            <div><b>Ranked grade ledger</b><span>{rows.length}/500 persistent rows</span></div>
+            <span className="rl-spacer" />
+            <button className="rl-btn rl-btn-small" type="button" onClick={() => importInput.current?.click()}><Upload size={13} /> Import</button>
+            <button className="rl-btn rl-btn-small" type="button" disabled={!rows.length} onClick={() => downloadText(exportGradeLedgerJsonl(rows), "relab-grades.jsonl", "application/x-ndjson")}><FileJson size={13} /> JSONL</button>
+            <button className="rl-btn rl-btn-small" type="button" disabled={!rows.length} onClick={() => downloadText(exportGradeLedgerCsv(rows), "relab-grades.csv", "text/csv")}><Download size={13} /> CSV</button>
+            <button className="rl-btn rl-btn-small" type="button" disabled={!rows.length} onClick={() => void copyText(compactGradeReport(rows), "compact")}><ClipboardCopy size={13} /> {copyState === "compact" ? "Copied" : "Copy compact report"}</button>
+          </div>
+          <div className="rl-table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>File ID</th><th>Settings code</th><th>Mode</th><th><button onClick={() => sortBy("ai")}>OG AI% / Remint AI%</button></th><th><button onClick={() => sortBy("delta")}>Δ</button></th><th>Top sources</th>{auxiliaryModes.map((mode) => <th key={mode}>{modeLabel(mode)}<br />OG / Remint / Δ</th>)}<th>Swap / retention</th><th><button onClick={() => sortBy("verdict")}>Verdict</button></th><th>QA</th><th><button onClick={() => sortBy("timestamp")}>Timestamp</button></th><th>Actions</th></tr></thead>
+              <tbody>
+                {sortedRows.map((row, index) => (
+                  <tr key={row.id}>
+                    <td className="rl-rank">{index + 1}</td>
+                    <td><b>{row.file_name}</b><small>{row.file_id}</small>{row.mock ? <span className="rl-mini-mock">MOCK</span> : null}</td>
+                    <td><code>{row.settings_code}</code></td>
+                    <td>{modeLabel(row.mode)}</td>
+                    <td><span className="rl-pair"><b>{percent(row.og_grade.ai_probability)}</b><span>→</span><b>{percent(row.remint_grade.ai_probability)}</b></span></td>
+                    <td className={row.delta >= 0 ? "is-good" : "is-bad"}>{signedPercent(row.delta)}</td>
+                    <td><small>OG</small> {row.og_grade.top_source ?? "—"}<br /><small>RM</small> {row.remint_grade.top_source ?? "—"}</td>
+                    {auxiliaryModes.map((mode) => {
+                      const pair = row.mode_results[mode];
+                      return <td key={mode}>{pair ? <span className="rl-pair"><b>{percent(pair.og.ai_probability)}</b><span>→</span><b>{percent(pair.remint.ai_probability)}</b><span className={pair.delta >= 0 ? "is-good" : "is-bad"}>{signedPercent(pair.delta)}</span></span> : "—"}</td>;
+                    })}
+                    <td>{percent(row.swap_index)} / {percent(row.retention_index)}</td>
+                    <td><span className={`rl-verdict is-${row.verdict.toLowerCase()}`}>{row.verdict}</span></td>
+                    <td>{row.qa_flag ? <span className="rl-qa">FLAG</span> : "—"}</td>
+                    <td>{new Date(row.timestamp).toLocaleString()}</td>
+                    <td><div className="rl-actions"><button title="Re-grade (hash cache applies)" disabled={running} onClick={() => void regradeRow(row)}><RefreshCw size={13} /></button><button title="Copy compact report line" onClick={() => void copyText(compactGradeReport([row]), row.id)}>{copyState === row.id ? <Check size={13} /> : <Copy size={13} />}</button><button title="Open result" onClick={() => void openResult(row)}><ExternalLink size={13} /></button></div></td>
+                  </tr>
+                ))}
+                {!rows.length ? <tr><td colSpan={12 + auxiliaryModes.length} className="rl-no-results">Completed paired grades will appear here.</td></tr> : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function settingsCodeForPreset(preset: PresetDefinition): string {
+  return buildSettingsCode({
+    mode: "sequence",
+    remint: preset.remint,
+    finish: { ...preset.finish, finishMode: preset.finishMode }
+  });
+}
+
+function pairFor(requestedMode: GradeMode, og: NormalizedGrade, remint: NormalizedGrade): ModeGradePair {
+  const delta = Math.round((og.ai_probability - remint.ai_probability) * 1_000_000) / 1_000_000;
+  return {
+    mode: remint.mode ?? requestedMode,
+    og,
+    remint,
+    delta,
+    verdict: remint.verdict,
+    qa_flag: remint.verdict === "BORDER" || Boolean(og.vendor_error || remint.vendor_error)
+  };
+}
+
+function presetFromRequested(value: Record<string, unknown>): PresetDefinition | null {
+  const remint = value.remint;
+  const finish = value.finish;
+  if (!isRecord(remint) || !isRecord(finish)) return null;
+  const wash = remint.washModel;
+  const quality = remint.jpegQuality;
+  if (wash === "qwen+zimage") return structuredClone(PRESETS["config-1a"]);
+  if (wash === "qwen" && quality === 97) return structuredClone(PRESETS["config-2b"]);
+  if (wash === "qwen") return structuredClone(PRESETS["config-a"]);
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function modeLabel(mode: GradeMode): string {
+  return mode === "real" ? "Detect Real" : mode === "sdxl" ? "Detect SDXL" : "Detect Flux Schnell";
+}
+
+function statusLabel(status: QueueStatus): string {
+  return {
+    ready: "Ready",
+    preparing: "Preparing",
+    uploading: "Uploading",
+    queued: "Queued",
+    processing: "Processing",
+    grading: "Grading pair",
+    completed: "Graded",
+    failed: "Failed"
+  }[status];
+}
+
+function percent(value: number): string {
+  return `${(Math.max(0, Math.min(1, value)) * 100).toFixed(1)}%`;
+}
+
+function signedPercent(value: number): string {
+  const amount = Math.max(-1, Math.min(1, value)) * 100;
+  return `${amount >= 0 ? "+" : ""}${amount.toFixed(1)}%`;
+}
