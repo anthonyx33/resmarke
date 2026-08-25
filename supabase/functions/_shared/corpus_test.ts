@@ -1,23 +1,7 @@
 import { inspectImage } from "./corpus_image.ts";
-import { buildSettingsCode as buildServerCode, type SettingsCodeInput } from "./settings_code.ts";
+import { PRESET_DEFINITIONS, buildSettingsCode as buildServerCode, settingsForPreset } from "./settings_code.ts";
 
-const PRESETS: SettingsCodeInput[] = [
-  {
-    mode: "sequence",
-    remint: { engineMode: "adaptive", washModel: "qwen", strength: "deep", iphoneExif: true, metadataMode: "device" },
-    finish: { preset: "strong", scale: null, finishMode: "adaptive", overrides: { dither: 1, smoothness: 1.25, sharpen: 1 }, materialClean: true },
-  },
-  {
-    mode: "sequence",
-    remint: { engineMode: "adaptive", washModel: "qwen+zimage", strength: "deep", iphoneExif: true, metadataMode: "device" },
-    finish: { preset: "strong", scale: null, finishMode: "adaptive", overrides: { dither: 1, smoothness: 1.25, sharpen: 1 }, materialClean: true },
-  },
-  {
-    mode: "sequence",
-    remint: { engineMode: "adaptive", washModel: "qwen", strength: "deep", jpegQuality: 97, jpegSubsampling: "4:4:4", iphoneExif: true, metadataMode: "device" },
-    finish: { preset: "strong", scale: null, finishMode: "adaptive", overrides: { dither: 1, smoothness: 1.25, sharpen: 1 }, materialClean: true },
-  },
-];
+const PRESETS = Object.values(PRESET_DEFINITIONS).map(settingsForPreset);
 
 Deno.test("edge settings-code implementation matches the frozen client contract", () => {
   // Golden values produced by src/lib/settingsCode.ts. A change on either side
@@ -26,6 +10,7 @@ Deno.test("edge settings-code implementation matches the frozen client contract"
     "SEQ-CFA-dtbnbygm5iao",
     "SEQ-1A-3lzgvffda5xf",
     "SEQ-2B-zzz2dudlbywp",
+    "SEQ-3C-brgbola74zqg",
   ];
   PRESETS.forEach((preset, index) => {
     const server = buildServerCode(preset);

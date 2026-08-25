@@ -22,7 +22,10 @@ Deno.serve(async (request) => {
     const body = await request.json() as Record<string, unknown>;
     const experimentId = assertUuid(body.experiment_id, "experiment_id");
     const imageId = assertUuid(body.corpus_image_id, "corpus_image_id");
-    const canonical = jsonObject(body.requested_settings_canonical, "requested_settings_canonical") as SettingsCodeInput;
+    const canonical = jsonObject(
+      body.requested_settings_canonical,
+      "requested_settings_canonical",
+    ) as unknown as SettingsCodeInput;
     if (canonical.mode !== "sequence" || !canonical.remint || !canonical.finish) {
       throw new CorpusHttpError("requested_settings_canonical must be a sequence settings tuple.", 400);
     }
@@ -82,4 +85,3 @@ function configAllowed(value: unknown, label: string, key: string): boolean {
   }
   return false;
 }
-

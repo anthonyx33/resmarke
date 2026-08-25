@@ -1,4 +1,5 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
+import { LabSeedHttpError, validateLabSeedAccess } from "../_shared/lab_seed.ts";
 import { userFromRequest } from "../_shared/supabase.ts";
 
 type CreateJobBody = {
@@ -23,6 +24,13 @@ type CreateJobBody = {
     | "max-cx-remint-v4"
     | "max-cx-remint-v5"
     | "ds-remint-v6"
+    | "ds-remint-v7"
+    | "ds-remint-v8"
+    | "ds-remint-v8.1"
+    | "ds-remint-v8.2"
+    | "ds-remint-v8.3"
+    | "ds-remint-v8.8"
+    | "ds-remint-v8.9"
     | "quality-finish"
     | "ds-remint-v8.9-hd";
   micro_texture_jitter?: boolean;
@@ -101,6 +109,15 @@ Deno.serve(async (request) => {
     if (!["stripped", "sealed", "sealed-stamped"].includes(body.output_mode)) {
       return jsonResponse({ error: "Invalid output mode." }, 400);
     }
+
+    // Authentication has completed above. Seed rejection is deliberately
+    // before the first profile/credit read and every credit, ledger, and job
+    // mutation below, so 403/503/400 requests have no durable side effects.
+    const requestedLabSeed = requestedLabSeedFromBody(body);
+    validateLabSeedAccess(requestedLabSeed, user, {
+      corpusAdminEmails: Deno.env.get("CORPUS_ADMIN_EMAILS"),
+      enabled: Deno.env.get("LAB_FIXED_SEED_ENABLED"),
+    });
 
     const { data: profile, error: profileError } = await client
       .from("creator_profiles")
@@ -339,7 +356,7 @@ Deno.serve(async (request) => {
   } catch (error) {
     return jsonResponse(
       { error: error instanceof Error ? error.message : "Could not create job." },
-      500
+      error instanceof LabSeedHttpError ? error.status : 500
     );
   }
 });
@@ -1179,6 +1196,7 @@ function dsRemintV8_9ExpertRefinement(input: unknown) {
     mode: "ds-remint-v8.9",
     ds_remint_v8_9: {
       ...sub,
+      ...(typeof raw.seed === "string" ? { seed: raw.seed } : {}),
       route_by_baseline:
         typeof raw.route_by_baseline === "boolean" ? raw.route_by_baseline : true,
       deep_degrade_scale: clampNumber(
@@ -1255,7 +1273,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+function requestedLabSeedFromBody(body: CreateJobBody): unknown {
+  if (body.profile === "ds-remint-v8.9") {
+    return isRecord(body.ds_remint_v8_9) ? body.ds_remint_v8_9.seed : undefined;
+  }
+  if (body.profile === "ds-remint-v8.9-hd" && isRecord(body.ds_remint_v8_9_hd)) {
+    const remint = body.ds_remint_v8_9_hd.ds_remint_v8_9;
+    return isRecord(remint) ? remint.seed : undefined;
+  }
+  return undefined;
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: null): number | null;
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number;
+function clampNumber(value: unknown, min: number, max: number, fallback: number | null): number | null {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));

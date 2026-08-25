@@ -34,8 +34,7 @@ import {
   dispatchDeepCleanJob,
   getDeepCleanJob,
   uploadDeepCleanInput,
-  type DeepCleanJob,
-  type DsRemintV8_9HdOptions
+  type DeepCleanJob
 } from "./lib/deepcleanClient";
 import {
   appendDetectionOnlyLedgerRow,
@@ -67,11 +66,19 @@ import {
   type CorpusSnapshot
 } from "./lib/corpusClient";
 import { readLocalCredits, spendLocalPrivacyCredit, type CreditSnapshot } from "./lib/localCredits";
-import { buildSettingsCode, type SettingsCodeInput } from "./lib/settingsCode";
+import {
+  PRESET_DEFINITIONS,
+  buildSettingsCode,
+  configIdentity,
+  presetFromRequested,
+  settingsForPreset,
+  type PresetDefinition,
+  type PresetId,
+  type SettingsCodeInput
+} from "./lib/settingsCode";
 import { supabase } from "./lib/supabase";
 import "./relab.css";
 
-type PresetId = "config-a" | "config-1a" | "config-2b";
 type Theme = "light" | "dark";
 type QueueStatus =
   | "ready"
@@ -105,82 +112,14 @@ type QueueItem = {
   };
 };
 
-type PresetDefinition = {
-  id: PresetId;
-  label: string;
-  detail: string;
-  remint: DsRemintV8_9HdOptions["remint"];
-  finish: DsRemintV8_9HdOptions["finish"];
-  finishMode: "adaptive";
-};
-
 const MAX_QUEUE = 20;
 const MAX_BYTES = 25 * 1024 * 1024;
 const UNIT_COST = 23;
 const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
 const SESSION_CAP_FALLBACK = 40;
 
-const PRESETS: Record<PresetId, PresetDefinition> = {
-  "config-a": {
-    id: "config-a",
-    label: "Config A",
-    detail: "Qwen · Deep · Strong · Native · S1.25 · Adaptive",
-    remint: {
-      engineMode: "adaptive",
-      washModel: "qwen",
-      strength: "deep",
-      iphoneExif: true,
-      metadataMode: "device"
-    },
-    finish: {
-      preset: "strong",
-      scale: null,
-      overrides: { dither: 1, smoothness: 1.25, sharpen: 1 },
-      materialClean: true
-    },
-    finishMode: "adaptive"
-  },
-  "config-1a": {
-    id: "config-1a",
-    label: "Config 1A",
-    detail: "Qwen + Z-Image · rest identical to Config A",
-    remint: {
-      engineMode: "adaptive",
-      washModel: "qwen+zimage",
-      strength: "deep",
-      iphoneExif: true,
-      metadataMode: "device"
-    },
-    finish: {
-      preset: "strong",
-      scale: null,
-      overrides: { dither: 1, smoothness: 1.25, sharpen: 1 },
-      materialClean: true
-    },
-    finishMode: "adaptive"
-  },
-  "config-2b": {
-    id: "config-2b",
-    label: "Config 2B",
-    detail: "Stage-1 Q97 4:4:4 · rest identical to Config A",
-    remint: {
-      engineMode: "adaptive",
-      washModel: "qwen",
-      strength: "deep",
-      jpegQuality: 97,
-      jpegSubsampling: "4:4:4",
-      iphoneExif: true,
-      metadataMode: "device"
-    },
-    finish: {
-      preset: "strong",
-      scale: null,
-      overrides: { dither: 1, smoothness: 1.25, sharpen: 1 },
-      materialClean: true
-    },
-    finishMode: "adaptive"
-  }
-};
+const PRESETS = PRESET_DEFINITIONS;
+const LAB_SEED_RE = /^lab-[a-z0-9]{1,32}$/;
 
 const VERDICT_RANK: Record<GradeVerdict, number> = {
   CLEAR: 0,
@@ -208,6 +147,7 @@ export default function RelabApp() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [activeId, setActiveId] = useState("");
   const [presetId, setPresetId] = useState<PresetId>("config-a");
+  const [labSeed, setLabSeed] = useState("");
   const primaryMode = HIVE_GRADE_MODE;
   const [running, setRunning] = useState(false);
   const [detecting, setDetecting] = useState(false);
@@ -240,8 +180,13 @@ export default function RelabApp() {
   const [authPassword, setAuthPassword] = useState("");
   const [authStatus, setAuthStatus] = useState("");
 
-  const preset = PRESETS[presetId];
+  const preset = useMemo(() => {
+    const next = structuredClone(PRESETS[presetId]);
+    if (labSeed) next.remint.seed = labSeed;
+    return next;
+  }, [labSeed, presetId]);
   const settingsCode = useMemo(() => settingsCodeForPreset(preset), [preset]);
+  const labSeedValid = !labSeed || LAB_SEED_RE.test(labSeed);
   const pending = queue.filter((item) => item.status !== "completed");
   const active = queue.find((item) => item.id === activeId) ?? queue[0] ?? null;
   const totalCost = pending.length * UNIT_COST;
@@ -251,6 +196,7 @@ export default function RelabApp() {
     !detecting &&
     hasSupabaseConfig &&
     !!userId &&
+    labSeedValid &&
     credits.privacyCredits >= totalCost;
 
   const sortedRows = useMemo(() => {
@@ -1016,11 +962,29 @@ export default function RelabApp() {
             <div className="rl-panel-scroll rl-control-body">
               {(Object.values(PRESETS) as PresetDefinition[]).map((next) => (
                 <button key={next.id} className={`rl-preset${presetId === next.id ? " is-active" : ""}`} type="button" disabled={running} onClick={() => setPresetId(next.id)}>
-                  <span className="rl-preset-icon">{next.id === "config-2b" ? <Film size={15} /> : next.id === "config-1a" ? <Gauge size={15} /> : <Check size={15} />}</span>
+                  <span className="rl-preset-icon">{next.id === "config-3c" ? <FlaskConical size={15} /> : next.id === "config-2b" ? <Film size={15} /> : next.id === "config-1a" ? <Gauge size={15} /> : <Check size={15} />}</span>
                   <span><b>{next.label}</b><small>{next.detail}</small></span>
                   <span>{presetId === next.id ? "ACTIVE" : "SELECT"}</span>
                 </button>
               ))}
+
+              <section className="rl-detector-card">
+                <div className="rl-section-title"><KeyRound size={14} /><b>Lab paired seed</b></div>
+                <label className="rl-field">
+                  <span>Optional fixed seed</span>
+                  <input
+                    type="text"
+                    value={labSeed}
+                    pattern="^lab-[a-z0-9]{1,32}$"
+                    placeholder="lab-pair1"
+                    aria-invalid={!labSeedValid}
+                    disabled={running}
+                    onChange={(event) => setLabSeed(event.target.value)}
+                  />
+                </label>
+                <p className="rl-help">Exact form: <code>lab-[a-z0-9]&#123;1,32&#125;</code>. Blank keeps production randomness; authorized lab accounts only.</p>
+                {!labSeedValid ? <div className="rl-warning"><b>INVALID</b><span>The seed must match the exact lab format.</span></div> : null}
+              </section>
 
               <section className="rl-detector-card">
                 <div className="rl-section-title"><FlaskConical size={14} /><b>Detection loop</b></div>
@@ -1173,15 +1137,13 @@ function settingsCodeForPreset(preset: PresetDefinition): string {
 }
 
 function settingsCanonicalForPreset(preset: PresetDefinition): SettingsCodeInput {
-  return {
-    mode: "sequence",
-    remint: preset.remint,
-    finish: { ...preset.finish, finishMode: preset.finishMode }
-  };
+  return settingsForPreset(preset);
 }
 
-function configLabelForPreset(preset: PresetDefinition): "A" | "1A" | "2B" {
-  return preset.id === "config-1a" ? "1A" : preset.id === "config-2b" ? "2B" : "A";
+function configLabelForPreset(preset: PresetDefinition): "A" | "1A" | "2B" | "3C" {
+  const label = configIdentity(settingsCanonicalForPreset(preset)).label;
+  if (label === "CUSTOM") throw new Error("Frozen preset identity drifted to CUSTOM.");
+  return label;
 }
 
 function pairFor(requestedMode: GradeMode, og: NormalizedGrade, remint: NormalizedGrade): ModeGradePair {
@@ -1194,22 +1156,6 @@ function pairFor(requestedMode: GradeMode, og: NormalizedGrade, remint: Normaliz
     verdict: remint.verdict,
     qa_flag: remint.verdict === "BORDER" || Boolean(og.vendor_error || remint.vendor_error)
   };
-}
-
-function presetFromRequested(value: Record<string, unknown>): PresetDefinition | null {
-  const remint = value.remint;
-  const finish = value.finish;
-  if (!isRecord(remint) || !isRecord(finish)) return null;
-  const wash = remint.washModel;
-  const quality = remint.jpegQuality;
-  if (wash === "qwen+zimage") return structuredClone(PRESETS["config-1a"]);
-  if (wash === "qwen" && quality === 97) return structuredClone(PRESETS["config-2b"]);
-  if (wash === "qwen") return structuredClone(PRESETS["config-a"]);
-  return null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function modeLabel(mode: GradeMode): string {

@@ -18,7 +18,6 @@ light at delivery. No neural restorer in the default path (its re-stamp never
 paid -- review confirmed).
 """
 
-import os
 import time
 from pathlib import Path
 
@@ -39,25 +38,13 @@ from ds_remint_v7 import (
     _v7_verdict,
 )
 from max_cx_remint import _histogram_match
+from tools.checkpoint_capture import save_checkpoint
 import iphone_exif
 
-
-# V10 checkpoint instrumentation (diagnostic-only, default OFF). Set
-# DEEPCLEAN_CHECKPOINT_DIR to export O0/O1/O2/O3 buffers for the
-# checkpoint_attribution.py tool. NO algorithm behaviour changes.
-_CKPT_DIR = os.environ.get("DEEPCLEAN_CHECKPOINT_DIR")
-
-
-def _ckpt_save(name, img):
-    if not _CKPT_DIR:
-        return
-    try:
-        os.makedirs(_CKPT_DIR, exist_ok=True)
-        Image.fromarray(np.asarray(img.convert("RGB"))).save(
-            os.path.join(_CKPT_DIR, name), format="PNG"
-        )
-    except Exception:
-        pass
+def _ckpt_save(checkpoint_dir, name, image, errors):
+    error = save_checkpoint(checkpoint_dir, name, image)
+    if error:
+        errors.append(error)
 
 
 DEFAULT_SETTINGS = {
@@ -98,7 +85,7 @@ def is_ds_remint_v8_9(settings):
     return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.9"
 
 
-def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False):
+def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False, checkpoint_dir=None):
     """DS ReMint V8.9: the V8.8 coherent pipeline with data-driven defaults
     (Qwen wash, balanced default, deep degrade 0.75) and baseline-aware
     ladder routing."""
@@ -110,6 +97,7 @@ def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, see
         seed_extra=seed_extra,
         detector=detector,
         return_buffer=return_buffer,
+        checkpoint_dir=checkpoint_dir,
     )
 
 
@@ -185,7 +173,7 @@ def normalize_ds_remint_v8_8_settings(settings):
     return cfg
 
 
-def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False):
+def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False, checkpoint_dir=None):
     """Full DS ReMint V8.8 pipeline. Writes the final camera-like JPEG (with
     coherent EXIF when enabled) to output_path and returns a report.
     return_buffer=True additionally attaches the PRE-ENCODE RGB array as
@@ -208,6 +196,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
         "input_baseline": None,
         "quality_floor_gate": {},
         "detector_gate": {"evaluated": False},
+        "checkpoint_errors": [],
     }
     if not cfg["enabled"]:
         return report
@@ -216,7 +205,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     original = Image.open(input_path).convert("RGB")
     src_long = max(original.size)
     report["source_long_edge"] = src_long
-    _ckpt_save("O0_source.png", original)
+    _ckpt_save(checkpoint_dir, "O0_source.png", original, report["checkpoint_errors"])
 
     adaptive = cfg["engine_mode"] == "adaptive"
     if adaptive and detector is None:
@@ -254,7 +243,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
             }
     else:
         report["layers"]["pre_wash"] = {"applied": False, "reason": "pre_regen_disabled"}
-    _ckpt_save("O1_postwash.png", base)
+    _ckpt_save(checkpoint_dir, "O1_postwash.png", base, report["checkpoint_errors"])
 
     # --- ONE resample to delivery (the lattice breaker) -----------------------
     delivery = cfg["output_target"] or min(src_long, 1250)
@@ -341,7 +330,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
             break  # least destructive that clears -> max quality
 
     final_image = chosen["image"]
-    _ckpt_save("O2_precamera.png", final_image)
+    _ckpt_save(checkpoint_dir, "O2_precamera.png", final_image, report["checkpoint_errors"])
 
     # --- final tone lock ------------------------------------------------------
     if cfg["color_restore"]:
@@ -375,9 +364,11 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
 
     report["final_qc"] = _final_qc(original, output_path)
     try:
-        _ckpt_save("O3_stage1.png", Image.open(output_path))
-    except Exception:
-        pass
+        with Image.open(output_path) as stage1_image:
+            _ckpt_save(checkpoint_dir, "O3_stage1.png", stage1_image, report["checkpoint_errors"])
+    except Exception as exc:
+        if checkpoint_dir is not None:
+            report["checkpoint_errors"].append(f"O3_stage1.png: {type(exc).__name__}: {exc}")
     report["quality_floor_gate"] = {
         "min_ssim": cfg["min_ssim"],
         "ssim": _num(chosen["metrics"].get("ssim_luma_window11_mean")),

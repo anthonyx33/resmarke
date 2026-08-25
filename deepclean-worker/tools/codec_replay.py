@@ -87,7 +87,7 @@ def main():
         record["variants"][name] = m
         print(f"  {name}: EATR={m['eatr']:.3f} HFTR_H1={m['hftr_H1']:.3f} "
               f"lumaRMS={m['luma_rms_lsb']:.2f}LSB chromaRMS={m['chroma_rms_lsb']:.2f}LSB "
-              f"rho1={m['rho1']:.3f} dE00={m['delta_e00']:.2f}")
+              f"rho1={m['rho1']:.3f} dE76={m['delta_e76']:.2f}")
 
     if args.source:
         print("Source-relative (scale-normalized vs original):")

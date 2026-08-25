@@ -69,7 +69,7 @@ export type CorpusRun = {
   intent_id?: string;
   experiment_id: string;
   corpus_image_id: string;
-  config_label: "A" | "1A" | "2B" | "CUSTOM";
+  config_label: "A" | "1A" | "2B" | "3C" | "CUSTOM";
   config_key: string;
   requested_settings_code: string;
   requested_settings_canonical?: Record<string, unknown>;
@@ -256,7 +256,7 @@ export async function archiveCorpusEntity(entity: "image" | "set" | "experiment"
 export async function createCorpusRunIntent(input: {
   corpusImageId: string;
   experimentId: string;
-  configLabel: "A" | "1A" | "2B" | "CUSTOM";
+  configLabel: "A" | "1A" | "2B" | "3C" | "CUSTOM";
   requestedSettingsCode: string;
   requestedSettingsCanonical: SettingsCodeInput;
 }): Promise<string> {

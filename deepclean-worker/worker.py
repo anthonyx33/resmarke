@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -13,6 +14,7 @@ import runpod
 from PIL import Image, ImageDraw, ImageFont
 
 from content_repair import apply_content_repair_lab, is_content_repair_lab
+from tools.checkpoint_capture import build_checkpoint_manifest, lab_checkpoint_dir, save_checkpoint
 from deepclean_detector import make_detector
 from ds_remint_v6 import apply_ds_remint_v6, is_ds_remint_v6
 from ds_remint_v7 import apply_ds_remint_v7, is_ds_remint_v7
@@ -41,6 +43,12 @@ from quality_finish import apply_quality_finish, is_quality_finish
 TEMPLATE_PATH = Path(
     os.environ.get("DEEPCLEAN_WORKFLOW", "/app/workflows/remarkee-max-v2.api.json")
 )
+
+LAB_SEED_PATTERN = re.compile(r"^lab-[a-z0-9]{1,32}$")
+
+
+class InvalidLabSeedError(ValueError):
+    pass
 
 # Profiles drive the python-side optimizations (resolution cap + restore-to-
 # original + timeout) plus small graph mutations before /prompt submission.
@@ -129,6 +137,9 @@ def handler(job):
         input_path = tmp / f"input{input_suffix}"
         cleaned_path = tmp / "cleaned.png"
         final_path = tmp / "final.jpg"
+        lab_seed = None
+        checkpoint_dir = None
+        capture_errors = []
 
         try:
             download(payload["input_url"], input_path)
@@ -136,6 +147,27 @@ def handler(job):
             before_report = identify_image(input_path)
 
             expert_refinement = payload.get("expert_refinement")
+            lab_seed = validated_lab_seed(expert_refinement)
+            effective_seed_extra = (
+                f"lab:{lab_seed}" if lab_seed is not None else f"{job_id}:{input_sha}"
+            )
+            if lab_seed is not None:
+                checkpoint_base = os.environ.get("DEEPCLEAN_CHECKPOINT_DIR")
+                durable_confirmed = os.environ.get("DEEPCLEAN_CHECKPOINT_DURABLE") == "1"
+                if not durable_confirmed:
+                    capture_errors.append(
+                        "private durable checkpoint storage is not confirmed "
+                        "(DEEPCLEAN_CHECKPOINT_DURABLE=1 required)"
+                    )
+                elif not checkpoint_base:
+                    capture_errors.append("DEEPCLEAN_CHECKPOINT_DIR is not configured")
+                else:
+                    try:
+                        checkpoint_dir = lab_checkpoint_dir(checkpoint_base, job_id, lab_seed)
+                    except Exception as exc:  # noqa: BLE001
+                        capture_errors.append(
+                            f"checkpoint directory: {type(exc).__name__}: {exc}"
+                        )
 
             if is_max_remint(expert_refinement):
                 # Max ReMint is NON-GENERATIVE: it deliberately bypasses
@@ -323,8 +355,9 @@ def handler(job):
                     output_path=cleaned_path,
                     creator_id=creator_id,
                     settings=expert_refinement,
-                    seed_extra=f"{job_id}:{input_sha}",
+                    seed_extra=effective_seed_extra,
                     detector=make_detector(),
+                    checkpoint_dir=checkpoint_dir,
                 )
                 cleaned_sha = sha256_file(cleaned_path)
                 neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9"}
@@ -368,9 +401,10 @@ def handler(job):
                     output_path=cleaned_path,
                     creator_id=creator_id,
                     settings=v89_settings,
-                    seed_extra=f"{job_id}:{input_sha}",
+                    seed_extra=effective_seed_extra,
                     detector=detector,
                     return_buffer=fidelity,
+                    checkpoint_dir=checkpoint_dir,
                 )
                 pre_encode_rgb = engine_report.pop("_pre_encode_rgb", None) if isinstance(engine_report, dict) else None
                 stage1_path = tmp / "stage1-delivered.jpg"
@@ -392,9 +426,10 @@ def handler(job):
                         image=pre_encode_rgb,
                         output_path=cleaned_path,
                         settings=fin_settings,
-                        seed_extra=f"{job_id}:{input_sha}",
+                        seed_extra=effective_seed_extra,
                         creator_id=creator_id,
                         reference=input_path,
+                        checkpoint_dir=checkpoint_dir,
                     )
                     # Same detector gate as the v3.1 adaptive path: the
                     # DELIVERED file must clear. Probe infra errors never
@@ -449,19 +484,32 @@ def handler(job):
                         cand_settings = dict(expert_refinement)
                         cand_settings["quality_finish"] = {**finish_base, "preset": preset}
                         cand_path = tmp / f"finished-{preset}.jpg"
+                        candidate_checkpoint_dir = (
+                            checkpoint_dir / f".candidate-{preset}"
+                            if checkpoint_dir is not None
+                            else None
+                        )
                         rep = apply_quality_finish(
                             input_path=cleaned_path,
                             output_path=cand_path,
                             settings=cand_settings,
-                            seed_extra=f"{job_id}:{input_sha}",
+                            seed_extra=effective_seed_extra,
                             creator_id=creator_id,
                             reference=input_path,
+                            checkpoint_dir=candidate_checkpoint_dir,
                         )
                         if not rep.get("applied"):
                             continue
                         ai, flux = _finish_probe(detector, cand_path)
                         candidates.append(
-                            {"preset": preset, "path": cand_path, "report": rep, "ai": ai, "flux": flux}
+                            {
+                                "preset": preset,
+                                "path": cand_path,
+                                "report": rep,
+                                "ai": ai,
+                                "flux": flux,
+                                "checkpoint_dir": candidate_checkpoint_dir,
+                            }
                         )
 
                     chosen = None
@@ -484,6 +532,21 @@ def handler(job):
                                 chosen = candidates[0]
                     if chosen is not None:
                         shutil.copyfile(chosen["path"], cleaned_path)
+                        if checkpoint_dir is not None and chosen["checkpoint_dir"] is not None:
+                            try:
+                                shutil.copyfile(
+                                    chosen["checkpoint_dir"] / "O4_preencode.png",
+                                    checkpoint_dir / "O4_preencode.png",
+                                )
+                            except Exception as exc:  # noqa: BLE001
+                                capture_errors.append(
+                                    f"O4_preencode.png: {type(exc).__name__}: {exc}"
+                                )
+                    if checkpoint_dir is not None:
+                        for candidate in candidates:
+                            candidate_dir = candidate.get("checkpoint_dir")
+                            if candidate_dir is not None:
+                                shutil.rmtree(candidate_dir, ignore_errors=True)
                     engine_report["quality_finish"] = (
                         chosen["report"] if chosen else {"applied": False, "reason": "no_finish_candidate_applied"}
                     )
@@ -556,6 +619,11 @@ def handler(job):
             if not quality["ok"]:
                 raise RuntimeError(quality["reason"])
 
+            final_seed_extra = (
+                effective_seed_extra
+                if is_ds_remint_v8_9(expert_refinement) or is_ds_remint_v8_9_hd(expert_refinement)
+                else f"{job_id}:{input_sha}:{cleaned_sha}"
+            )
             naturalization_report = finalize_output(
                 cleaned_path=cleaned_path,
                 output_path=final_path,
@@ -563,7 +631,31 @@ def handler(job):
                 creator_id=creator_id,
                 naturalization=final_naturalization_config(cfg, expert_refinement),
                 expert_refinement=expert_refinement,
-                seed_extra=f"{job_id}:{input_sha}:{cleaned_sha}",
+                seed_extra=final_seed_extra,
+            )
+
+            if isinstance(engine_report, dict):
+                engine_report["effective_seed"] = effective_seed_extra
+                engine_report["lab_seed"] = lab_seed
+                capture_errors.extend(engine_report.get("checkpoint_errors") or [])
+                finish_report = engine_report.get("quality_finish")
+                if isinstance(finish_report, dict):
+                    capture_errors.extend(finish_report.get("checkpoint_errors") or [])
+
+            if checkpoint_dir is not None:
+                try:
+                    with Image.open(final_path) as delivered_image:
+                        checkpoint_error = save_checkpoint(
+                            checkpoint_dir, "O5_final.png", delivered_image
+                        )
+                    if checkpoint_error:
+                        capture_errors.append(checkpoint_error)
+                except Exception as exc:  # noqa: BLE001
+                    capture_errors.append(f"O5_final.png: {type(exc).__name__}: {exc}")
+            checkpoint_manifest = build_checkpoint_manifest(
+                checkpoint_dir,
+                capture_requested=lab_seed is not None,
+                errors=capture_errors,
             )
 
             after_report = identify_image(final_path)
@@ -594,12 +686,26 @@ def handler(job):
                         "expert_refinement": naturalization_report["expert_refinement"],
                         "identify_before": before_report,
                         "identify_after": after_report,
+                        "checkpoints": checkpoint_manifest,
                     },
                 },
             )
             return {"ok": True, "job_id": job_id, "runtime_ms": runtime_ms}
         except Exception as exc:
             runtime_ms = int((time.time() - started) * 1000)
+            invalid_seed = isinstance(exc, InvalidLabSeedError)
+            checkpoint_manifest = build_checkpoint_manifest(
+                checkpoint_dir,
+                capture_requested=lab_seed is not None,
+                errors=capture_errors,
+            )
+            failure_report = {
+                "profile": profile,
+                "output_mode": payload.get("output_mode", "sealed"),
+                "checkpoints": checkpoint_manifest,
+            }
+            if invalid_seed:
+                failure_report["seed"] = "invalid"
             notify(
                 webhook_url,
                 webhook_secret,
@@ -610,13 +716,13 @@ def handler(job):
                     "runtime_ms": runtime_ms,
                     "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
                     "failure_reason": str(exc),
-                    "report": {
-                        "profile": profile,
-                        "output_mode": payload.get("output_mode", "sealed"),
-                    },
+                    "report": failure_report,
                 },
             )
-            return {"ok": False, "job_id": job_id, "error": str(exc)}
+            result = {"ok": False, "job_id": job_id, "error": str(exc)}
+            if invalid_seed:
+                result["seed"] = "invalid"
+            return result
         finally:
             if payload.get("input_path"):
                 delete_storage_object("deepclean-inputs", payload["input_path"])
@@ -883,6 +989,22 @@ def final_naturalization_config(cfg, expert_refinement):
 def is_ds_remint_v8_9_hd(settings):
     """Slash Image sequence: frozen V8.9 remint -> Quality Finish."""
     return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.9-hd"
+
+
+def validated_lab_seed(settings):
+    """Defense in depth for edge-preserved remint.seed; never normalize it."""
+    if not isinstance(settings, dict) or settings.get("mode") not in (
+        "ds-remint-v8.9",
+        "ds-remint-v8.9-hd",
+    ):
+        return None
+    remint = settings.get("ds_remint_v8_9")
+    if not isinstance(remint, dict) or "seed" not in remint:
+        return None
+    seed = remint.get("seed")
+    if not isinstance(seed, str) or LAB_SEED_PATTERN.fullmatch(seed) is None:
+        raise InvalidLabSeedError("remint.seed is invalid")
+    return seed
 
 
 def _finish_probe(detector, path):

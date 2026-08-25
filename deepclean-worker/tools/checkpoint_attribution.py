@@ -1,5 +1,7 @@
 """checkpoint_attribution.py — V10 Priority-1 tool (zero vendor grades).
 
+Metrics are diagnostics; they do not drive decisions until owner-approved.
+
 Locates WHERE quality is lost in the remint chain by comparing each
 checkpoint against a GEOMETRY-MATCHED reference (the original resampled
 only to the checkpoint's lattice), so the measurements separate processing
@@ -18,11 +20,11 @@ worker) contains:
   O5_final.png        final delivery (decoded)
 
 For every checkpoint Oi: Ri = O0 resampled to Oi's geometry (LANCZOS).
-Metrics are computed on the full frame + fixed ROIs (center, top, left,
-bottom bands):
+Metrics are computed on the full frame + fixed positional bands (center,
+top, left, bottom):
   EATR        p95 Sobel magnitude ratio  edge(Oi) / edge(Ri)
   HFTR_H0/H1/H2  band-RMS ratio (I-g0.7 / g0.7-g1.4 / g1.4-g4.0)
-  rho1, rho2  lag-1/2 autocorrelation of the smooth-region residual Oi-Ri
+  rho1, rho2  spatial horizontal/vertical lag-1/2 correlation of Oi-Ri
   corr_len    first lag where smooth-residual autocorrelation < 0.1
   luma_rms    smooth-region residual RMS (LSB)
   chroma_rms  Cb/Cr residual RMS (LSB)
@@ -52,9 +54,10 @@ CHECKPOINTS = [
     ("O5", "O5_final.png"),
 ]
 
-# Fixed ROIs (normalized boxes x0,y0,x1,y1) — hand-auditable, registration-
-# free (the chain is generative; geometry drifts slightly).
-ROIS = {
+# Fixed positional bands (normalized boxes x0,y0,x1,y1) — hand-auditable,
+# registration-free (the chain can drift slightly). These are not semantic
+# regions and must not be described as semantic masks.
+POSITIONAL_BANDS = {
     "full": (0.0, 0.0, 1.0, 1.0),
     "center": (0.25, 0.25, 0.75, 0.75),
     "top": (0.15, 0.02, 0.85, 0.35),
@@ -112,7 +115,7 @@ def _edge_width_10_90(y):
     return float(np.median(widths)) if widths else 0.0
 
 
-def _delta_e00(oi, ri):
+def _delta_e76(oi, ri):
     """Median CIE-Lab (D65) colour difference, 1976 approximation (V11)."""
 
     def srgb_to_lab(a):
@@ -164,24 +167,7 @@ def _metrics_for(oi, ri):
     if smooth.sum() < 64:
         smooth = np.ones_like(smooth)
     res_s = residual[smooth]
-    if float(np.var(res_s)) < 1e-12:
-        rho1 = rho2 = 0.0
-    else:
-        rho1 = float(np.corrcoef(res_s[:-1], res_s[1:])[0, 1]) if len(res_s) > 2 else 0.0
-        rho2 = float(np.corrcoef(res_s[:-2], res_s[2:])[0, 1]) if len(res_s) > 4 else 0.0
-
-    # correlation length: first lag where autocorrelation drops below 0.1
-    res_c = res_s - res_s.mean()
-    var = float(np.var(res_c)) + 1e-12
-    corr_len = 0
-    for lag in range(1, 32):
-        if len(res_c) <= lag:
-            break
-        r = float(np.mean(res_c[:-lag] * res_c[lag:]) / var)
-        if r < 0.1:
-            corr_len = lag
-            break
-        corr_len = lag
+    spatial = _spatial_correlations(residual, smooth)
 
     luma_rms = float(np.sqrt(np.mean(res_s ** 2))) * 255.0
     co = oi[..., 1:3] - ri[..., 1:3]
@@ -189,25 +175,70 @@ def _metrics_for(oi, ri):
     return {
         "eatr": eatr,
         "hftr": hftr,
-        "rho1": rho1,
-        "rho2": rho2,
-        "corr_len": corr_len,
+        **spatial,
         "luma_rms_lsb": luma_rms,
         "chroma_rms_lsb": chroma_rms,
         "edge_width_10_90": _edge_width_10_90(yo),
-        "delta_e00": _delta_e00(oi, ri),
+        "delta_e76": _delta_e76(oi, ri),
         "staircase": _staircase(yo),
     }
 
 
-def _combine(roi_metrics):
-    """Average metrics across ROIs; eatr/hftr averaged per band."""
-    out = {"eatr": float(np.mean([m["eatr"] for m in roi_metrics]))}
+def _masked_spatial_corr(field, mask, dy, dx):
+    """Pearson correlation over genuine 2-D neighbours selected by mask."""
+    height, width = field.shape
+    if dy >= height or dx >= width:
+        return 0.0
+    left = field[: height - dy or None, : width - dx or None]
+    right = field[dy:, dx:]
+    left_mask = mask[: height - dy or None, : width - dx or None]
+    right_mask = mask[dy:, dx:]
+    valid = left_mask & right_mask
+    if int(valid.sum()) < 64:
+        return 0.0
+    first = left[valid]
+    second = right[valid]
+    if float(np.var(first)) < 1e-12 or float(np.var(second)) < 1e-12:
+        return 0.0
+    return float(np.corrcoef(first, second)[0, 1])
+
+
+def _spatial_correlations(field, mask):
+    rho1_h = _masked_spatial_corr(field, mask, 0, 1)
+    rho1_v = _masked_spatial_corr(field, mask, 1, 0)
+    rho2_h = _masked_spatial_corr(field, mask, 0, 2)
+    rho2_v = _masked_spatial_corr(field, mask, 2, 0)
+    corr_len = 0
+    for lag in range(1, 32):
+        values = [
+            _masked_spatial_corr(field, mask, 0, lag),
+            _masked_spatial_corr(field, mask, lag, 0),
+        ]
+        correlation = float(np.mean(values))
+        corr_len = lag
+        if correlation < 0.1:
+            break
+    return {
+        "rho1": float(np.mean([rho1_h, rho1_v])),
+        "rho2": float(np.mean([rho2_h, rho2_v])),
+        "rho1_h": rho1_h,
+        "rho1_v": rho1_v,
+        "rho2_h": rho2_h,
+        "rho2_v": rho2_v,
+        "corr_len": corr_len,
+    }
+
+
+def _combine(positional_band_metrics):
+    """Average metrics across positional bands; eatr/hftr per band."""
+    metrics = list(positional_band_metrics)
+    out = {"eatr": float(np.mean([m["eatr"] for m in metrics]))}
     for band in ("H0", "H1", "H2"):
-        out[f"hftr_{band}"] = float(np.mean([m["hftr"][band] for m in roi_metrics]))
-    for k in ("rho1", "rho2", "corr_len", "luma_rms_lsb", "chroma_rms_lsb",
-              "edge_width_10_90", "delta_e00", "staircase"):
-        out[k] = float(np.mean([m[k] for m in roi_metrics]))
+        out[f"hftr_{band}"] = float(np.mean([m["hftr"][band] for m in metrics]))
+    for k in ("rho1", "rho2", "rho1_h", "rho1_v", "rho2_h", "rho2_v",
+              "corr_len", "luma_rms_lsb", "chroma_rms_lsb",
+              "edge_width_10_90", "delta_e76", "staircase"):
+        out[k] = float(np.mean([m[k] for m in metrics]))
     return out
 
 
@@ -236,10 +267,11 @@ def main():
     for name in present:
         oi = _load(files[name])
         ri = _resample_to(o0, oi.shape)
-        roi_metrics = {}
-        for roi, box in ROIS.items():
-            roi_metrics[roi] = _metrics_for(_crop(oi, box), _crop(ri, box))
-        rows[name] = {"rois": roi_metrics, "combined": _combine(roi_metrics.values()),
+        positional_metrics = {}
+        for band, box in POSITIONAL_BANDS.items():
+            positional_metrics[band] = _metrics_for(_crop(oi, box), _crop(ri, box))
+        rows[name] = {"positional_bands": positional_metrics,
+                      "combined": _combine(positional_metrics.values()),
                       "dims": list(oi.shape[:2])}
 
     # transition losses + dominance
@@ -262,14 +294,15 @@ def main():
         if v["loss"] > 1e-4 and (v["loss"] >= 1.5 * second or v["loss"] >= 0.35 * total):
             dominant.append(name)
 
-    print("Checkpoint metrics (ROI-averaged):")
+    print("Checkpoint metrics (positional-band averaged):")
     for name in order:
         c = rows[name]["combined"]
         print(f"  {name} dims={rows[name]['dims']} EATR={c['eatr']:.3f} "
               f"HFTR H0/H1/H2={c['hftr_H0']:.3f}/{c['hftr_H1']:.3f}/{c['hftr_H2']:.3f} "
-              f"rho1={c['rho1']:.3f} rho2={c['rho2']:.3f} corr_len={c['corr_len']:.1f} "
+              f"rho1 h/v={c['rho1_h']:.3f}/{c['rho1_v']:.3f} "
+              f"rho2 h/v={c['rho2_h']:.3f}/{c['rho2_v']:.3f} corr_len={c['corr_len']:.1f} "
               f"lumaRMS={c['luma_rms_lsb']:.2f}LSB chromaRMS={c['chroma_rms_lsb']:.2f}LSB "
-              f"edgeW={c['edge_width_10_90']:.1f}px dE00={c['delta_e00']:.2f} "
+              f"edgeW={c['edge_width_10_90']:.1f}px dE76={c['delta_e76']:.2f} "
               f"stair={c['staircase']:.3f}")
     print("\nTransition losses (negative = detail lost):")
     for name, v in ranked:
@@ -286,7 +319,8 @@ def main():
 
     if args.jsonl:
         record = {
-            "checkpoints": {n: {"metrics": rows[n]["combined"], "rois": rows[n]["rois"],
+            "checkpoints": {n: {"metrics": rows[n]["combined"],
+                                "positional_bands": rows[n]["positional_bands"],
                                 "dims": rows[n]["dims"]} for n in order},
             "transitions": losses,
             "dominant_offenders": dominant,

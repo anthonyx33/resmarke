@@ -92,6 +92,8 @@ export type DsRemintV8_8Options = {
   /** Stage-one codec (Config 2B lever). Defaults: 92 / 4:2:0. */
   jpegQuality?: number;
   jpegSubsampling?: "4:2:0" | "4:2:2" | "4:4:4";
+  /** Authorized /relab fixed-seed control. Never exposed by production UIs. */
+  seed?: string;
 };
 
 export type QualityFinishOverrides = {
@@ -291,6 +293,7 @@ export async function createDeepCleanJob(params: {
             strength: params.dsRemintV89.strength,
             jpeg_quality: params.dsRemintV89.jpegQuality,
             jpeg_subsampling: params.dsRemintV89.jpegSubsampling,
+            seed: params.dsRemintV89.seed,
             iphone_exif: params.dsRemintV89.iphoneExif,
             metadata_mode: params.dsRemintV89.metadataMode
           }
@@ -311,6 +314,7 @@ export async function createDeepCleanJob(params: {
               strength: params.dsRemintV89Hd.remint.strength,
               jpeg_quality: params.dsRemintV89Hd.remint.jpegQuality,
               jpeg_subsampling: params.dsRemintV89Hd.remint.jpegSubsampling,
+              seed: params.dsRemintV89Hd.remint.seed,
               iphone_exif: params.dsRemintV89Hd.remint.iphoneExif,
               metadata_mode: params.dsRemintV89Hd.remint.metadataMode
             },

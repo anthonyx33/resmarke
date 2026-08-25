@@ -47,13 +47,13 @@ ship the input bytes unchanged (quality never costs acceptance).
 import hashlib
 import io
 import math
-import os
 import shutil
 import time
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from tools.checkpoint_capture import save_checkpoint
 
 MODE = "quality-finish"
 
@@ -179,11 +179,6 @@ ATROUS_KERNEL = np.array([1.0, 4.0, 6.0, 4.0, 1.0], dtype=np.float32) / 16.0
 # and deliberate dither disproportionately better in large smooth skies.
 FINAL_JPEG_QUALITY = 97
 FINAL_JPEG_SUBSAMPLING = 0  # 4:4:4
-
-# V10 checkpoint instrumentation (diagnostic-only, default OFF). Set
-# DEEPCLEAN_CHECKPOINT_DIR to export the O4 pre-encode buffer for the
-# checkpoint_attribution.py tool. NO algorithm behaviour changes.
-_QF_CKPT_DIR = os.environ.get("DEEPCLEAN_CHECKPOINT_DIR")
 
 # Delivery cap: passthrough shipping in the worker stays single-encode only
 # while the long edge is <= 2048, so enlargement is clamped to that ceiling.
@@ -1572,6 +1567,7 @@ def apply_quality_finish(
     seed_extra="",
     creator_id="",
     reference=None,
+    checkpoint_dir=None,
 ):
     """Run the finisher. Writes the final single JPEG (Q97 4:4:4) to
     `output_path`. On QC failure the ORIGINAL bytes are shipped unchanged and
@@ -1717,15 +1713,11 @@ def apply_quality_finish(
                 qc["reference_fail"] = "texture_detail_transfer_below_0.60"
 
     runtime_ms = int((time.time() - started) * 1000)
+    checkpoint_errors = []
     if passed:
-        if _QF_CKPT_DIR:
-            try:
-                os.makedirs(_QF_CKPT_DIR, exist_ok=True)
-                Image.fromarray(out_u8, mode="RGB").save(
-                    os.path.join(_QF_CKPT_DIR, "O4_preencode.png"), format="PNG"
-                )
-            except Exception:
-                pass
+        checkpoint_error = save_checkpoint(checkpoint_dir, "O4_preencode.png", out_u8)
+        if checkpoint_error:
+            checkpoint_errors.append(checkpoint_error)
         out_img = Image.fromarray(out_u8, mode="RGB")
         save_kwargs = {
             "format": "JPEG",
@@ -1761,6 +1753,7 @@ def apply_quality_finish(
         "runtime_ms": runtime_ms,
         "qc": qc,
         "delivery_check": delivery_check,
+        "checkpoint_errors": checkpoint_errors,
         "overrides": {k: round(float(v), 3) for k, v in sub.get("overrides", {}).items()}
         if isinstance(sub.get("overrides"), dict)
         else {},
