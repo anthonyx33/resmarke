@@ -124,6 +124,57 @@ export type CorpusLeaderboardRow = {
   created_at: string;
 };
 
+/** One row of the server-backed visual history browser (`corpus-run-history`). */
+export type CorpusVisualRun = {
+  run_id: string;
+  created_at: string;
+  experiment_id: string;
+  corpus_image_id: string;
+  file_name: string | null;
+  config_label: CorpusRun["config_label"];
+  config_key: string;
+  settings_code: string;
+  requested_settings_canonical: Record<string, unknown> | null;
+  requested_settings_sha256: string | null;
+  executed_settings_sha256: string | null;
+  worker_report_sha256: string | null;
+  og_sha256: string | null;
+  output_sha256: string;
+  output_byte_size: number | null;
+  output_copy_status: CorpusRun["output_copy_status"];
+  og_grade: CorpusGrade | null;
+  remint_grade: CorpusGrade | null;
+  delta: number | null;
+  swap_index: number | null;
+  retention_index: number | null;
+  grade_status: CorpusRun["grade_status"];
+  verdict: string;
+  qa_flag: boolean;
+  mock: boolean;
+  engine_version: string | null;
+  engine_release: string | null;
+  detector_vendor: string | null;
+  detector_mode: string | null;
+  detector_model: string | null;
+  detector_version: string | null;
+  runtime_ms: number | null;
+  job_id: string | null;
+  og_width: number | null;
+  og_height: number | null;
+  og_url: string | null;
+  output_url: string | null;
+};
+
+export type CorpusVisualHistory = {
+  runs: CorpusVisualRun[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  signed_url_ttl_seconds: number;
+  signed_at: string;
+};
+
 export type CorpusSnapshot = {
   is_admin: true;
   user_id: string;
@@ -160,6 +211,22 @@ export async function readCorpusHistory(input: {
   return invoke("corpus-read", {
     corpus_image_id: input.corpusImageId,
     experiment_id: input.experimentId,
+  });
+}
+
+export async function fetchCorpusRunHistory(input: {
+  experimentId?: string;
+  corpusImageId?: string;
+  configLabel?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<CorpusVisualHistory> {
+  return invoke<CorpusVisualHistory>("corpus-run-history", {
+    experiment_id: input.experimentId || undefined,
+    corpus_image_id: input.corpusImageId || undefined,
+    config_label: input.configLabel || undefined,
+    limit: input.limit,
+    offset: input.offset,
   });
 }
 
@@ -297,6 +364,22 @@ export function compactCorpusReport(runs: CorpusRun[]): string {
     `| ${run.corpus_image_id} | ${percent(run.og_grade!.ai_probability)} | ${run.og_grade!.top_source ?? "—"} | ${percent(run.remint_grade!.ai_probability)} | ${run.remint_grade!.top_source ?? "—"} | ${signedPercent(run.delta ?? 0)} | ${run.remint_grade!.verdict} |`
   );
   return [header, divider, ...lines].join("\n");
+}
+
+/** Single-row compact line for a visual-history run, matching `compactCorpusReport` columns. */
+export function compactVisualReport(run: CorpusVisualRun): string {
+  const cells = [
+    run.file_name ?? run.corpus_image_id,
+    run.og_grade ? percent(run.og_grade.ai_probability) : "PENDING",
+    run.og_grade?.top_source ?? "—",
+    run.remint_grade ? percent(run.remint_grade.ai_probability) : "PENDING",
+    run.remint_grade?.top_source ?? "—",
+    run.delta == null ? "—" : signedPercent(run.delta),
+    run.verdict,
+    run.config_label,
+    run.settings_code,
+  ];
+  return `| ${cells.join(" | ")} |`;
 }
 
 async function manage<T = Record<string, unknown>>(body: Record<string, unknown>): Promise<T> {

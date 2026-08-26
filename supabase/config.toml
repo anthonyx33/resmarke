@@ -39,6 +39,9 @@ verify_jwt = true
 [functions.corpus-read]
 verify_jwt = true
 
+[functions.corpus-run-history]
+verify_jwt = true
+
 [functions.corpus-manage]
 verify_jwt = true
 
