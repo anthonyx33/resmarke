@@ -6,7 +6,16 @@
 
 export type SettingsCodeMode = "sequence" | "remint" | "finish";
 export type ConfigLabel = "A" | "1A" | "2B" | "3C" | "CUSTOM";
-export type PresetId = "config-a" | "config-1a" | "config-2b" | "config-3c";
+export type FrozenPresetId = "config-a" | "config-1a" | "config-2b" | "config-3c";
+export type PresetId = FrozenPresetId | "4d-cam-1";
+export type OpticsPsfScale = 0.5 | 1;
+
+export class SettingsValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SettingsValidationError";
+  }
+}
 
 export interface RemintSettings {
   washModel?: string;
@@ -17,6 +26,7 @@ export interface RemintSettings {
   iphoneExif?: boolean;
   metadataMode?: string;
   seed?: string;
+  opticsPsfScale?: number;
 }
 
 export interface FinishSettings {
@@ -62,7 +72,7 @@ const COMMON_FINISH: PresetDefinition["finish"] = {
   materialClean: true,
 };
 
-export const PRESET_DEFINITIONS: Record<PresetId, PresetDefinition> = {
+export const PRESET_DEFINITIONS: Record<FrozenPresetId, PresetDefinition> = {
   "config-a": {
     id: "config-a",
     label: "Config A",
@@ -125,6 +135,32 @@ export const PRESET_DEFINITIONS: Record<PresetId, PresetDefinition> = {
   },
 };
 
+/** Kept separate so shared consumers still enumerate exactly four frozen configs. */
+export const CAM1_PRESET_DEFINITION: PresetDefinition = {
+  id: "4d-cam-1",
+  label: "4D-CAM-1 — LAB · Gaussian radii ×0.50",
+  detail: "Config A with the sealed camera-radius scalar only",
+  remint: {
+    engineMode: "adaptive",
+    washModel: "qwen",
+    strength: "deep",
+    iphoneExif: true,
+    metadataMode: "device",
+    opticsPsfScale: 0.5,
+  },
+  finish: cloneFinish(COMMON_FINISH),
+  finishMode: "adaptive",
+};
+
+/** Fail-closed boundary parser shared by the client/edge identity contract. */
+export function validateOpticsPsfScale(value: unknown, supplied: boolean): OpticsPsfScale {
+  if (!supplied) return 1;
+  if (typeof value !== "number" || !Number.isFinite(value) || (value !== 0.5 && value !== 1)) {
+    throw new SettingsValidationError("optics_psf_scale must be exactly 0.50 or 1.00 when supplied.");
+  }
+  return value;
+}
+
 /** Stable JSON stringify: sorted keys and no insignificant whitespace. */
 export function canonicalJson(value: unknown): string {
   const walk = (item: unknown): unknown => {
@@ -182,6 +218,11 @@ export function isConfig3C(input: SettingsCodeInput): boolean {
   return commonTuple(input, "qwen+zimage") && q97Codec(input.remint);
 }
 
+export function is4dCam1(input: SettingsCodeInput): boolean {
+  return commonBaseTuple(input, "qwen") && input.remint.opticsPsfScale === 0.5 &&
+    defaultCodec(input.remint);
+}
+
 export function buildSettingsCode(input: SettingsCodeInput): string {
   const marker = { sequence: "SEQ", remint: "REM", finish: "QF" }[input.mode];
   const hash = settingsShortHash(canonicalJson(input), 12);
@@ -189,6 +230,7 @@ export function buildSettingsCode(input: SettingsCodeInput): string {
   if (isConfig1A(input)) return `${marker}-1A-${hash}`;
   if (isConfig2B(input)) return `${marker}-2B-${hash}`;
   if (isConfig3C(input)) return `${marker}-3C-${hash}`;
+  if (is4dCam1(input)) return `${marker}-CAM1-${hash}`;
   const preset = ({ conservative: "CON", standard: "STD", strong: "STR", fidelity: "FID" } as Record<string, string>)[input.finish.preset ?? "standard"] ?? "STD";
   const scale = input.finish.scale == null ? "N" : String(input.finish.scale);
   const wall = input.finish.materialClean === false ? "M0" : "M1";
@@ -200,6 +242,10 @@ export function configIdentity(input: SettingsCodeInput): { label: ConfigLabel; 
   if (isConfig1A(input)) return { label: "1A", key: "1A" };
   if (isConfig2B(input)) return { label: "2B", key: "2B" };
   if (isConfig3C(input)) return { label: "3C", key: "3C" };
+  if (is4dCam1(input)) {
+    const key = buildSettingsCode(input);
+    return { label: "CUSTOM", key };
+  }
   return { label: "CUSTOM", key: buildSettingsCode(input) };
 }
 
@@ -211,7 +257,7 @@ export function settingsForPreset(preset: PresetDefinition): SettingsCodeInput {
   };
 }
 
-/** Reconstruct one of the four exact presets from canonical or ledger data. */
+/** Reconstruct one of the four frozen presets or the exact lab-only CAM-1 tuple. */
 export function presetFromRequested(value: unknown): PresetDefinition | null {
   const input = requestedToSettings(value);
   if (!input) return null;
@@ -219,9 +265,11 @@ export function presetFromRequested(value: unknown): PresetDefinition | null {
     : isConfig1A(input) ? "config-1a"
     : isConfig2B(input) ? "config-2b"
     : isConfig3C(input) ? "config-3c"
+    : is4dCam1(input) ? "4d-cam-1"
     : null;
   if (!id) return null;
-  const result = clonePreset(PRESET_DEFINITIONS[id]);
+  const definition = id === "4d-cam-1" ? CAM1_PRESET_DEFINITION : PRESET_DEFINITIONS[id];
+  const result = clonePreset(definition);
   const seed = input.remint.seed;
   if (seed !== undefined) result.remint.seed = seed;
   return result;
@@ -240,7 +288,7 @@ function requestedToSettings(value: unknown): SettingsCodeInput | null {
   };
 }
 
-function commonTuple(input: SettingsCodeInput, washModel: string): boolean {
+function commonBaseTuple(input: SettingsCodeInput, washModel: string): boolean {
   const remint = input.remint;
   const finish = input.finish;
   const overrides = finish.overrides ?? {};
@@ -249,6 +297,14 @@ function commonTuple(input: SettingsCodeInput, washModel: string): boolean {
     finish.preset === "strong" && finish.scale == null && finish.finishMode === "adaptive" &&
     finish.materialClean !== false && near(overrides.dither, 1) &&
     near(overrides.smoothness, 1.25) && near(overrides.sharpen, 1);
+}
+
+function commonTuple(input: SettingsCodeInput, washModel: string): boolean {
+  return commonBaseTuple(input, washModel) && defaultOpticsPsfScale(input.remint);
+}
+
+function defaultOpticsPsfScale(remint: RemintSettings): boolean {
+  return remint.opticsPsfScale === undefined || remint.opticsPsfScale === 1;
 }
 
 function defaultCodec(remint: RemintSettings): boolean {

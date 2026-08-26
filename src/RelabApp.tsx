@@ -67,9 +67,11 @@ import {
 } from "./lib/corpusClient";
 import { readLocalCredits, spendLocalPrivacyCredit, type CreditSnapshot } from "./lib/localCredits";
 import {
+  CAM1_PRESET_DEFINITION,
   PRESET_DEFINITIONS,
   buildSettingsCode,
   configIdentity,
+  is4dCam1,
   presetFromRequested,
   settingsForPreset,
   type PresetDefinition,
@@ -118,8 +120,12 @@ const UNIT_COST = 23;
 const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp"]);
 const SESSION_CAP_FALLBACK = 40;
 
-const PRESETS = PRESET_DEFINITIONS;
+const PRESETS: Record<PresetId, PresetDefinition> = {
+  ...PRESET_DEFINITIONS,
+  "4d-cam-1": CAM1_PRESET_DEFINITION,
+};
 const LAB_SEED_RE = /^lab-[a-z0-9]{1,32}$/;
+const CAM1_LOCKED_SEEDS = new Set(["lab-ctla1", "lab-ctla2"]);
 
 const VERDICT_RANK: Record<GradeVerdict, number> = {
   CLEAR: 0,
@@ -187,6 +193,7 @@ export default function RelabApp() {
   }, [labSeed, presetId]);
   const settingsCode = useMemo(() => settingsCodeForPreset(preset), [preset]);
   const labSeedValid = !labSeed || LAB_SEED_RE.test(labSeed);
+  const cam1SeedReady = presetId !== "4d-cam-1" || CAM1_LOCKED_SEEDS.has(labSeed);
   const pending = queue.filter((item) => item.status !== "completed");
   const active = queue.find((item) => item.id === activeId) ?? queue[0] ?? null;
   const totalCost = pending.length * UNIT_COST;
@@ -197,6 +204,7 @@ export default function RelabApp() {
     hasSupabaseConfig &&
     !!userId &&
     labSeedValid &&
+    cam1SeedReady &&
     credits.privacyCredits >= totalCost;
 
   const sortedRows = useMemo(() => {
@@ -487,6 +495,7 @@ export default function RelabApp() {
   async function processItem(item: QueueItem, position: number, total: number) {
     const runPreset = structuredClone(preset);
     const runSettingsCode = settingsCodeForPreset(runPreset);
+    const runConfigLabel = configLabelForPreset(runPreset);
     let created: DeepCleanJob | null = null;
     let corpusIntentId: string | null = null;
     let workerCompleted = false;
@@ -516,7 +525,7 @@ export default function RelabApp() {
         corpusIntentId = await createCorpusRunIntent({
           corpusImageId: item.corpus.imageId,
           experimentId: item.corpus.experimentId,
-          configLabel: configLabelForPreset(runPreset),
+          configLabel: runConfigLabel,
           requestedSettingsCode: runSettingsCode,
           requestedSettingsCanonical: settingsCanonicalForPreset(runPreset)
         });
@@ -755,7 +764,8 @@ export default function RelabApp() {
     try {
       const fresh = await getDeepCleanJob(item.job.id);
       if (fresh.status !== "completed" || !fresh.outputUrl) throw new Error("Output is not ready.");
-      const runPreset = presetFromRequested(row.requested_settings) ?? preset;
+      const runPreset = presetFromRequested(row.requested_settings);
+      if (!runPreset) throw new Error("Stored requested settings do not match an authorized /relab tuple.");
       const next = await gradeCompletedItem(item, fresh, runPreset, row.settings_code);
       setRows(appendGradeLedgerRow(next));
       patchItem(item.id, { status: "completed", job: fresh, ledgerId: next.id });
@@ -962,7 +972,7 @@ export default function RelabApp() {
             <div className="rl-panel-scroll rl-control-body">
               {(Object.values(PRESETS) as PresetDefinition[]).map((next) => (
                 <button key={next.id} className={`rl-preset${presetId === next.id ? " is-active" : ""}`} type="button" disabled={running} onClick={() => setPresetId(next.id)}>
-                  <span className="rl-preset-icon">{next.id === "config-3c" ? <FlaskConical size={15} /> : next.id === "config-2b" ? <Film size={15} /> : next.id === "config-1a" ? <Gauge size={15} /> : <Check size={15} />}</span>
+                  <span className="rl-preset-icon">{next.id === "config-3c" || next.id === "4d-cam-1" ? <FlaskConical size={15} /> : next.id === "config-2b" ? <Film size={15} /> : next.id === "config-1a" ? <Gauge size={15} /> : <Check size={15} />}</span>
                   <span><b>{next.label}</b><small>{next.detail}</small></span>
                   <span>{presetId === next.id ? "ACTIVE" : "SELECT"}</span>
                 </button>
@@ -984,6 +994,7 @@ export default function RelabApp() {
                 </label>
                 <p className="rl-help">Exact form: <code>lab-[a-z0-9]&#123;1,32&#125;</code>. Blank keeps production randomness; authorized lab accounts only.</p>
                 {!labSeedValid ? <div className="rl-warning"><b>INVALID</b><span>The seed must match the exact lab format.</span></div> : null}
+                {presetId === "4d-cam-1" && !cam1SeedReady ? <div className="rl-warning"><b>LOCKED</b><span>4D-CAM-1 requires lab-ctla1 or lab-ctla2.</span></div> : null}
               </section>
 
               <section className="rl-detector-card">
@@ -1140,9 +1151,15 @@ function settingsCanonicalForPreset(preset: PresetDefinition): SettingsCodeInput
   return settingsForPreset(preset);
 }
 
-function configLabelForPreset(preset: PresetDefinition): "A" | "1A" | "2B" | "3C" {
-  const label = configIdentity(settingsCanonicalForPreset(preset)).label;
-  if (label === "CUSTOM") throw new Error("Frozen preset identity drifted to CUSTOM.");
+function configLabelForPreset(preset: PresetDefinition): "A" | "1A" | "2B" | "3C" | "CUSTOM" {
+  const canonical = settingsCanonicalForPreset(preset);
+  const label = configIdentity(canonical).label;
+  if (label === "CUSTOM") {
+    if (!is4dCam1(canonical) || !CAM1_LOCKED_SEEDS.has(preset.remint.seed ?? "")) {
+      throw new Error("CUSTOM is restricted to the exact seeded 4D-CAM-1 tuple.");
+    }
+    return label;
+  }
   return label;
 }
 

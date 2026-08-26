@@ -38,6 +38,7 @@ from ds_remint_v7 import (
     _v7_verdict,
 )
 from max_cx_remint import _histogram_match
+from tools.auxiliary_checkpoints import build_auxiliary_manifest, save_auxiliary_checkpoint
 from tools.checkpoint_capture import save_checkpoint
 import iphone_exif
 
@@ -55,6 +56,7 @@ DEFAULT_SETTINGS = {
     "route_by_baseline": False,       # V8.9: start ladder per input baseline
     "zimage_denoise": 0.12,
     "strength": "balanced",           # "light" | "balanced" | "deep"
+    "optics_psf_scale": 1.0,          # sealed 4D-CAM-1: 1.00 | 0.50
     "deep_degrade_scale": 0.68,
     "output_target": None,            # None = min(source_long_edge, 1250)
     "min_ssim": 0.85,
@@ -111,6 +113,15 @@ def _clamp(value, low, high):
     return max(low, min(high, parsed))
 
 
+def _strict_optics_psf_scale(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ValueError("optics_psf_scale must be exactly 0.50 or 1.00")
+    parsed = float(value)
+    if not np.isfinite(parsed) or parsed not in (0.5, 1.0):
+        raise ValueError("optics_psf_scale must be exactly 0.50 or 1.00")
+    return parsed
+
+
 def normalize_ds_remint_v8_8_settings(settings):
     raw = settings if isinstance(settings, dict) else {}
     sub = {}
@@ -131,6 +142,10 @@ def normalize_ds_remint_v8_8_settings(settings):
 
     strength = str(sub.get("strength", cfg["strength"]))
     cfg["strength"] = strength if strength in COHERENT_PRESETS else "balanced"
+    cfg["optics_psf_scale_requested"] = sub.get("optics_psf_scale") if "optics_psf_scale" in sub else None
+    cfg["optics_psf_scale"] = _strict_optics_psf_scale(
+        sub["optics_psf_scale"] if "optics_psf_scale" in sub else cfg["optics_psf_scale"]
+    )
     # V8.9 data: 0.68 deep degrade was quality-bad; 0.75 keeps the TruthScan
     # win with far less damage. V8.8 keeps its original default.
     deep_default = 0.75 if cfg["mode"] == "ds-remint-v8.9" else 0.68
@@ -180,6 +195,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     report["_pre_encode_rgb"] so a chained stage can consume the high-
     precision buffer instead of decoding the intermediate JPEG (C8 v4)."""
     cfg = normalize_ds_remint_v8_8_settings(settings)
+    auxiliary_checkpoint_errors = []
     report = {
         "enabled": bool(cfg["enabled"]),
         "pipeline": cfg.get("mode") or "ds_remint_v8_8",
@@ -187,6 +203,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
         "applied": False,
         "settings": {k: cfg[k] for k in (
             "engine_mode", "wash_model", "zimage_denoise", "strength",
+            "optics_psf_scale_requested", "optics_psf_scale",
             "deep_degrade_scale", "output_target", "min_ssim", "ai_threshold",
             "source_threshold", "deepfake_threshold", "jpeg_quality",
             "jpeg_subsampling", "iphone_exif", "metadata_mode",
@@ -197,8 +214,14 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
         "quality_floor_gate": {},
         "detector_gate": {"evaluated": False},
         "checkpoint_errors": [],
+        "auxiliary_checkpoints": {"status": "off", "files": [], "errors": []},
     }
     if not cfg["enabled"]:
+        report["auxiliary_checkpoints"] = build_auxiliary_manifest(
+            checkpoint_dir,
+            capture_requested=checkpoint_dir is not None,
+            errors=auxiliary_checkpoint_errors,
+        )
         return report
 
     started = time.time()
@@ -259,6 +282,11 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
         "micro_rotation": False,
     }
     reference = base  # all fidelity metrics measure against this, not the source
+    auxiliary_error = save_auxiliary_checkpoint(
+        checkpoint_dir, "OR_postresample.png", reference
+    )
+    if auxiliary_error:
+        auxiliary_checkpoint_errors.append(auxiliary_error)
 
     # --- coherent camera ladder ----------------------------------------------
     if adaptive:
@@ -402,6 +430,11 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
         report["detector_gate"]["rating_note"] = "rating_unavailable"
 
     report["applied"] = True
+    report["auxiliary_checkpoints"] = build_auxiliary_manifest(
+        checkpoint_dir,
+        capture_requested=checkpoint_dir is not None,
+        errors=auxiliary_checkpoint_errors,
+    )
     report["runtime_ms"] = int((time.time() - started) * 1000)
     return report
 
@@ -410,7 +443,11 @@ def _v88_candidate(reference, strength, cfg, creator_id, seed_extra, rung_index)
     """One coherent-camera candidate. deep = degrade 0.68 -> coherent balanced
     at low res -> Lanczos restore -> coherent light at delivery."""
     layers = {}
-    settings = {"mode": "coherent-camera", "coherent_camera": {"strength": strength}}
+    camera_settings = {
+        "strength": strength,
+        "psf_scale": cfg["optics_psf_scale"],
+    }
+    settings = {"mode": "coherent-camera", "coherent_camera": camera_settings}
     if strength != "deep":
         candidate, report = apply_coherent_camera(
             reference, settings=settings, creator_id=creator_id,
@@ -425,12 +462,24 @@ def _v88_candidate(reference, strength, cfg, creator_id, seed_extra, rung_index)
                 max(1, int(round(reference.height * scale))))
     low = reference.resize(low_size, Image.Resampling.LANCZOS)
     low_candidate, low_report = apply_coherent_camera(
-        low, settings={"mode": "coherent-camera", "coherent_camera": {"strength": "balanced"}},
+        low, settings={
+            "mode": "coherent-camera",
+            "coherent_camera": {
+                "strength": "balanced",
+                "psf_scale": cfg["optics_psf_scale"],
+            },
+        },
         creator_id=creator_id, seed_extra=f"{seed_extra}:v88:{rung_index}:deep-low",
     )
     restored = low_candidate.resize(reference.size, Image.Resampling.LANCZOS)
     candidate, final_report = apply_coherent_camera(
-        restored, settings={"mode": "coherent-camera", "coherent_camera": {"strength": "light"}},
+        restored, settings={
+            "mode": "coherent-camera",
+            "coherent_camera": {
+                "strength": "light",
+                "psf_scale": cfg["optics_psf_scale"],
+            },
+        },
         creator_id=creator_id, seed_extra=f"{seed_extra}:v88:{rung_index}:deep-final",
     )
     layers["deep_branch"] = {

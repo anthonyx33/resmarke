@@ -1,5 +1,9 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { LabSeedHttpError, validateLabSeedAccess } from "../_shared/lab_seed.ts";
+import {
+  SettingsValidationError,
+  validateOpticsPsfScale,
+} from "../_shared/settingsIdentity.ts";
 import { userFromRequest } from "../_shared/supabase.ts";
 
 type CreateJobBody = {
@@ -356,7 +360,11 @@ Deno.serve(async (request) => {
   } catch (error) {
     return jsonResponse(
       { error: error instanceof Error ? error.message : "Could not create job." },
-      error instanceof LabSeedHttpError ? error.status : 500
+      error instanceof LabSeedHttpError
+        ? error.status
+        : error instanceof SettingsValidationError
+        ? 400
+        : 500
     );
   }
 });
@@ -1191,12 +1199,17 @@ function dsRemintV8_9ExpertRefinement(input: unknown) {
   const base = dsRemintV8_8ExpertRefinement(input);
   const raw = isRecord(input) ? input : {};
   const sub = isRecord(base.ds_remint_v8_8) ? base.ds_remint_v8_8 : {};
+  const opticsPsfScale = validateOpticsPsfScale(
+    raw.optics_psf_scale,
+    Object.prototype.hasOwnProperty.call(raw, "optics_psf_scale"),
+  );
   return {
     ...base,
     mode: "ds-remint-v8.9",
     ds_remint_v8_9: {
       ...sub,
       ...(typeof raw.seed === "string" ? { seed: raw.seed } : {}),
+      optics_psf_scale: opticsPsfScale,
       route_by_baseline:
         typeof raw.route_by_baseline === "boolean" ? raw.route_by_baseline : true,
       deep_degrade_scale: clampNumber(

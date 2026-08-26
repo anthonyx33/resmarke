@@ -93,7 +93,7 @@ PRESETS = {
     },
 }
 
-DEFAULT_SETTINGS = {"enabled": True, "strength": "balanced"}
+DEFAULT_SETTINGS = {"enabled": True, "strength": "balanced", "psf_scale": 1.0}
 
 
 def is_coherent_camera(settings):
@@ -113,6 +113,9 @@ def normalize_coherent_camera_settings(settings):
     for key in PRESETS[strength]:
         if key in sub:
             cfg[key] = _clamp(sub[key], 0.0, 2.0)
+    cfg["psf_scale"] = _strict_psf_scale(
+        sub["psf_scale"] if "psf_scale" in sub else DEFAULT_SETTINGS["psf_scale"]
+    )
     cfg["strength"] = strength
     return cfg
 
@@ -125,6 +128,15 @@ def _clamp(value, low, high):
     if not np.isfinite(parsed):
         return low
     return max(low, min(high, parsed))
+
+
+def _strict_psf_scale(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ValueError("psf_scale must be exactly 0.50 or 1.00")
+    parsed = float(value)
+    if not np.isfinite(parsed) or parsed not in (0.5, 1.0):
+        raise ValueError("psf_scale must be exactly 0.50 or 1.00")
+    return parsed
 
 
 def _seed(creator_id, seed_extra, size, salt):
@@ -141,7 +153,10 @@ def apply_coherent_camera(image, settings=None, creator_id="coherent-camera", se
         "pipeline": "coherent_camera_v1",
         "applied": False,
         "strength": cfg["strength"],
-        "settings": {k: cfg[k] for k in PRESETS[cfg["strength"]]},
+        "settings": {
+            **{k: cfg[k] for k in PRESETS[cfg["strength"]]},
+            "psf_scale": cfg["psf_scale"],
+        },
         "layers": {},
     }
     if not cfg["enabled"]:
@@ -154,6 +169,8 @@ def apply_coherent_camera(image, settings=None, creator_id="coherent-camera", se
     # --- 1. display gamma -> linear -------------------------------------------
     linear = srgb_to_linear(np.asarray(work).astype(np.float32) / 255.0)
     report["layers"]["inverse_gamma"] = {"applied": True}
+    base_psf_g = float(cfg["psf_g"])
+    base_psf_rb = float(cfg["psf_rb"])
 
     # --- 2. scene analysis + synthesis-residual cleanup ----------------------
     features = {}
@@ -181,13 +198,19 @@ def apply_coherent_camera(image, settings=None, creator_id="coherent-camera", se
     }
 
     # --- 6. optics in camera RGB ----------------------------------------------
-    cam = _per_channel_psf(cam, cfg["psf_g"], cfg["psf_rb"])
+    scene_multiplier = float(cfg["psf_g"]) / base_psf_g if base_psf_g else 1.0
+    effective_psf_g = float(cfg["psf_g"]) * cfg["psf_scale"]
+    effective_psf_rb = float(cfg["psf_rb"]) * cfg["psf_scale"]
+    cam = _per_channel_psf(cam, effective_psf_g, effective_psf_rb)
     cam_image = Image.fromarray(np.clip(cam * 255.0, 0, 255).astype(np.uint8))
     cam_image = apply_lens_character(cam_image, cfg["ca_amount"])
     cam_image = apply_micro_vignette(cam_image, cfg["vignette"])
     cam = np.asarray(cam_image).astype(np.float32) / 255.0
     report["layers"]["optics"] = {
-        "psf_g": cfg["psf_g"], "psf_rb": cfg["psf_rb"], "ca_amount": cfg["ca_amount"],
+        "base_psf_g": base_psf_g, "base_psf_rb": base_psf_rb,
+        "scene_multiplier": scene_multiplier, "psf_scale": cfg["psf_scale"],
+        "effective_psf_g": effective_psf_g, "effective_psf_rb": effective_psf_rb,
+        "psf_g": effective_psf_g, "psf_rb": effective_psf_rb, "ca_amount": cfg["ca_amount"],
         "vignette": cfg["vignette"], "domain": "linear_camera_rgb_before_cfa",
     }
 

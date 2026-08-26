@@ -1,18 +1,21 @@
 import {
+  CAM1_PRESET_DEFINITION,
   PRESET_DEFINITIONS,
   buildSettingsCode,
   configIdentity,
+  is4dCam1,
   isConfig1A,
   isConfig2B,
   isConfig3C,
   isConfigA,
   presetFromRequested,
   settingsForPreset,
-  type PresetId,
+  validateOpticsPsfScale,
+  type FrozenPresetId,
   type SettingsCodeInput,
 } from "./settingsIdentity.ts";
 
-const IDS: PresetId[] = ["config-a", "config-1a", "config-2b", "config-3c"];
+const IDS: FrozenPresetId[] = ["config-a", "config-1a", "config-2b", "config-3c"];
 const PREDICATES = [isConfigA, isConfig1A, isConfig2B, isConfig3C];
 const GOLDENS = [
   "SEQ-CFA-dtbnbygm5iao",
@@ -20,6 +23,10 @@ const GOLDENS = [
   "SEQ-2B-zzz2dudlbywp",
   "SEQ-3C-brgbola74zqg",
 ];
+const CAM1_GOLDENS: Record<string, string> = {
+  "lab-ctla1": "SEQ-CAM1-7ltwtryshnga",
+  "lab-ctla2": "SEQ-CAM1-w4kwip3no7g4",
+};
 
 Deno.test("identity predicates are exclusive over every frozen tuple", () => {
   IDS.forEach((id, expectedIndex) => {
@@ -75,6 +82,51 @@ Deno.test("preset reconstruction round-trips all presets with seed absent and pr
       assert(presetFromRequested(ledgerShape)?.id === id, `${id}: ledger round-trip failed`);
     }
   });
+});
+
+Deno.test("4D-CAM-1 is an exact CUSTOM identity and round-trips both locked seeds", () => {
+  for (const seed of ["lab-ctla1", "lab-ctla2"]) {
+    const input = settingsForPreset(CAM1_PRESET_DEFINITION);
+    input.remint.seed = seed;
+    assert(is4dCam1(input), `${seed}: CAM-1 predicate failed`);
+    assert(PREDICATES.every((predicate) => !predicate(input)), `${seed}: matched a frozen config`);
+    const code = buildSettingsCode(input);
+    assert(code.startsWith("SEQ-CAM1-"), `${seed}: incorrect marker ${code}`);
+    assert(code === CAM1_GOLDENS[seed], `${seed}: ${code} !== ${CAM1_GOLDENS[seed]}`);
+    const identity = configIdentity(input);
+    assert(identity.label === "CUSTOM", `${seed}: candidate was not CUSTOM`);
+    assert(identity.key === code, `${seed}: CUSTOM key drifted`);
+    const reconstructed = presetFromRequested(input);
+    assert(reconstructed?.id === "4d-cam-1", `${seed}: reconstruction failed`);
+    assert(reconstructed.remint.opticsPsfScale === 0.5, `${seed}: scale was lost`);
+    assert(reconstructed.remint.seed === seed, `${seed}: seed was lost`);
+    assert(buildSettingsCode(settingsForPreset(reconstructed)) === code, `${seed}: code drifted`);
+  }
+});
+
+Deno.test("absent and explicit 1.00 are baseline-only while the incumbent golden stays absent", () => {
+  const absent = settingsForPreset(PRESET_DEFINITIONS["config-a"]);
+  const explicit = mutate(absent, { opticsPsfScale: 1 });
+  assert(isConfigA(absent) && isConfigA(explicit), "baseline predicate rejected an authorized form");
+  assert(!is4dCam1(absent) && !is4dCam1(explicit), "baseline matched CAM-1");
+  assert(buildSettingsCode(absent) === GOLDENS[0], "absent baseline golden changed");
+  assert(buildSettingsCode(explicit) !== GOLDENS[0], "explicit scale unexpectedly reused incumbent code");
+  assert(PRESET_DEFINITIONS["config-a"].remint.opticsPsfScale === undefined, "Config A must omit scale");
+});
+
+Deno.test("optics PSF request boundary accepts only absent, 1.00, or 0.50", () => {
+  assert(validateOpticsPsfScale(undefined, false) === 1, "absence did not default to 1.00");
+  assert(validateOpticsPsfScale(1, true) === 1, "explicit 1.00 rejected");
+  assert(validateOpticsPsfScale(0.5, true) === 0.5, "candidate 0.50 rejected");
+  for (const invalid of [0.49, 0.6, 0.75, NaN, Infinity, -Infinity, "0.50", null, undefined]) {
+    let rejected = false;
+    try {
+      validateOpticsPsfScale(invalid, true);
+    } catch {
+      rejected = true;
+    }
+    assert(rejected, `invalid boundary value was accepted: ${String(invalid)}`);
+  }
 });
 
 function mutate(input: SettingsCodeInput, remint: Partial<SettingsCodeInput["remint"]>): SettingsCodeInput {
