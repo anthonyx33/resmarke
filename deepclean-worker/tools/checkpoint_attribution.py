@@ -29,11 +29,13 @@ top, left, bottom):
   luma_rms    smooth-region residual RMS (LSB)
   chroma_rms  Cb/Cr residual RMS (LSB)
 
-Transition losses between consecutive checkpoints feed the dominance rule:
-  loss_i = max(|min(dEATR,0)|, |min(dHFTR,0)|)
-  dominant = loss_i >= 1.5 * second_largest  OR  loss_i >= 0.35 * total
-The dominant transition(s) are the PRIMARY offender(s) the next paid A/B
-must target. Report-only; no thresholds are production constants.
+Transition losses between consecutive checkpoints feed the dominance bands:
+  loss_i = max(|min(dEATR,0)|, |min(dHFTR,0)|)   (normalized and native)
+  normalized: Ri = O0 resampled to Oi's geometry (resample cost removed)
+  native:     Oi resampled to O0's geometry (resample cost INCLUDED)
+  PRIMARY >=35% of attributable loss · CO-PRIMARY >=25% · SECONDARY 10-25% ·
+  NEGLIGIBLE <10%. Runner-up ratio is confidence evidence only.
+Report-only; no thresholds are production constants.
 """
 
 import argparse
@@ -273,6 +275,13 @@ def main():
         rows[name] = {"positional_bands": positional_metrics,
                       "combined": _combine(positional_metrics.values()),
                       "dims": list(oi.shape[:2])}
+        # native-reference metrics: checkpoint resampled UP to O0 geometry, so the
+        # lattice/resample cost is INCLUDED instead of normalized away.
+        oi_native = _resample_to(oi, o0.shape)
+        native_metrics = {}
+        for band, box in POSITIONAL_BANDS.items():
+            native_metrics[band] = _metrics_for(_crop(oi_native, box), _crop(o0, box))
+        rows[name]["native"] = _combine(native_metrics.values())
 
     # transition losses + dominance
     order = [n for n, _ in CHECKPOINTS if n in files]
@@ -285,14 +294,33 @@ def main():
             "dHFTR_H1": round(dh, 4),
             "loss": round(max(abs(min(da, 0.0)), abs(min(dh, 0.0))), 4),
         }
+    native_losses = {}
+    for a, b in zip(order, order[1:]):
+        da = rows[b]["native"]["eatr"] - rows[a]["native"]["eatr"]
+        dh = rows[b]["native"]["hftr_H1"] - rows[a]["native"]["hftr_H1"]
+        native_losses[f"{a}->{b}"] = round(max(abs(min(da, 0.0)), abs(min(dh, 0.0))), 4)
     total = sum(v["loss"] for v in losses.values()) or 1e-9
     ranked = sorted(losses.items(), key=lambda kv: -kv[1]["loss"])
     nz = [v["loss"] for _, v in ranked if v["loss"] > 1e-4]
     second = nz[1] if len(nz) > 1 else 0.0
-    dominant = []
+    bands = {}
     for name, v in ranked:
-        if v["loss"] > 1e-4 and (v["loss"] >= 1.5 * second or v["loss"] >= 0.35 * total):
-            dominant.append(name)
+        share = v["loss"] / total
+        if share >= 0.35:
+            band = "PRIMARY"
+        elif share >= 0.25:
+            band = "CO-PRIMARY"
+        elif share >= 0.10:
+            band = "SECONDARY"
+        else:
+            band = "NEGLIGIBLE"
+        bands[name] = {"band": band, "share": round(share, 3),
+                       "runnerup_ratio": round(v["loss"] / (second or 1e-9), 2)}
+    print("Transition loss bands (normalized | native, native includes resample):")
+    for name, v in ranked:
+        b = bands[name]
+        print(f"  {name} loss={v['loss']:.4f} (native {native_losses.get(name, 0):.4f}) "
+              f"{b['band']} share={b['share']} runnerup_ratio={b['runnerup_ratio']}")
 
     print("Checkpoint metrics (positional-band averaged):")
     for name in order:
@@ -306,24 +334,27 @@ def main():
               f"stair={c['staircase']:.3f}")
     print("\nTransition losses (negative = detail lost):")
     for name, v in ranked:
-        tag = "  <-- DOMINANT OFFENDER" if name in dominant else ""
+        b = bands[name]
         print(f"  {name}: dEATR={v['dEATR']:+.3f} dHFTR_H1={v['dHFTR_H1']:+.3f} "
-              f"loss={v['loss']:.3f}{tag}")
-    if dominant:
-        print("\nPRIMARY OFFENDERS:", ", ".join(dominant))
-        print("Next paid A/B must target the largest measured loss — budget "
-              "follows evidence (V10 §8).")
+              f"loss={v['loss']:.3f} [{b['band']}]")
+    primary = [n for n, b in bands.items() if b["band"] == "PRIMARY"]
+    if primary:
+        print("\nPRIMARY transitions:", ", ".join(primary))
+        print("Next paid A/B targets the largest measured loss — budget "
+              "follows evidence (EXPERT_TESTING_SYSTEM.md §5/§6).")
     else:
-        print("\nNo single dominant transition (losses spread) — treat the "
-              "largest loss as the first target anyway.")
+        print("\nNo PRIMARY band (losses spread) — treat the largest loss as the "
+              "first target; do not force a winner.")
 
     if args.jsonl:
         record = {
             "checkpoints": {n: {"metrics": rows[n]["combined"],
+                                "native_metrics": rows[n]["native"],
                                 "positional_bands": rows[n]["positional_bands"],
                                 "dims": rows[n]["dims"]} for n in order},
             "transitions": losses,
-            "dominant_offenders": dominant,
+            "transitions_native": native_losses,
+            "bands": bands,
         }
         with open(args.jsonl, "a") as fh:
             fh.write(json.dumps(record) + "\n")
