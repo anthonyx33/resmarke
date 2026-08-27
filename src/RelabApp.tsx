@@ -69,9 +69,11 @@ import { readLocalCredits, spendLocalPrivacyCredit, type CreditSnapshot } from "
 import {
   CAM1_PRESET_DEFINITION,
   PRESET_DEFINITIONS,
+  TRANSFER_4D_1A_PRESET_DEFINITION,
   buildSettingsCode,
   configIdentity,
   is4dCam1,
+  is4d1a,
   presetFromRequested,
   settingsForPreset,
   type PresetDefinition,
@@ -123,6 +125,7 @@ const SESSION_CAP_FALLBACK = 40;
 const PRESETS: Record<PresetId, PresetDefinition> = {
   ...PRESET_DEFINITIONS,
   "4d-cam-1": CAM1_PRESET_DEFINITION,
+  "4d-1a": TRANSFER_4D_1A_PRESET_DEFINITION,
 };
 const LAB_SEED_RE = /^lab-[a-z0-9]{1,32}$/;
 const CAM1_LOCKED_SEEDS = new Set(["lab-ctla1", "lab-ctla2"]);
@@ -194,6 +197,7 @@ export default function RelabApp() {
   const settingsCode = useMemo(() => settingsCodeForPreset(preset), [preset]);
   const labSeedValid = !labSeed || LAB_SEED_RE.test(labSeed);
   const cam1SeedReady = presetId !== "4d-cam-1" || CAM1_LOCKED_SEEDS.has(labSeed);
+  const transfer4d1aSeedReady = presetId !== "4d-1a" || CAM1_LOCKED_SEEDS.has(labSeed);
   const pending = queue.filter((item) => item.status !== "completed");
   const active = queue.find((item) => item.id === activeId) ?? queue[0] ?? null;
   const totalCost = pending.length * UNIT_COST;
@@ -205,6 +209,7 @@ export default function RelabApp() {
     !!userId &&
     labSeedValid &&
     cam1SeedReady &&
+    transfer4d1aSeedReady &&
     credits.privacyCredits >= totalCost;
 
   const sortedRows = useMemo(() => {
@@ -972,7 +977,7 @@ export default function RelabApp() {
             <div className="rl-panel-scroll rl-control-body">
               {(Object.values(PRESETS) as PresetDefinition[]).map((next) => (
                 <button key={next.id} className={`rl-preset${presetId === next.id ? " is-active" : ""}`} type="button" disabled={running} onClick={() => setPresetId(next.id)}>
-                  <span className="rl-preset-icon">{next.id === "config-3c" || next.id === "4d-cam-1" ? <FlaskConical size={15} /> : next.id === "config-2b" ? <Film size={15} /> : next.id === "config-1a" ? <Gauge size={15} /> : <Check size={15} />}</span>
+                  <span className="rl-preset-icon">{next.id === "config-3c" || next.id === "4d-cam-1" || next.id === "4d-1a" ? <FlaskConical size={15} /> : next.id === "config-2b" ? <Film size={15} /> : next.id === "config-1a" ? <Gauge size={15} /> : <Check size={15} />}</span>
                   <span><b>{next.label}</b><small>{next.detail}</small></span>
                   <span>{presetId === next.id ? "ACTIVE" : "SELECT"}</span>
                 </button>
@@ -995,6 +1000,7 @@ export default function RelabApp() {
                 <p className="rl-help">Exact form: <code>lab-[a-z0-9]&#123;1,32&#125;</code>. Blank keeps production randomness; authorized lab accounts only.</p>
                 {!labSeedValid ? <div className="rl-warning"><b>INVALID</b><span>The seed must match the exact lab format.</span></div> : null}
                 {presetId === "4d-cam-1" && !cam1SeedReady ? <div className="rl-warning"><b>LOCKED</b><span>4D-CAM-1 requires lab-ctla1 or lab-ctla2.</span></div> : null}
+                {presetId === "4d-1a" && !transfer4d1aSeedReady ? <div className="rl-warning"><b>LOCKED</b><span>4D-1A requires lab-ctla1 or lab-ctla2.</span></div> : null}
               </section>
 
               <section className="rl-detector-card">
@@ -1155,8 +1161,9 @@ function configLabelForPreset(preset: PresetDefinition): "A" | "1A" | "2B" | "3C
   const canonical = settingsCanonicalForPreset(preset);
   const label = configIdentity(canonical).label;
   if (label === "CUSTOM") {
-    if (!is4dCam1(canonical) || !CAM1_LOCKED_SEEDS.has(preset.remint.seed ?? "")) {
-      throw new Error("CUSTOM is restricted to the exact seeded 4D-CAM-1 tuple.");
+    const lockedSeed = CAM1_LOCKED_SEEDS.has(preset.remint.seed ?? "");
+    if ((!is4dCam1(canonical) && !is4d1a(canonical)) || !lockedSeed) {
+      throw new Error("CUSTOM is restricted to an exact seeded 4D lab tuple.");
     }
     return label;
   }

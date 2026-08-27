@@ -7,7 +7,7 @@
 export type SettingsCodeMode = "sequence" | "remint" | "finish";
 export type ConfigLabel = "A" | "1A" | "2B" | "3C" | "CUSTOM";
 export type FrozenPresetId = "config-a" | "config-1a" | "config-2b" | "config-3c";
-export type PresetId = FrozenPresetId | "4d-cam-1";
+export type PresetId = FrozenPresetId | "4d-cam-1" | "4d-1a";
 export type OpticsPsfScale = 0.5 | 1;
 
 export class SettingsValidationError extends Error {
@@ -27,6 +27,7 @@ export interface RemintSettings {
   metadataMode?: string;
   seed?: string;
   opticsPsfScale?: number;
+  transfer4d1a?: boolean;
 }
 
 export interface FinishSettings {
@@ -152,6 +153,23 @@ export const CAM1_PRESET_DEFINITION: PresetDefinition = {
   finishMode: "adaptive",
 };
 
+/** Kept separate so shared consumers still enumerate exactly four frozen configs. */
+export const TRANSFER_4D_1A_PRESET_DEFINITION: PresetDefinition = {
+  id: "4d-1a",
+  label: "4D-1A — LAB · H1/H2 source transfer α=0.10",
+  detail: "Config A with sealed remint-led H1/H2 source-energy transfer",
+  remint: {
+    engineMode: "adaptive",
+    washModel: "qwen",
+    strength: "deep",
+    iphoneExif: true,
+    metadataMode: "device",
+    transfer4d1a: true,
+  },
+  finish: cloneFinish(COMMON_FINISH),
+  finishMode: "adaptive",
+};
+
 /** Fail-closed boundary parser shared by the client/edge identity contract. */
 export function validateOpticsPsfScale(value: unknown, supplied: boolean): OpticsPsfScale {
   if (!supplied) return 1;
@@ -159,6 +177,30 @@ export function validateOpticsPsfScale(value: unknown, supplied: boolean): Optic
     throw new SettingsValidationError("optics_psf_scale must be exactly 0.50 or 1.00 when supplied.");
   }
   return value;
+}
+
+/** Strict fail-closed parser for the lab-only 4D-1a request flag. */
+export function validate4d1aFlag(value: unknown, supplied: boolean): boolean {
+  if (!supplied) return false;
+  if (typeof value !== "boolean") {
+    throw new SettingsValidationError("4d1a must be a boolean when supplied.");
+  }
+  return value;
+}
+
+/** The candidate is one sealed seed/optics tuple, never a parameter family. */
+export function validate4d1aTuple(
+  enabled: boolean,
+  seed: unknown,
+  opticsPsfScale: OpticsPsfScale,
+): void {
+  if (!enabled) return;
+  if (seed !== "lab-ctla1" && seed !== "lab-ctla2") {
+    throw new SettingsValidationError("4d1a requires lab-ctla1 or lab-ctla2.");
+  }
+  if (opticsPsfScale !== 1) {
+    throw new SettingsValidationError("4d1a requires incumbent optics_psf_scale 1.00.");
+  }
 }
 
 /** Stable JSON stringify: sorted keys and no insignificant whitespace. */
@@ -220,6 +262,12 @@ export function isConfig3C(input: SettingsCodeInput): boolean {
 
 export function is4dCam1(input: SettingsCodeInput): boolean {
   return commonBaseTuple(input, "qwen") && input.remint.opticsPsfScale === 0.5 &&
+    default4d1a(input.remint) && defaultCodec(input.remint);
+}
+
+export function is4d1a(input: SettingsCodeInput): boolean {
+  return commonBaseTuple(input, "qwen") && defaultOpticsPsfScale(input.remint) &&
+    input.remint.transfer4d1a === true && locked4d1aSeed(input.remint.seed) &&
     defaultCodec(input.remint);
 }
 
@@ -231,6 +279,7 @@ export function buildSettingsCode(input: SettingsCodeInput): string {
   if (isConfig2B(input)) return `${marker}-2B-${hash}`;
   if (isConfig3C(input)) return `${marker}-3C-${hash}`;
   if (is4dCam1(input)) return `${marker}-CAM1-${hash}`;
+  if (is4d1a(input)) return `${marker}-4D1A-${hash}`;
   const preset = ({ conservative: "CON", standard: "STD", strong: "STR", fidelity: "FID" } as Record<string, string>)[input.finish.preset ?? "standard"] ?? "STD";
   const scale = input.finish.scale == null ? "N" : String(input.finish.scale);
   const wall = input.finish.materialClean === false ? "M0" : "M1";
@@ -246,6 +295,10 @@ export function configIdentity(input: SettingsCodeInput): { label: ConfigLabel; 
     const key = buildSettingsCode(input);
     return { label: "CUSTOM", key };
   }
+  if (is4d1a(input)) {
+    const key = buildSettingsCode(input);
+    return { label: "CUSTOM", key };
+  }
   return { label: "CUSTOM", key: buildSettingsCode(input) };
 }
 
@@ -257,7 +310,7 @@ export function settingsForPreset(preset: PresetDefinition): SettingsCodeInput {
   };
 }
 
-/** Reconstruct one of the four frozen presets or the exact lab-only CAM-1 tuple. */
+/** Reconstruct one frozen preset or an exact lab-only candidate tuple. */
 export function presetFromRequested(value: unknown): PresetDefinition | null {
   const input = requestedToSettings(value);
   if (!input) return null;
@@ -266,9 +319,14 @@ export function presetFromRequested(value: unknown): PresetDefinition | null {
     : isConfig2B(input) ? "config-2b"
     : isConfig3C(input) ? "config-3c"
     : is4dCam1(input) ? "4d-cam-1"
+    : is4d1a(input) ? "4d-1a"
     : null;
   if (!id) return null;
-  const definition = id === "4d-cam-1" ? CAM1_PRESET_DEFINITION : PRESET_DEFINITIONS[id];
+  const definition = id === "4d-cam-1"
+    ? CAM1_PRESET_DEFINITION
+    : id === "4d-1a"
+    ? TRANSFER_4D_1A_PRESET_DEFINITION
+    : PRESET_DEFINITIONS[id];
   const result = clonePreset(definition);
   const seed = input.remint.seed;
   if (seed !== undefined) result.remint.seed = seed;
@@ -300,11 +358,20 @@ function commonBaseTuple(input: SettingsCodeInput, washModel: string): boolean {
 }
 
 function commonTuple(input: SettingsCodeInput, washModel: string): boolean {
-  return commonBaseTuple(input, washModel) && defaultOpticsPsfScale(input.remint);
+  return commonBaseTuple(input, washModel) && defaultOpticsPsfScale(input.remint) &&
+    default4d1a(input.remint);
 }
 
 function defaultOpticsPsfScale(remint: RemintSettings): boolean {
   return remint.opticsPsfScale === undefined || remint.opticsPsfScale === 1;
+}
+
+function default4d1a(remint: RemintSettings): boolean {
+  return remint.transfer4d1a === undefined || remint.transfer4d1a === false;
+}
+
+function locked4d1aSeed(seed: string | undefined): boolean {
+  return seed === "lab-ctla1" || seed === "lab-ctla2";
 }
 
 function defaultCodec(remint: RemintSettings): boolean {

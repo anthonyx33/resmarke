@@ -35,6 +35,8 @@ from photo_naturalization import (
 )
 from neural_texture import apply_neural_texture_lab, is_neural_texture_lab
 from quality_finish import apply_quality_finish, is_quality_finish
+from transfer_4d_1a import LOCKED_SEEDS as TRANSFER_4D_1A_LOCKED_SEEDS
+from transfer_4d_1a import finalize_transfer_report
 
 # The cleaning engine is ComfyUI running the Remarkee Max workflow, started
 # as a localhost service by start.sh (see comfyui_client.py). The workflow
@@ -358,6 +360,7 @@ def handler(job):
                     seed_extra=effective_seed_extra,
                     detector=make_detector(),
                     checkpoint_dir=checkpoint_dir,
+                    lab_seed=lab_seed,
                 )
                 cleaned_sha = sha256_file(cleaned_path)
                 neural_texture_report = {"enabled": False, "reason": "integrated_into_ds_remint_v8_9"}
@@ -405,6 +408,7 @@ def handler(job):
                     detector=detector,
                     return_buffer=fidelity,
                     checkpoint_dir=checkpoint_dir,
+                    lab_seed=lab_seed,
                 )
                 pre_encode_rgb = engine_report.pop("_pre_encode_rgb", None) if isinstance(engine_report, dict) else None
                 stage1_path = tmp / "stage1-delivered.jpg"
@@ -652,6 +656,13 @@ def handler(job):
                         capture_errors.append(checkpoint_error)
                 except Exception as exc:  # noqa: BLE001
                     capture_errors.append(f"O5_final.png: {type(exc).__name__}: {exc}")
+            if isinstance(engine_report, dict) and isinstance(
+                engine_report.get("transfer_4d_1a"), dict
+            ):
+                with Image.open(final_path) as delivered_image:
+                    finalize_transfer_report(
+                        engine_report["transfer_4d_1a"], delivered_image
+                    )
             checkpoint_manifest = build_checkpoint_manifest(
                 checkpoint_dir,
                 capture_requested=lab_seed is not None,
@@ -999,11 +1010,21 @@ def validated_lab_seed(settings):
     ):
         return None
     remint = settings.get("ds_remint_v8_9")
-    if not isinstance(remint, dict) or "seed" not in remint:
+    if not isinstance(remint, dict):
+        return None
+    transfer_supplied = "4d1a" in remint
+    transfer_enabled = remint.get("4d1a", False)
+    if transfer_supplied and not isinstance(transfer_enabled, bool):
+        raise InvalidLabSeedError("4d1a must be a boolean when supplied")
+    if "seed" not in remint:
+        if transfer_enabled:
+            raise InvalidLabSeedError("4d1a requires a locked lab seed")
         return None
     seed = remint.get("seed")
     if not isinstance(seed, str) or LAB_SEED_PATTERN.fullmatch(seed) is None:
         raise InvalidLabSeedError("remint.seed is invalid")
+    if transfer_enabled and seed not in TRANSFER_4D_1A_LOCKED_SEEDS:
+        raise InvalidLabSeedError("4d1a requires lab-ctla1 or lab-ctla2")
     return seed
 
 

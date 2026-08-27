@@ -2,6 +2,8 @@ import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { LabSeedHttpError, validateLabSeedAccess } from "../_shared/lab_seed.ts";
 import {
   SettingsValidationError,
+  validate4d1aFlag,
+  validate4d1aTuple,
   validateOpticsPsfScale,
 } from "../_shared/settingsIdentity.ts";
 import { userFromRequest } from "../_shared/supabase.ts";
@@ -1198,11 +1200,15 @@ function dsRemintV8_9ExpertRefinement(input: unknown) {
   // baseline-aware routing. Same whitelist as V8.8.
   const base = dsRemintV8_8ExpertRefinement(input);
   const raw = isRecord(input) ? input : {};
+  assertOnlyKnownKeys(raw, DS_REMINT_V8_9_KEYS, "DS ReMint V8.9");
   const sub = isRecord(base.ds_remint_v8_8) ? base.ds_remint_v8_8 : {};
   const opticsPsfScale = validateOpticsPsfScale(
     raw.optics_psf_scale,
     Object.prototype.hasOwnProperty.call(raw, "optics_psf_scale"),
   );
+  const transfer4d1aSupplied = Object.prototype.hasOwnProperty.call(raw, "4d1a");
+  const transfer4d1a = validate4d1aFlag(raw["4d1a"], transfer4d1aSupplied);
+  validate4d1aTuple(transfer4d1a, raw.seed, opticsPsfScale);
   return {
     ...base,
     mode: "ds-remint-v8.9",
@@ -1210,6 +1216,7 @@ function dsRemintV8_9ExpertRefinement(input: unknown) {
       ...sub,
       ...(typeof raw.seed === "string" ? { seed: raw.seed } : {}),
       optics_psf_scale: opticsPsfScale,
+      ...(transfer4d1aSupplied ? { "4d1a": transfer4d1a } : {}),
       route_by_baseline:
         typeof raw.route_by_baseline === "boolean" ? raw.route_by_baseline : true,
       deep_degrade_scale: clampNumber(
@@ -1258,6 +1265,11 @@ function dsRemintV8_9HdExpertRefinement(input: unknown) {
   // gate (live data: finish preset is a per-image lever, strong flipped
   // one image to 0.1% and another to 99%).
   const raw = isRecord(input) ? input : {};
+  assertOnlyKnownKeys(
+    raw,
+    new Set(["ds_remint_v8_9", "quality_finish"]),
+    "DS ReMint V8.9 HD",
+  );
   const v89 = dsRemintV8_9ExpertRefinement(raw.ds_remint_v8_9);
   const qfRaw = isRecord(raw.quality_finish) ? raw.quality_finish : {};
   const qfOvRaw = isRecord(qfRaw.overrides) ? qfRaw.overrides : {};
@@ -1284,6 +1296,38 @@ function dsRemintV8_9HdExpertRefinement(input: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const DS_REMINT_V8_9_KEYS = new Set([
+  "engine_mode",
+  "wash_model",
+  "zimage_denoise",
+  "strength",
+  "deep_degrade_scale",
+  "output_target",
+  "min_ssim",
+  "ai_threshold",
+  "source_threshold",
+  "deepfake_threshold",
+  "jpeg_quality",
+  "jpeg_subsampling",
+  "iphone_exif",
+  "metadata_mode",
+  "seed",
+  "optics_psf_scale",
+  "route_by_baseline",
+  "4d1a",
+]);
+
+function assertOnlyKnownKeys(
+  value: Record<string, unknown>,
+  allowed: ReadonlySet<string>,
+  label: string,
+): void {
+  const unknown = Object.keys(value).filter((key) => !allowed.has(key)).sort();
+  if (unknown.length) {
+    throw new SettingsValidationError(`${label} contains unknown setting(s): ${unknown.join(", ")}.`);
+  }
 }
 
 function requestedLabSeedFromBody(body: CreateJobBody): unknown {

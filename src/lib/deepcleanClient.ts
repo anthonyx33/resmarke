@@ -96,6 +96,8 @@ export type DsRemintV8_8Options = {
   seed?: string;
   /** Lab-only 4D-CAM-1 scalar. Request boundary accepts only 0.50 or 1.00. */
   opticsPsfScale?: number;
+  /** Lab-only 4D-1a switch. The request boundary accepts booleans only. */
+  transfer4d1a?: boolean;
 };
 
 export type QualityFinishOverrides = {
@@ -297,6 +299,7 @@ export async function createDeepCleanJob(params: {
             jpeg_subsampling: params.dsRemintV89.jpegSubsampling,
             seed: params.dsRemintV89.seed,
             optics_psf_scale: params.dsRemintV89.opticsPsfScale,
+            "4d1a": params.dsRemintV89.transfer4d1a,
             iphone_exif: params.dsRemintV89.iphoneExif,
             metadata_mode: params.dsRemintV89.metadataMode
           }
@@ -319,6 +322,7 @@ export async function createDeepCleanJob(params: {
               jpeg_subsampling: params.dsRemintV89Hd.remint.jpegSubsampling,
               seed: params.dsRemintV89Hd.remint.seed,
               optics_psf_scale: params.dsRemintV89Hd.remint.opticsPsfScale,
+              "4d1a": params.dsRemintV89Hd.remint.transfer4d1a,
               iphone_exif: params.dsRemintV89Hd.remint.iphoneExif,
               metadata_mode: params.dsRemintV89Hd.remint.metadataMode
             },

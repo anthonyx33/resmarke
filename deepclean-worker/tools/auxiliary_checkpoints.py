@@ -8,13 +8,14 @@ from tools.checkpoint_capture import pixel_sha256
 
 
 AUXILIARY_CHECKPOINTS = ("OR_postresample.png",)
+AUXILIARY_CHECKPOINT_WHITELIST = AUXILIARY_CHECKPOINTS + ("O2_transfer.png",)
 
 
 def save_auxiliary_checkpoint(checkpoint_dir, name, image):
     """Write one explicitly allowed auxiliary RGB PNG under a per-job directory."""
     if checkpoint_dir is None:
         return None
-    if name not in AUXILIARY_CHECKPOINTS:
+    if name not in AUXILIARY_CHECKPOINT_WHITELIST:
         return f"unexpected auxiliary checkpoint name: {name}"
     try:
         directory = Path(checkpoint_dir).resolve()
@@ -32,7 +33,7 @@ def save_auxiliary_checkpoint(checkpoint_dir, name, image):
         return f"{name}: {type(exc).__name__}: {exc}"
 
 
-def build_auxiliary_manifest(checkpoint_dir, capture_requested=False, errors=None):
+def build_auxiliary_manifest(checkpoint_dir, capture_requested=False, errors=None, include_transfer=False):
     """Return auxiliary status without changing the strict O0-O5 manifest."""
     collected = [str(error) for error in (errors or []) if error]
     if not capture_requested:
@@ -44,7 +45,8 @@ def build_auxiliary_manifest(checkpoint_dir, capture_requested=False, errors=Non
 
     files = []
     directory = Path(checkpoint_dir).resolve()
-    for name in AUXILIARY_CHECKPOINTS:
+    expected = AUXILIARY_CHECKPOINT_WHITELIST if include_transfer else AUXILIARY_CHECKPOINTS
+    for name in expected:
         path = (directory / name).resolve()
         if path.parent != directory:
             collected.append(f"unsafe auxiliary checkpoint path: {name}")

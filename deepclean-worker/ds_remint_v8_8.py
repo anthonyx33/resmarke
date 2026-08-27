@@ -40,6 +40,11 @@ from ds_remint_v7 import (
 from max_cx_remint import _histogram_match
 from tools.auxiliary_checkpoints import build_auxiliary_manifest, save_auxiliary_checkpoint
 from tools.checkpoint_capture import save_checkpoint
+from transfer_4d_1a import (
+    LOCKED_SEEDS as TRANSFER_4D_1A_LOCKED_SEEDS,
+    apply_transfer_4d_1a,
+    attach_transfer_diagnostic_context,
+)
 import iphone_exif
 
 def _ckpt_save(checkpoint_dir, name, image, errors):
@@ -57,6 +62,7 @@ DEFAULT_SETTINGS = {
     "zimage_denoise": 0.12,
     "strength": "balanced",           # "light" | "balanced" | "deep"
     "optics_psf_scale": 1.0,          # sealed 4D-CAM-1: 1.00 | 0.50
+    "4d1a": False,                    # sealed lab-only source-energy transfer
     "deep_degrade_scale": 0.68,
     "output_target": None,            # None = min(source_long_edge, 1250)
     "min_ssim": 0.85,
@@ -87,7 +93,7 @@ def is_ds_remint_v8_9(settings):
     return isinstance(settings, dict) and settings.get("mode") == "ds-remint-v8.9"
 
 
-def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False, checkpoint_dir=None):
+def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False, checkpoint_dir=None, lab_seed=None):
     """DS ReMint V8.9: the V8.8 coherent pipeline with data-driven defaults
     (Qwen wash, balanced default, deep degrade 0.75) and baseline-aware
     ladder routing."""
@@ -100,6 +106,7 @@ def apply_ds_remint_v8_9(input_path, output_path, creator_id, settings=None, see
         detector=detector,
         return_buffer=return_buffer,
         checkpoint_dir=checkpoint_dir,
+        lab_seed=lab_seed,
     )
 
 
@@ -122,12 +129,26 @@ def _strict_optics_psf_scale(value):
     return parsed
 
 
+def _strict_4d1a(value, supplied):
+    if not supplied:
+        return False
+    if not isinstance(value, bool):
+        raise ValueError("4d1a must be a boolean when supplied")
+    return value
+
+
+_ALLOWED_REMINT_KEYS = frozenset(set(DEFAULT_SETTINGS) - {"enabled"}) | {"seed"}
+
+
 def normalize_ds_remint_v8_8_settings(settings):
     raw = settings if isinstance(settings, dict) else {}
     sub = {}
     for key in ("ds_remint_v8_8", "ds_remint_v8_9"):
         if isinstance(raw.get(key), dict):
             sub = raw[key]
+    unknown_keys = sorted(set(sub) - _ALLOWED_REMINT_KEYS)
+    if unknown_keys:
+        raise ValueError(f"unknown DS ReMint setting(s): {', '.join(unknown_keys)}")
     cfg = dict(DEFAULT_SETTINGS)
     cfg["mode"] = str(raw.get("mode") or "ds-remint-v8.8")
     cfg["enabled"] = cfg["mode"] in ("ds-remint-v8.8", "ds-remint-v8.9")
@@ -146,6 +167,16 @@ def normalize_ds_remint_v8_8_settings(settings):
     cfg["optics_psf_scale"] = _strict_optics_psf_scale(
         sub["optics_psf_scale"] if "optics_psf_scale" in sub else cfg["optics_psf_scale"]
     )
+    cfg["4d1a_supplied"] = "4d1a" in sub
+    cfg["4d1a"] = _strict_4d1a(sub.get("4d1a"), cfg["4d1a_supplied"])
+    cfg["lab_seed"] = sub.get("seed") if "seed" in sub else None
+    if cfg["4d1a"]:
+        if cfg["mode"] != "ds-remint-v8.9":
+            raise ValueError("4d1a is restricted to DS ReMint V8.9 lab jobs")
+        if cfg["lab_seed"] not in TRANSFER_4D_1A_LOCKED_SEEDS:
+            raise ValueError("4d1a requires lab-ctla1 or lab-ctla2")
+        if cfg["optics_psf_scale"] != 1.0:
+            raise ValueError("4d1a requires incumbent optics_psf_scale 1.00")
     # V8.9 data: 0.68 deep degrade was quality-bad; 0.75 keeps the TruthScan
     # win with far less damage. V8.8 keeps its original default.
     deep_default = 0.75 if cfg["mode"] == "ds-remint-v8.9" else 0.68
@@ -188,7 +219,7 @@ def normalize_ds_remint_v8_8_settings(settings):
     return cfg
 
 
-def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False, checkpoint_dir=None):
+def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False, checkpoint_dir=None, lab_seed=None):
     """Full DS ReMint V8.8 pipeline. Writes the final camera-like JPEG (with
     coherent EXIF when enabled) to output_path and returns a report.
     return_buffer=True additionally attaches the PRE-ENCODE RGB array as
@@ -216,11 +247,14 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
         "checkpoint_errors": [],
         "auxiliary_checkpoints": {"status": "off", "files": [], "errors": []},
     }
+    if cfg["4d1a"]:
+        report["settings"]["4d1a"] = True
     if not cfg["enabled"]:
         report["auxiliary_checkpoints"] = build_auxiliary_manifest(
             checkpoint_dir,
             capture_requested=checkpoint_dir is not None,
             errors=auxiliary_checkpoint_errors,
+            include_transfer=cfg["4d1a"],
         )
         return report
 
@@ -360,6 +394,22 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     final_image = chosen["image"]
     _ckpt_save(checkpoint_dir, "O2_precamera.png", final_image, report["checkpoint_errors"])
 
+    # --- sealed 4D-1a source-energy transfer (post-O2, pre-tone-lock) --------
+    if cfg["4d1a"]:
+        if lab_seed not in TRANSFER_4D_1A_LOCKED_SEEDS or lab_seed != cfg["lab_seed"]:
+            raise ValueError("4d1a requires the matching validated locked lab seed")
+        pre_transfer_image = final_image
+        final_image, transfer_report = apply_transfer_4d_1a(pre_transfer_image, original)
+        auxiliary_error = save_auxiliary_checkpoint(
+            checkpoint_dir, "O2_transfer.png", final_image
+        )
+        if auxiliary_error:
+            auxiliary_checkpoint_errors.append(auxiliary_error)
+        attach_transfer_diagnostic_context(
+            transfer_report, original, pre_transfer_image, final_image
+        )
+        report["transfer_4d_1a"] = transfer_report
+
     # --- final tone lock ------------------------------------------------------
     if cfg["color_restore"]:
         original_ref = original.resize(final_image.size, Image.Resampling.LANCZOS)
@@ -434,6 +484,7 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
         checkpoint_dir,
         capture_requested=checkpoint_dir is not None,
         errors=auxiliary_checkpoint_errors,
+        include_transfer=cfg["4d1a"],
     )
     report["runtime_ms"] = int((time.time() - started) * 1000)
     return report
