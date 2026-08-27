@@ -127,6 +127,7 @@ COPY deepclean_detector.py /app/deepclean_detector.py
 COPY ds_remint_v6.py /app/ds_remint_v6.py
 COPY ds_remint_v7.py /app/ds_remint_v7.py
 COPY ds_remint_v8_8.py /app/ds_remint_v8_8.py
+COPY transfer_4d_1a.py /app/transfer_4d_1a.py
 COPY iphone_exif.py /app/iphone_exif.py
 COPY max_cx_remint.py /app/max_cx_remint.py
 COPY max_optimised_remint.py /app/max_optimised_remint.py
