@@ -89,6 +89,8 @@ export type DsRemintV8_8Options = {
   strength: "light" | "balanced" | "deep";
   iphoneExif: boolean;
   metadataMode?: "device" | "minimal";
+  /** Explicit delivery long edge. Omitted preserves the incumbent 1250 cap. */
+  outputTarget?: number;
   /** Stage-one codec (Config 2B lever). Defaults: 92 / 4:2:0. */
   jpegQuality?: number;
   jpegSubsampling?: "4:2:0" | "4:2:2" | "4:4:4";
@@ -286,6 +288,9 @@ export async function createDeepCleanJob(params: {
             strength: params.dsRemintV88.strength,
             jpeg_quality: params.dsRemintV88.jpegQuality,
             jpeg_subsampling: params.dsRemintV88.jpegSubsampling,
+            ...(params.dsRemintV88.outputTarget != null
+              ? { output_target: params.dsRemintV88.outputTarget }
+              : {}),
             iphone_exif: params.dsRemintV88.iphoneExif,
             metadata_mode: params.dsRemintV88.metadataMode
           }
@@ -297,6 +302,9 @@ export async function createDeepCleanJob(params: {
             strength: params.dsRemintV89.strength,
             jpeg_quality: params.dsRemintV89.jpegQuality,
             jpeg_subsampling: params.dsRemintV89.jpegSubsampling,
+            ...(params.dsRemintV89.outputTarget != null
+              ? { output_target: params.dsRemintV89.outputTarget }
+              : {}),
             seed: params.dsRemintV89.seed,
             optics_psf_scale: params.dsRemintV89.opticsPsfScale,
             "4d1a": params.dsRemintV89.transfer4d1a,
@@ -320,6 +328,9 @@ export async function createDeepCleanJob(params: {
               strength: params.dsRemintV89Hd.remint.strength,
               jpeg_quality: params.dsRemintV89Hd.remint.jpegQuality,
               jpeg_subsampling: params.dsRemintV89Hd.remint.jpegSubsampling,
+              ...(params.dsRemintV89Hd.remint.outputTarget != null
+                ? { output_target: params.dsRemintV89Hd.remint.outputTarget }
+                : {}),
               seed: params.dsRemintV89Hd.remint.seed,
               optics_psf_scale: params.dsRemintV89Hd.remint.opticsPsfScale,
               "4d1a": params.dsRemintV89Hd.remint.transfer4d1a,

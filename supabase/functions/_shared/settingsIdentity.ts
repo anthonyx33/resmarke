@@ -7,7 +7,7 @@
 export type SettingsCodeMode = "sequence" | "remint" | "finish";
 export type ConfigLabel = "A" | "1A" | "2B" | "3C" | "CUSTOM";
 export type FrozenPresetId = "config-a" | "config-1a" | "config-2b" | "config-3c";
-export type PresetId = FrozenPresetId | "4d-cam-1" | "4d-1a";
+export type PresetId = FrozenPresetId | "remint-1-01" | "4d-cam-1" | "4d-1a";
 export type OpticsPsfScale = 0.5 | 1;
 
 export class SettingsValidationError extends Error {
@@ -25,6 +25,7 @@ export interface RemintSettings {
   jpegSubsampling?: string;
   iphoneExif?: boolean;
   metadataMode?: string;
+  outputTarget?: number;
   seed?: string;
   opticsPsfScale?: number;
   transfer4d1a?: boolean;
@@ -54,6 +55,7 @@ export interface PresetDefinition {
     strength: "deep";
     iphoneExif: true;
     metadataMode: "device";
+    outputTarget?: 1800;
     jpegQuality?: 97;
     jpegSubsampling?: "4:4:4";
   };
@@ -71,6 +73,23 @@ const COMMON_FINISH: PresetDefinition["finish"] = {
   scale: null,
   overrides: { dither: 1, smoothness: 1.25, sharpen: 1 },
   materialClean: true,
+};
+
+/** Production candidate kept separate so the four frozen configs stay frozen. */
+export const REMINT_1_01_PRESET_DEFINITION: PresetDefinition = {
+  id: "remint-1-01",
+  label: "ReMint 1.01",
+  detail: "Delivery 1800 · rest identical to Config A",
+  remint: {
+    engineMode: "adaptive",
+    washModel: "qwen",
+    strength: "deep",
+    iphoneExif: true,
+    metadataMode: "device",
+    outputTarget: 1800,
+  },
+  finish: cloneFinish(COMMON_FINISH),
+  finishMode: "adaptive",
 };
 
 export const PRESET_DEFINITIONS: Record<FrozenPresetId, PresetDefinition> = {
@@ -245,30 +264,35 @@ export function settingsShortHash(text: string, chars = 12): string {
 }
 
 export function isConfigA(input: SettingsCodeInput): boolean {
-  return commonTuple(input, "qwen") && defaultCodec(input.remint);
+  return commonTuple(input, "qwen") && defaultCodec(input.remint) && defaultOutputTarget(input.remint);
 }
 
 export function isConfig1A(input: SettingsCodeInput): boolean {
-  return commonTuple(input, "qwen+zimage") && defaultCodec(input.remint);
+  return commonTuple(input, "qwen+zimage") && defaultCodec(input.remint) && defaultOutputTarget(input.remint);
 }
 
 export function isConfig2B(input: SettingsCodeInput): boolean {
-  return commonTuple(input, "qwen") && q97Codec(input.remint);
+  return commonTuple(input, "qwen") && q97Codec(input.remint) && defaultOutputTarget(input.remint);
 }
 
 export function isConfig3C(input: SettingsCodeInput): boolean {
-  return commonTuple(input, "qwen+zimage") && q97Codec(input.remint);
+  return commonTuple(input, "qwen+zimage") && q97Codec(input.remint) && defaultOutputTarget(input.remint);
+}
+
+export function isRemint1_01(input: SettingsCodeInput): boolean {
+  return commonTuple(input, "qwen") && defaultCodec(input.remint) &&
+    input.remint.outputTarget === 1800;
 }
 
 export function is4dCam1(input: SettingsCodeInput): boolean {
   return commonBaseTuple(input, "qwen") && input.remint.opticsPsfScale === 0.5 &&
-    default4d1a(input.remint) && defaultCodec(input.remint);
+    default4d1a(input.remint) && defaultCodec(input.remint) && defaultOutputTarget(input.remint);
 }
 
 export function is4d1a(input: SettingsCodeInput): boolean {
   return commonBaseTuple(input, "qwen") && defaultOpticsPsfScale(input.remint) &&
     input.remint.transfer4d1a === true && locked4d1aSeed(input.remint.seed) &&
-    defaultCodec(input.remint);
+    defaultCodec(input.remint) && defaultOutputTarget(input.remint);
 }
 
 export function buildSettingsCode(input: SettingsCodeInput): string {
@@ -278,6 +302,7 @@ export function buildSettingsCode(input: SettingsCodeInput): string {
   if (isConfig1A(input)) return `${marker}-1A-${hash}`;
   if (isConfig2B(input)) return `${marker}-2B-${hash}`;
   if (isConfig3C(input)) return `${marker}-3C-${hash}`;
+  if (isRemint1_01(input)) return `${marker}-1.01-${hash}`;
   if (is4dCam1(input)) return `${marker}-CAM1-${hash}`;
   if (is4d1a(input)) return `${marker}-4D1A-${hash}`;
   const preset = ({ conservative: "CON", standard: "STD", strong: "STR", fidelity: "FID" } as Record<string, string>)[input.finish.preset ?? "standard"] ?? "STD";
@@ -291,6 +316,10 @@ export function configIdentity(input: SettingsCodeInput): { label: ConfigLabel; 
   if (isConfig1A(input)) return { label: "1A", key: "1A" };
   if (isConfig2B(input)) return { label: "2B", key: "2B" };
   if (isConfig3C(input)) return { label: "3C", key: "3C" };
+  if (isRemint1_01(input)) {
+    const key = buildSettingsCode(input);
+    return { label: "CUSTOM", key };
+  }
   if (is4dCam1(input)) {
     const key = buildSettingsCode(input);
     return { label: "CUSTOM", key };
@@ -318,6 +347,7 @@ export function presetFromRequested(value: unknown): PresetDefinition | null {
     : isConfig1A(input) ? "config-1a"
     : isConfig2B(input) ? "config-2b"
     : isConfig3C(input) ? "config-3c"
+    : isRemint1_01(input) ? "remint-1-01"
     : is4dCam1(input) ? "4d-cam-1"
     : is4d1a(input) ? "4d-1a"
     : null;
@@ -326,6 +356,8 @@ export function presetFromRequested(value: unknown): PresetDefinition | null {
     ? CAM1_PRESET_DEFINITION
     : id === "4d-1a"
     ? TRANSFER_4D_1A_PRESET_DEFINITION
+    : id === "remint-1-01"
+    ? REMINT_1_01_PRESET_DEFINITION
     : PRESET_DEFINITIONS[id];
   const result = clonePreset(definition);
   const seed = input.remint.seed;
@@ -377,6 +409,10 @@ function locked4d1aSeed(seed: string | undefined): boolean {
 function defaultCodec(remint: RemintSettings): boolean {
   return (remint.jpegQuality === undefined || remint.jpegQuality === 92) &&
     (remint.jpegSubsampling === undefined || remint.jpegSubsampling === "4:2:0");
+}
+
+function defaultOutputTarget(remint: RemintSettings): boolean {
+  return remint.outputTarget === undefined;
 }
 
 function q97Codec(remint: RemintSettings): boolean {

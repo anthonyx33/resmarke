@@ -1,13 +1,16 @@
 import {
   CAM1_PRESET_DEFINITION,
   PRESET_DEFINITIONS,
+  REMINT_1_01_PRESET_DEFINITION,
   buildSettingsCode,
+  canonicalJson,
   configIdentity,
   is4dCam1,
   isConfig1A,
   isConfig2B,
   isConfig3C,
   isConfigA,
+  isRemint1_01,
   presetFromRequested,
   settingsForPreset,
   validateOpticsPsfScale,
@@ -26,6 +29,11 @@ const GOLDENS = [
 const CAM1_GOLDENS: Record<string, string> = {
   "lab-ctla1": "SEQ-CAM1-7ltwtryshnga",
   "lab-ctla2": "SEQ-CAM1-w4kwip3no7g4",
+};
+const REMINT_1_01_GOLDEN = "SEQ-1.01-sywgbtfbjwhg";
+const REMINT_1_01_SEEDED_GOLDENS: Record<string, string> = {
+  "lab-ctla1": "SEQ-1.01-yg63qja3got4",
+  "lab-ctla2": "SEQ-1.01-vzz7jbtvmvly",
 };
 
 Deno.test("identity predicates are exclusive over every frozen tuple", () => {
@@ -46,11 +54,44 @@ Deno.test("negative codec and wash tuples emit no frozen identity", () => {
     mutate(settingsForPreset(PRESET_DEFINITIONS["config-2b"]), { jpegQuality: undefined }),
     mutate(settingsForPreset(PRESET_DEFINITIONS["config-2b"]), { jpegSubsampling: undefined }),
     mutate(base, { jpegQuality: 95, jpegSubsampling: "4:2:2" }),
+    mutate(base, { outputTarget: 1799 }),
   ];
   negatives.forEach((input, index) => {
     assert(PREDICATES.every((predicate) => !predicate(input)), `negative ${index} matched`);
     assert(configIdentity(input).label === "CUSTOM", `negative ${index} was not custom`);
   });
+});
+
+Deno.test("ReMint 1.01 is exact, exclusive, reconstructable, and marked 1.01", () => {
+  const input = settingsForPreset(REMINT_1_01_PRESET_DEFINITION);
+  assert(isRemint1_01(input), "1.01 predicate rejected its sealed tuple");
+  assert(PREDICATES.every((predicate) => !predicate(input)), "1.01 matched a frozen config");
+  const code = buildSettingsCode(input);
+  assert(code.startsWith("SEQ-1.01-"), `incorrect 1.01 marker: ${code}`);
+  assert(code === REMINT_1_01_GOLDEN, `1.01 golden drifted: ${code}`);
+  assert(configIdentity(input).label === "CUSTOM", "1.01 must use the existing CUSTOM ledger label");
+  assert(configIdentity(input).key === code, "1.01 custom key drifted");
+  const reconstructed = presetFromRequested(input);
+  assert(reconstructed?.id === "remint-1-01", "1.01 reconstruction failed");
+  assert(reconstructed.remint.outputTarget === 1800, "1.01 delivery target was lost");
+  assert(buildSettingsCode(settingsForPreset(reconstructed)) === code, "1.01 code drifted");
+  for (const [seed, golden] of Object.entries(REMINT_1_01_SEEDED_GOLDENS)) {
+    const seeded = settingsForPreset(REMINT_1_01_PRESET_DEFINITION);
+    seeded.remint.seed = seed;
+    assert(buildSettingsCode(seeded) === golden, `${seed}: 1.01 seeded golden drifted`);
+  }
+  const configA = settingsForPreset(PRESET_DEFINITIONS["config-a"]);
+  const withoutDelivery = { ...input, remint: { ...input.remint } };
+  delete withoutDelivery.remint.outputTarget;
+  assert(
+    canonicalJson(withoutDelivery) === canonicalJson(configA),
+    "1.01 moved a setting other than outputTarget",
+  );
+
+  for (const outputTarget of [undefined, 1250, 1799, 1800, 1801, 2000]) {
+    const candidate = mutate(input, { outputTarget });
+    assert(isRemint1_01(candidate) === (outputTarget === 1800), `target ${outputTarget} matched`);
+  }
 });
 
 Deno.test("full settings-code goldens and markers are byte-for-byte stable", () => {

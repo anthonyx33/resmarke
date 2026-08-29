@@ -193,6 +193,7 @@ export default function RemintApp() {
   const [engineMode, setEngineMode] = useState<CxRemintEngineMode>("adaptive");
   const [metadataMode, setMetadataMode] = useState<MetadataMode>("device");
   const [deviceExif, setDeviceExif] = useState(true);
+  const [outputTarget, setOutputTarget] = useState<number | null>(null);
   // Stage-1 codec (Config 2B lever) — defaults are the frozen engine values.
   const [stageJpegQ, setStageJpegQ] = useState(92);
   const [stageJpegS, setStageJpegS] = useState<"4:2:0" | "4:2:2" | "4:4:4">("4:2:0");
@@ -508,6 +509,7 @@ export default function RemintApp() {
       strength,
       iphoneExif: deviceExif,
       metadataMode,
+      ...(outputTarget != null ? { outputTarget } : {}),
       // Config 2B lever — only serialized when non-default so Config A /
       // Config 1A settings hashes stay byte-stable with earlier exports.
       ...(stageJpegQ !== 92 || stageJpegS !== "4:2:0"
@@ -552,6 +554,7 @@ export default function RemintApp() {
     Math.abs(tuneSharpen - 1) < 0.001 &&
     wallClean &&
     finishMode === "adaptive" &&
+    outputTarget === null &&
     stageJpegQ === 92 &&
     stageJpegS === "4:2:0";
 
@@ -567,8 +570,32 @@ export default function RemintApp() {
     setTuneSharpen(1);
     setWallClean(true);
     setFinishMode("adaptive");
+    setOutputTarget(null);
     setStageJpegQ(92);
     setStageJpegS("4:2:0");
+  }
+
+  // ReMint 1.01 — Config A with exactly one production variable moved:
+  // delivery long edge 1250 -> 1800. The wash process cap remains 1536.
+  const remint101Active =
+    mode === "sequence" &&
+    washModel === "qwen" &&
+    strength === "deep" &&
+    engineMode === "adaptive" &&
+    qfPreset === "strong" &&
+    qfScale <= 1.001 &&
+    Math.abs(tuneSmooth - 1.25) < 0.001 &&
+    Math.abs(tuneDither - 1) < 0.001 &&
+    Math.abs(tuneSharpen - 1) < 0.001 &&
+    wallClean &&
+    finishMode === "adaptive" &&
+    outputTarget === 1800 &&
+    stageJpegQ === 92 &&
+    stageJpegS === "4:2:0";
+
+  function applyRemint101() {
+    applyConfigA();
+    setOutputTarget(1800);
   }
 
   // Config 1A — the V8 cross-wash test tuple: every Config A lever unchanged
@@ -586,7 +613,8 @@ export default function RemintApp() {
     Math.abs(tuneDither - 1) < 0.001 &&
     Math.abs(tuneSharpen - 1) < 0.001 &&
     wallClean &&
-    finishMode === "adaptive";
+    finishMode === "adaptive" &&
+    outputTarget === null;
 
   function applyConfig1A() {
     setMode("sequence");
@@ -600,6 +628,7 @@ export default function RemintApp() {
     setTuneSharpen(1);
     setWallClean(true);
     setFinishMode("adaptive");
+    setOutputTarget(null);
     setStageJpegQ(92);
     setStageJpegS("4:2:0");
   }
@@ -620,6 +649,7 @@ export default function RemintApp() {
     Math.abs(tuneSharpen - 1) < 0.001 &&
     wallClean &&
     finishMode === "adaptive" &&
+    outputTarget === null &&
     stageJpegQ === 97 &&
     stageJpegS === "4:4:4";
 
@@ -635,6 +665,7 @@ export default function RemintApp() {
     setTuneSharpen(1);
     setWallClean(true);
     setFinishMode("adaptive");
+    setOutputTarget(null);
     setStageJpegQ(97);
     setStageJpegS("4:4:4");
   }
@@ -1413,6 +1444,34 @@ export default function RemintApp() {
                     ) : (
                       "Restore"
                     )}
+                  </span>
+                </button>
+
+                {/* ReMint 1.01 — Config A with delivery moved to 1800px. */}
+                <button
+                  type="button"
+                  className={`rx-preset${remint101Active ? " is-active" : ""}`}
+                  disabled={running}
+                  onClick={() => (remint101Active ? applyConfigA() : applyRemint101())}
+                  title="ReMint 1.01 — 1800px delivery · rest identical to Config A"
+                >
+                  <span className="rx-preset-mark">
+                    <Maximize2 size={15} aria-hidden="true" />
+                  </span>
+                  <span className="rx-preset-text">
+                    <b>ReMint 1.01</b>
+                    <span>1800px delivery · rest identical to Config A</span>
+                  </span>
+                  <span
+                    className={`rx-toggle-pill${remint101Active ? " is-on" : ""}`}
+                    role="switch"
+                    aria-checked={remint101Active}
+                    aria-label="ReMint 1.01 applied"
+                  >
+                    <span className="rx-toggle-pill-knob" />
+                    <span className="rx-toggle-pill-label">
+                      {remint101Active ? "ON" : "OFF"}
+                    </span>
                   </span>
                 </button>
 

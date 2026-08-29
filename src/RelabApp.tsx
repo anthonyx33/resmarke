@@ -69,11 +69,13 @@ import { readLocalCredits, spendLocalPrivacyCredit, type CreditSnapshot } from "
 import {
   CAM1_PRESET_DEFINITION,
   PRESET_DEFINITIONS,
+  REMINT_1_01_PRESET_DEFINITION,
   TRANSFER_4D_1A_PRESET_DEFINITION,
   buildSettingsCode,
   configIdentity,
   is4dCam1,
   is4d1a,
+  isRemint1_01,
   presetFromRequested,
   settingsForPreset,
   type PresetDefinition,
@@ -124,6 +126,7 @@ const SESSION_CAP_FALLBACK = 40;
 
 const PRESETS: Record<PresetId, PresetDefinition> = {
   ...PRESET_DEFINITIONS,
+  "remint-1-01": REMINT_1_01_PRESET_DEFINITION,
   "4d-cam-1": CAM1_PRESET_DEFINITION,
   "4d-1a": TRANSFER_4D_1A_PRESET_DEFINITION,
 };
@@ -1161,6 +1164,7 @@ function configLabelForPreset(preset: PresetDefinition): "A" | "1A" | "2B" | "3C
   const canonical = settingsCanonicalForPreset(preset);
   const label = configIdentity(canonical).label;
   if (label === "CUSTOM") {
+    if (isRemint1_01(canonical)) return label;
     const lockedSeed = CAM1_LOCKED_SEEDS.has(preset.remint.seed ?? "");
     if ((!is4dCam1(canonical) && !is4d1a(canonical)) || !lockedSeed) {
       throw new Error("CUSTOM is restricted to an exact seeded 4D lab tuple.");
