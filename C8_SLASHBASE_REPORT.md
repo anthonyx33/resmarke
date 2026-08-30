@@ -5,15 +5,15 @@ Route: `/slashbase`
 
 ## Design rationale
 
-SlashBase is built as a high-contrast editorial gallery: a short promise, a
-three-item stats bar, one horizontal preset filter, then large before/after
-cards. Warm paper, black type, and a single acid-green accent keep attention on
-the images; verdict colour is reserved for CLEAR / NEAR / BORDER / FAIL. Each
-card header contains only image name, preset, SEQ code, and date. Both sides
-show one dominant AI percentage with deepfake percentage beneath, and either
-image opens the same side-by-side lightbox. Config A, 1A, 2B, and 3C deliberately
-show a plain empty state because no real rows exist for them. Desktop and mobile
-were locally rendered at 1440 px and 390 px widths.
+SlashBase uses the established Slash/Mint visual system: dark-first navy
+panels, restrained violet/cyan accents, compact sticky controls, and a complete
+day palette. Compact view is a dense three-column gallery; Focus view expands
+each pair for inspection, and both choices persist. Preset/version, SEQ code,
+and date lead the card hierarchy while image name and scores are deliberately
+smaller. Either image opens the same side-by-side lightbox. Config A, 1A, 2B,
+and 3C deliberately show a plain empty state because no real rows exist for
+them. Day/night, Compact/Focus, desktop, and 390 px mobile states were locally
+rendered.
 
 ## Implementation
 
@@ -63,11 +63,13 @@ record from being double-imported.
 
 ## Signed declaration
 
-I, Codex (builder/designer), declare that I made no commit, push, deployment,
-Supabase mutation, grading call, grading-vendor call, or live cell run while
-performing this commission. I did not change secrets or owner operations. The
-cancelled corpus-feed matrix scope was not implemented. Only local source
-inspection, parser/tests, compilation, production build, and local visual
-rendering were performed.
+I, Codex (builder/designer), declare that I made no Supabase mutation, grading
+call, grading-vendor call, live cell run, secret change, or owner-operations
+change while performing this commission. The cancelled corpus-feed matrix
+scope was not implemented. After the initial build, the owner explicitly
+authorized publishing: commit `8709c52` was pushed and deployed on 2026-08-30.
+The subsequent Compact/Focus and day/night redesign documented here was
+published to GitHub only after explicit owner direction; no deployment was
+performed for this redesign.
 
 Signed: **Codex — 2026-08-30, Australia/Sydney**

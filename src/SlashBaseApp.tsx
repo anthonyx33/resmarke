@@ -1,4 +1,12 @@
-import { LoaderCircle, Maximize2, X } from "lucide-react";
+import {
+  Grid2X2,
+  LoaderCircle,
+  Maximize2,
+  Moon,
+  Rows3,
+  Sun,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   gradeSlashBaseImage,
@@ -24,8 +32,13 @@ type DisplayGrade = Pick<
   "ai_probability" | "deepfake_probability" | "verdict"
 >;
 
+type ThemeMode = "dark" | "light";
+type ViewMode = "compact" | "focus";
+
 export default function SlashBaseApp() {
   const [preset, setPreset] = useState<SlashBasePreset>("ReMint 1.01");
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const [view, setView] = useState<ViewMode>(getInitialView);
   const [savedGrades, setSavedGrades] = useState<DetectionOnlyLedgerRow[]>(
     loadSlashBaseGradeRows,
   );
@@ -58,6 +71,15 @@ export default function SlashBaseApp() {
       document.body.classList.remove("slashbase-body");
     };
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("resmarke:theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("resmarke:slashbase:view", view);
+  }, [view]);
 
   useEffect(() => {
     if (!activeCard) return;
@@ -106,44 +128,79 @@ export default function SlashBaseApp() {
   }
 
   return (
-    <div className="sb-page" id="top">
-      <header className="sb-hero">
+    <div className="sb-page" data-theme={theme} data-view={view} id="top">
+      <header className="sb-header">
         <nav className="sb-nav" aria-label="SlashBase">
-          <a className="sb-logo" href="/slashbase" aria-label="SlashBase home">
-            <span aria-hidden="true">/</span>SLASHBASE
+          <a className="sb-brand" href="/slashbase" aria-label="SlashBase home">
+            <span className="sb-mark" aria-hidden="true">/</span>
+            <span>
+              <strong>SlashBase</strong>
+              <small>Real results</small>
+            </span>
           </a>
-          <p>REAL RESULTS</p>
+
+          <div className="sb-nav-actions">
+            <span className="sb-real-status"><i aria-hidden="true" /> Real only</span>
+            <div className="sb-view-switch" aria-label="Result view">
+              <button
+                type="button"
+                className={view === "compact" ? "is-active" : ""}
+                aria-pressed={view === "compact"}
+                title="Compact view"
+                onClick={() => setView("compact")}
+              >
+                <Grid2X2 aria-hidden="true" /> <span>Compact</span>
+              </button>
+              <button
+                type="button"
+                className={view === "focus" ? "is-active" : ""}
+                aria-pressed={view === "focus"}
+                title="Focus view"
+                onClick={() => setView("focus")}
+              >
+                <Rows3 aria-hidden="true" /> <span>Focus</span>
+              </button>
+            </div>
+            <button
+              className="sb-theme-toggle"
+              type="button"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              title={theme === "dark" ? "Switch to day mode" : "Switch to night mode"}
+              aria-label={theme === "dark" ? "Switch to day mode" : "Switch to night mode"}
+            >
+              {theme === "dark" ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+            </button>
+          </div>
         </nav>
-
-        <div className="sb-title-block">
-          <p className="sb-kicker">THE BEFORE → AFTER FEED</p>
-          <h1>
-            See the image.
-            <br />
-            See the score.
-          </h1>
-          <p className="sb-intro">Every image. Before and after. Only real detection results.</p>
-        </div>
-
-        <dl className="sb-stats" aria-label="SlashBase totals">
-          <div>
-            <dt>Total real grades</dt>
-            <dd>{slashBaseSeedRows.length + savedGrades.length}</dd>
-          </div>
-          <div>
-            <dt>Images covered</dt>
-            <dd>{new Set(slashBaseSeedRows.map((row) => row.imageName)).size}</dd>
-          </div>
-          <div>
-            <dt>Last grade</dt>
-            <dd className="sb-stat-date">{formatDateTime(lastGradeTime)}</dd>
-          </div>
-        </dl>
       </header>
 
       <main className="sb-main">
-        <div className="sb-filter-wrap">
-          <p>Preset</p>
+        <section className="sb-overview" aria-labelledby="sb-page-title">
+          <div className="sb-overview-copy">
+            <p>The before → after feed</p>
+            <h1 id="sb-page-title">Real images. Real scores.</h1>
+          </div>
+          <dl className="sb-stats" aria-label="SlashBase totals">
+            <div>
+              <dt>Total real grades</dt>
+              <dd>{slashBaseSeedRows.length + savedGrades.length}</dd>
+            </div>
+            <div>
+              <dt>Images covered</dt>
+              <dd>{new Set(slashBaseSeedRows.map((row) => row.imageName)).size}</dd>
+            </div>
+            <div>
+              <dt>Last grade</dt>
+              <dd className="sb-stat-date">{formatDateTime(lastGradeTime)}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <div className="sb-toolbar">
+          <div className="sb-toolbar-label">
+            <span>Preset</span>
+            <strong>{preset}</strong>
+          </div>
           <div className="sb-filters" role="tablist" aria-label="Filter by preset">
             {SLASHBASE_PRESETS.map((option) => (
               <button
@@ -161,16 +218,26 @@ export default function SlashBaseApp() {
         </div>
 
         {cards.length ? (
-          <div className="sb-feed">
+          <div className={`sb-feed is-${view}`}>
             {cards.map((card) => {
               const currentDeliveredGrade = deliveredGrade(card);
               return (
                 <article className="sb-card" key={card.id}>
                   <header className="sb-card-header">
-                    <h2>{card.imageName}</h2>
-                    <div className="sb-card-meta">
-                      <span>{card.preset}</span>
+                    <div className="sb-card-preset">
+                      <span>Preset</span>
+                      <strong>{card.preset}</strong>
+                    </div>
+                    <div className="sb-card-name">
+                      <span>Image</span>
+                      <h2>{card.imageName}</h2>
+                    </div>
+                    <div className="sb-card-sequence">
+                      <span>Sequence</span>
                       <code>{card.sequenceCode}</code>
+                    </div>
+                    <div className="sb-card-date">
+                      <span>Graded</span>
                       <time dateTime={card.timestamp}>{formatDate(card.timestamp)}</time>
                     </div>
                   </header>
@@ -238,9 +305,13 @@ export default function SlashBaseApp() {
         >
           <div className="sb-lightbox-inner">
             <header>
-              <div>
-                <p>{activeCard.preset}</p>
-                <h2>{activeCard.imageName}</h2>
+              <div className="sb-lightbox-title">
+                <p>{activeCard.imageName}</p>
+                <h2>{activeCard.preset}</h2>
+              </div>
+              <div className="sb-lightbox-meta">
+                <code>{activeCard.sequenceCode}</code>
+                <time dateTime={activeCard.timestamp}>{formatDate(activeCard.timestamp)}</time>
               </div>
               <button type="button" onClick={() => setOpenCardId("")} aria-label="Close">
                 <X aria-hidden="true" />
@@ -348,4 +419,15 @@ function formatDateTime(timestamp: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(timestamp));
+}
+
+function getInitialTheme(): ThemeMode {
+  const storedTheme = localStorage.getItem("resmarke:theme");
+  if (storedTheme === "dark" || storedTheme === "light") return storedTheme;
+  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function getInitialView(): ViewMode {
+  const storedView = localStorage.getItem("resmarke:slashbase:view");
+  return storedView === "focus" ? "focus" : "compact";
 }
