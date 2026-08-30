@@ -26,6 +26,16 @@ Standing Rule battery for ReMint 1.01, per
 3. Confirm the detector mode shows **MOCK** and the MOCK badge is visible.
 4. Record the credit balance before starting. Write it in the ledger.
 
+## 1b. Experiment selection (P0.5 — added after the 409 stop)
+
+1. Open the corpus picker → **Comparable experiment** selector.
+2. Select the ReMint 1.01 experiment: **`73a8097d-29fc-4a01-a1c3-8aa978e0275b`
+   · mock/real** (created by the master engineer on 2026-08-30 with
+   `config_set = ["A", "SEQ-1.01-yg63qja3got4", "SEQ-1.01-vzz7jbtvmvly"]`).
+3. Confirm it is selected BEFORE loading any image into the queue.
+4. Remove any leftover failed queue item from the previous attempt before
+   starting ("Remove image" on the failed entry), then verify Queue 0/20.
+
 ## 2. Phase 1 — live MOCK screen (6 cells)
 
 For each sentinel image, in order, exactly:
@@ -42,6 +52,14 @@ For each sentinel image, in order, exactly:
    - `1.01_<IMG-N>_lab-ctla1.jpg` (delivered)
 6. Any cell error, wrong settings code, or missing file → **STOP**. Report
    the cell. Do not continue.
+
+**Cap adjudication (master engineer, 2026-08-30):** if a sentinel's remint
+and paired grades COMPLETE but corpus registration fails with "Corpus
+output cap reached (20)" — the cell's evidence is still valid: the job id,
+grade-ledger row (MOCK verdicts), and downloaded files are all captured.
+Record the cell in the ledger with `registration: capped`, download both
+files as usual, do NOT retry registration, and continue to the next cell.
+Do not change any cap or prune any output.
 
 After all 6: complete the visual checklist (Section 4) for each pair, export
 the ledger, and hand off to the master engineer. Phase 2 never starts

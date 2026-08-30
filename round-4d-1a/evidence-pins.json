@@ -1,0 +1,13 @@
+{
+ "deepclean-worker/ds_remint_v8_8.py": "9e57e06eacc8257dfc5c5acdcababd5c6ce25caea7b0dcdbb0160936fda8b1e8",
+ "deepclean-worker/quality_finish.py": "538c9edb3bdc7c0ebe7e8faf16b37a76d6d0c29b107a1914168bed8e4f587175",
+ "deepclean-worker/tools/checkpoint_attribution.py": "335d8967560a60f32c5732fde63258d9919520fd7006d8d74c1ffa46eef53a44",
+ "deepclean-worker/tools/edge_spread_audit.py": "3175409ef6c815df25ffb9027c7184667d7c1c04cf2d86d99128480f327f3cc4",
+ "deepclean-worker/tools/round_4d_1a_or_split.py": "8ba884c6d484443ea9c7f9b5c3539162b8cf8c41f5a988bcddce1dc70edd6c2a",
+ "deepclean-worker/tools/round_4d_cam_1_gates.py": "cf4c81bc0d70cf6364cba8c5e26dfaf3baba59e9b20cdf0cb97e3bb6a6e677a3",
+ "deepclean-worker/worker.py": "93f46bbe8412d846b1a15cb42eeca843f5184e32c608e870633f9e09cc98a5f3",
+ "round-4d-1a/cell-settings.json": "17691de31256b5a5f6db99bc0b94560606556e10b40a04fbb805340dffa439f6",
+ "round-4d-1a/expected-manifest.json": "6d1c730c629fda80b04b742bc75423f2f4710802a6cabc330910aaff7739c76a",
+ "round-4d-1a/or-band-split.json": "483c9d8dab867f2cd40fbec9d0898371c246fd6d024640343be99fe2f6691ccb",
+ "round-4d-cam-1/roi-manifest.json": "5b0d73779e2855e5deafff5534d01aca647342e2b21370bf8664f9571ad3d329"
+}

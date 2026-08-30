@@ -1,0 +1,194 @@
+{
+  "A4_candidate_report": null,
+  "A4_recovery_metrics": null,
+  "arm": {
+    "camera": false,
+    "composition": "OR -> tone-lock -> QF(buffer) -> q97",
+    "intermediate_jpeg": false,
+    "label": "camera-off + bypass",
+    "name": "A3",
+    "preservation": false,
+    "quality_finish": true
+  },
+  "cell": {
+    "image": "IMG-11",
+    "job": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab",
+    "seed": "lab-ctla1"
+  },
+  "delivered": {
+    "bytes": 939259,
+    "exif_present": false,
+    "format": "JPEG",
+    "height": 1250,
+    "jpeg": {
+      "height": 1250,
+      "sampling": "4:4:4",
+      "sampling_bytes": [
+        "0x11",
+        "0x11",
+        "0x11"
+      ],
+      "width": 1250
+    },
+    "mode": "RGB",
+    "path": "O5_final.jpg",
+    "pixel_sha256": "fecd761d7ac096507fcf9d9559d4d0388a6a2e196dcd8f638d90b3e45b56ff45",
+    "sha256": "66e2067bde724d747e9d4d0b0ba05e0dad4e9a758715f058a15d37d372978414",
+    "width": 1250
+  },
+  "delivery_contract": {
+    "exif_present": false,
+    "optimize": true,
+    "output_mode": "stripped",
+    "quality": 97,
+    "sampling": "4:4:4",
+    "single_final_encode": true
+  },
+  "effective_seed": "lab:lab-ctla1",
+  "input_at_O2_position": "OR_postresample",
+  "input_pixel_sha256": "ac7da8b0d5cebf3c441b6d4982575a72bce3b32bff1ce3fd96e32f4d52d76db8",
+  "intermediate_jpeg": null,
+  "pre_final": {
+    "bytes": 2419983,
+    "exif_present": false,
+    "format": "PNG",
+    "height": 1250,
+    "mode": "RGB",
+    "path": "O4_preencode.png",
+    "pixel_sha256": "6291dc17580c4303b9ebb4e06578ae41589cd2d1b5cec4fb611e745d6d7f6187",
+    "sha256": "bb9f82507db2c84cb7e3fab830173ef8f3d227426916f64beec1da2fcee579a3",
+    "width": 1250
+  },
+  "quality_finish_report": {
+    "applied": true,
+    "checkpoint_errors": [],
+    "delivery_check": {
+      "height": 1250,
+      "sampling": "4:4:4",
+      "sampling_bytes": [
+        "0x11",
+        "0x11",
+        "0x11"
+      ],
+      "width": 1250
+    },
+    "encode": {
+      "quality": 97,
+      "single_encode": true,
+      "subsampling": "4:4:4"
+    },
+    "height": 1250,
+    "mode": "quality-finish",
+    "output_height": 1250,
+    "output_width": 1250,
+    "overrides": {
+      "dither": 1.0,
+      "sharpen": 1.0,
+      "smoothness": 1.25
+    },
+    "preset": "strong",
+    "qc": {
+      "b8_ok": true,
+      "banding_after": 0.618,
+      "banding_before": 0.679,
+      "banding_origin": "quantization",
+      "banding_worse": false,
+      "chroma_spread_after": 0.348,
+      "chroma_spread_before": 0.327,
+      "dithered": true,
+      "final_polish": {
+        "applied": false
+      },
+      "flatness_delta": 0.0,
+      "gradient_alpha": 1.0,
+      "gradient_ladder_attempts": 1,
+      "gradient_rois": [
+        {
+          "banding": 0.954,
+          "coverage": 0.634,
+          "residual_rms": 0.415,
+          "rho1": 0.117,
+          "tile": "2,0"
+        },
+        {
+          "banding": 1.155,
+          "coverage": 0.463,
+          "residual_rms": 0.398,
+          "rho1": 0.032,
+          "tile": "1,0"
+        },
+        {
+          "banding": 0.477,
+          "coverage": 0.301,
+          "residual_rms": 0.448,
+          "rho1": 0.178,
+          "tile": "2,1"
+        },
+        {
+          "banding": 0.459,
+          "coverage": 0.243,
+          "residual_rms": 0.529,
+          "rho1": 0.17,
+          "tile": "0,1"
+        },
+        {
+          "banding": 0.635,
+          "coverage": 0.207,
+          "residual_rms": 0.458,
+          "rho1": 0.059,
+          "tile": "1,1"
+        },
+        {
+          "banding": 0.818,
+          "coverage": 0.196,
+          "residual_rms": 0.454,
+          "rho1": 0.057,
+          "tile": "0,0"
+        }
+      ],
+      "h1h0_ratio": 1.739,
+      "material_wall": {
+        "applied": false,
+        "cnf_after": 1.113,
+        "cnf_before": 0.0,
+        "correlation_length_px": 1,
+        "coverage": 0.001,
+        "enabled": true,
+        "h1h0": 1.318,
+        "reason": "below_threshold_or_no_material",
+        "rho1": 0.23,
+        "rms_after": 0.255,
+        "rms_before": 0.0,
+        "would_trigger": false
+      },
+      "noise_floor_ratio": 1.031,
+      "passed": true,
+      "reference": {
+        "edge_acutance_ratio": 1.052,
+        "edge_width_ratio_est": 0.951,
+        "ms_ssim": 0.8648,
+        "texture_detail_transfer": 1.015
+      },
+      "residual_rms": 0.406,
+      "rho1": 0.3194,
+      "ringing": 0.006800000090152025,
+      "sharpen_retry": false,
+      "ssim": 0.9997,
+      "staircase_index_jpeg": 0.779,
+      "staircase_reconstructed": false,
+      "step_fraction_8bit": 0.3611,
+      "step_fraction_float": 0.16857,
+      "step_fraction_jpeg": 0.28126
+    },
+    "runtime_ms": 1821,
+    "scale": 1.0,
+    "standalone_jpeg": false,
+    "width": 1250
+  },
+  "tone_lock": {
+    "function": "max_cx_remint._histogram_match",
+    "pixel_sha256": "ec1980092db3ed3b2ed4aa6d34892ac8af60e53659ef9cc463fab35eeefda439",
+    "reference": "O0_source resized LANCZOS to delivery geometry",
+    "strength": 0.8
+  }
+}

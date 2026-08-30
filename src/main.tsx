@@ -17,11 +17,13 @@ import "./slash.css";
 // "/mint" as the legacy original. "/remint" is the simplified console over
 // the same two engines as "/cmint" — its own lazy chunk and stylesheet.
 // "/corpus" is the private fixed-corpus registry and experiment history UI.
+// "/slashbase" is the real-results before/after gallery.
 const CmintApp = lazy(() => import("./CmintApp"));
 const RemintApp = lazy(() => import("./RemintApp"));
 const RelabApp = lazy(() => import("./RelabApp"));
 const CorpusApp = lazy(() => import("./CorpusApp"));
 const PrintApp = lazy(() => import("./PrintApp"));
+const SlashBaseApp = lazy(() => import("./SlashBaseApp"));
 
 const path = window.location.pathname;
 const lowerPath = path.toLowerCase().replace(/\/+$/, "") || "/";
@@ -31,6 +33,7 @@ const isPrint = lowerPath === "/print" || lowerPath.startsWith("/print/");
 const isRemint = lowerPath === "/remint" || lowerPath.startsWith("/remint/");
 const isRelab = lowerPath === "/relab" || lowerPath.startsWith("/relab/");
 const isCorpus = lowerPath === "/corpus" || lowerPath.startsWith("/corpus/");
+const isSlashBase = lowerPath === "/slashbase" || lowerPath.startsWith("/slashbase/");
 const isMint = path === "/" || path === "/mint" || path.startsWith("/mint/");
 const Root = isCmint
   ? CmintApp
@@ -38,15 +41,17 @@ const Root = isCmint
     ? SlashImage
     : isPrint
       ? PrintApp
-      : isCorpus
-        ? CorpusApp
-        : isRelab
-          ? RelabApp
-          : isRemint
-            ? RemintApp
-            : isMint
-              ? MintApp
-              : App;
+      : isSlashBase
+        ? SlashBaseApp
+        : isCorpus
+          ? CorpusApp
+          : isRelab
+            ? RelabApp
+            : isRemint
+              ? RemintApp
+              : isMint
+                ? MintApp
+                : App;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

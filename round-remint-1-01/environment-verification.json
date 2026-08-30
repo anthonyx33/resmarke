@@ -1,0 +1,12 @@
+{
+  "environment_prefix": "/private/var/folders/6p/0gn79k9s333dx4dtmqzthrdr0000gn/T/verify3",
+  "environment_prefix_pass": true,
+  "expected_environment_prefix": "/private/var/folders/6p/0gn79k9s333dx4dtmqzthrdr0000gn/T/verify3",
+  "numpy": "2.0.2",
+  "numpy_pass": true,
+  "pass": true,
+  "pillow": "11.3.0",
+  "pillow_pass": true,
+  "python": "3.9.6",
+  "python_pass": true
+}

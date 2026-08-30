@@ -1,0 +1,416 @@
+{
+  "cells": [
+    {
+      "delivered_pixel_sha256": "799749c721672f0bf66c878d33e015f45f3605226ffa2ffdef4fb0b72cfc1d8d",
+      "delivered_sha256": "68e8d3ffdf086185b8aa83d6e371a944eb26e17d3f48bf87b2ae97aea66d71fc",
+      "image": "IMG-5",
+      "job": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5",
+      "metrics": {
+        "eatr_p95": 0.5688325491875037,
+        "global": {
+          "h0_energy_ratio": 0.07129754714665247,
+          "h1_energy_ratio": 0.39866972853783045,
+          "h2_energy_ratio": 0.8260865752229274
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.7162310928775417,
+        "protected_eatr_by_roi": [
+          0.7162310928775417
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04433060334901798,
+          "h1_rms": 0.011577267202518404,
+          "h2_rms": 0.012545773697856031
+        },
+        "staircase_attribution_recipe": 0.44910794130151144,
+        "texture_h1_energy": 0.3927952881041495,
+        "texture_residual": {
+          "chroma_rms_255": 15.029485344910142,
+          "luma_rms_255": 16.37901466937158,
+          "rho1": 0.5696427079117409
+        },
+        "width": 1250
+      },
+      "seed": "lab-ctla1"
+    },
+    {
+      "delivered_pixel_sha256": "64ba54c3d09d13d02b96e30995241a2399ab6de37532e10bc65863a867706468",
+      "delivered_sha256": "6a6a7c767591fa1bd719e7f8886ebfce22d5ff7d9c595c97f2a9595ec5899e9b",
+      "image": "IMG-6",
+      "job": "cfca4ae3-5400-4a2c-a025-53271e40aaa7",
+      "metrics": {
+        "eatr_p95": 0.6618411416009337,
+        "global": {
+          "h0_energy_ratio": 0.15863038694370235,
+          "h1_energy_ratio": 0.4504130993235321,
+          "h2_energy_ratio": 0.629826134068234
+        },
+        "height": 800,
+        "protected_eatr_absolute_min": 0.7263906545680427,
+        "protected_eatr_by_roi": [
+          0.7263906545680427
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.029540869403746856,
+          "h1_rms": 0.008548419490089774,
+          "h2_rms": 0.009446285751258278
+        },
+        "staircase_attribution_recipe": 0.4209259728914814,
+        "texture_h1_energy": 0.4236369308798233,
+        "texture_residual": {
+          "chroma_rms_255": 10.049422943222638,
+          "luma_rms_255": 9.936109317506274,
+          "rho1": 0.5085633886842497
+        },
+        "width": 800
+      },
+      "seed": "lab-ctla1"
+    },
+    {
+      "delivered_pixel_sha256": "88de631c3d7dd1275ddf3a001e5d5cbf6999bdd7078d0766a74cc1e748bd4c66",
+      "delivered_sha256": "1eaf3683349931f195c819dee48d813f4eba2f8313331efff32b21342808f737",
+      "image": "IMG-7",
+      "job": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7",
+      "metrics": {
+        "eatr_p95": 0.5028145456030148,
+        "global": {
+          "h0_energy_ratio": 0.08122516669971606,
+          "h1_energy_ratio": 0.2660153443642989,
+          "h2_energy_ratio": 0.8130308455669456
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.556317000029829,
+        "protected_eatr_by_roi": [
+          0.556317000029829
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04904570252902647,
+          "h1_rms": 0.014125011434271645,
+          "h2_rms": 0.011846298800012742
+        },
+        "staircase_attribution_recipe": 0.43184910492756723,
+        "texture_h1_energy": 0.1842538471167013,
+        "texture_residual": {
+          "chroma_rms_255": 41.50341181390276,
+          "luma_rms_255": 44.77281816662758,
+          "rho1": 0.5076926401350513
+        },
+        "width": 1080
+      },
+      "seed": "lab-ctla1"
+    },
+    {
+      "delivered_pixel_sha256": "5bf9acc638fe8fa379373fa351d5cbe8eb8ca2210eaa214c14beb110048d5c92",
+      "delivered_sha256": "2f1951394a439345f635e87d55343e57f93309efd1908edced840c79ea8fc677",
+      "image": "IMG-8",
+      "job": "24ba6a88-6889-4704-b48c-3fe31c352b42",
+      "metrics": {
+        "eatr_p95": 0.5784092745667826,
+        "global": {
+          "h0_energy_ratio": 0.10310512514569105,
+          "h1_energy_ratio": 0.27684054070247643,
+          "h2_energy_ratio": 0.659642869069782
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5674205277768172,
+        "protected_eatr_by_roi": [
+          0.5674205277768172
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.039547293709691816,
+          "h1_rms": 0.012090166345232604,
+          "h2_rms": 0.011675516685907912
+        },
+        "staircase_attribution_recipe": 0.4759547038069808,
+        "texture_h1_energy": 0.12679404668950317,
+        "texture_residual": {
+          "chroma_rms_255": 17.756571795482632,
+          "luma_rms_255": 18.942112983214788,
+          "rho1": 0.7809878515776727
+        },
+        "width": 1080
+      },
+      "seed": "lab-ctla1"
+    },
+    {
+      "delivered_pixel_sha256": "8ab409cc4ba2a92a71df23417dcef74857ca6f0b5e6c02ae12bdd828199b4268",
+      "delivered_sha256": "64bd57d76a3dcfcc97844fe71a6d59d6be34ec1e24abc22d779bd1ea4a92e2a6",
+      "image": "IMG-9",
+      "job": "3d92e342-ff7f-4ae8-9af6-9d778f42270f",
+      "metrics": {
+        "eatr_p95": 0.5922446568616639,
+        "global": {
+          "h0_energy_ratio": 0.09648717891602307,
+          "h1_energy_ratio": 0.3332766320597246,
+          "h2_energy_ratio": 0.8302871024843571
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.4430363813105404,
+        "protected_eatr_by_roi": [
+          0.4430363813105404
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.07122029053630596,
+          "h1_rms": 0.019201194631551937,
+          "h2_rms": 0.023541093675238926
+        },
+        "staircase_attribution_recipe": 0.44418282777597035,
+        "texture_h1_energy": 0.2941727318931416,
+        "texture_residual": {
+          "chroma_rms_255": 46.71874925579818,
+          "luma_rms_255": 48.4398678347519,
+          "rho1": 0.6909678150065822
+        },
+        "width": 1250
+      },
+      "seed": "lab-ctla1"
+    },
+    {
+      "delivered_pixel_sha256": "f1126dde5b0360b62b4305efe881aacc96b4b530f99ed0e36d3b0b93cc657201",
+      "delivered_sha256": "bf42822ab5ece79dc717cdfe5631272ca4ff1b7ebae3018bb17a4dc5bb22c373",
+      "image": "IMG-11",
+      "job": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab",
+      "metrics": {
+        "eatr_p95": 0.6605431050316402,
+        "global": {
+          "h0_energy_ratio": 0.23167318936014358,
+          "h1_energy_ratio": 0.4167488933628263,
+          "h2_energy_ratio": 0.7088438869247415
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.5716054345172575,
+        "protected_eatr_by_roi": [
+          0.5716054345172575
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.053297081205451666,
+          "h1_rms": 0.014495224811291235,
+          "h2_rms": 0.02066921625825441
+        },
+        "staircase_attribution_recipe": 0.47089239979058406,
+        "texture_h1_energy": 0.453416852835249,
+        "texture_residual": {
+          "chroma_rms_255": 40.65839497766266,
+          "luma_rms_255": 42.716153003735364,
+          "rho1": 0.8457097992488729
+        },
+        "width": 1250
+      },
+      "seed": "lab-ctla1"
+    },
+    {
+      "delivered_pixel_sha256": "409ae45015749fd0ed50288939a1446a0385ccac02a6a973fed967c78818c7b0",
+      "delivered_sha256": "6056f34126a2f97abbbea1366c1492d6d5fecc0bc964f3089d4cebdb4dae05ce",
+      "image": "IMG-5",
+      "job": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e",
+      "metrics": {
+        "eatr_p95": 0.5770677561342838,
+        "global": {
+          "h0_energy_ratio": 0.07292127518880491,
+          "h1_energy_ratio": 0.40429484163086393,
+          "h2_energy_ratio": 0.8297718936660203
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.7035409097997476,
+        "protected_eatr_by_roi": [
+          0.7035409097997476
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.044045842272230025,
+          "h1_rms": 0.011629048992460662,
+          "h2_rms": 0.012631639787519496
+        },
+        "staircase_attribution_recipe": 0.44922169572411,
+        "texture_h1_energy": 0.41867806585670153,
+        "texture_residual": {
+          "chroma_rms_255": 14.964493594003471,
+          "luma_rms_255": 16.417113196450508,
+          "rho1": 0.5723250986323714
+        },
+        "width": 1250
+      },
+      "seed": "lab-ctla2"
+    },
+    {
+      "delivered_pixel_sha256": "05fc7b5553882f4c95af59cf4cd1079af2b2841f39686c9b4194ce9d724df629",
+      "delivered_sha256": "ac822b79ee5e4257feba9eccce66ce4a9e581240e5e113fce0669724fea0e72d",
+      "image": "IMG-6",
+      "job": "58914774-02ed-45f0-a823-95dce8ad09db",
+      "metrics": {
+        "eatr_p95": 0.6716002085856221,
+        "global": {
+          "h0_energy_ratio": 0.16394609703582966,
+          "h1_energy_ratio": 0.4680686634561862,
+          "h2_energy_ratio": 0.6531801885809317
+        },
+        "height": 800,
+        "protected_eatr_absolute_min": 0.6910008320197771,
+        "protected_eatr_by_roi": [
+          0.6910008320197771
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.02952738131489572,
+          "h1_rms": 0.008613042223718554,
+          "h2_rms": 0.009856328068750888
+        },
+        "staircase_attribution_recipe": 0.42123127705290697,
+        "texture_h1_energy": 0.45539918197248236,
+        "texture_residual": {
+          "chroma_rms_255": 10.056190724090644,
+          "luma_rms_255": 10.019244222158525,
+          "rho1": 0.5178854513308664
+        },
+        "width": 800
+      },
+      "seed": "lab-ctla2"
+    },
+    {
+      "delivered_pixel_sha256": "396f33c9c633a813a79fef1543eb193a1676bd4c53f262150bb9b7be02bab7f9",
+      "delivered_sha256": "4e648fa23b193776aa4793abe71df01ff5eca3612987dee8a9e3f3dc350ca4fa",
+      "image": "IMG-7",
+      "job": "5a702b8a-106d-4c98-928e-517bbaef8fe5",
+      "metrics": {
+        "eatr_p95": 0.5105063585889132,
+        "global": {
+          "h0_energy_ratio": 0.08569309396249325,
+          "h1_energy_ratio": 0.2792736842740758,
+          "h2_energy_ratio": 0.8406948114902202
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5475618514414359,
+        "protected_eatr_by_roi": [
+          0.5475618514414359
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04910351308381746,
+          "h1_rms": 0.014106827181799782,
+          "h2_rms": 0.011993785601565795
+        },
+        "staircase_attribution_recipe": 0.4330204323363932,
+        "texture_h1_energy": 0.20911106980884217,
+        "texture_residual": {
+          "chroma_rms_255": 42.31937555219984,
+          "luma_rms_255": 45.24410661461571,
+          "rho1": 0.5188745103077715
+        },
+        "width": 1080
+      },
+      "seed": "lab-ctla2"
+    },
+    {
+      "delivered_pixel_sha256": "7c55b496d50893b5fc5e092e00ab8165e380c156f0bf2ec8d4b5b9c967f3abb3",
+      "delivered_sha256": "d6ffbea22ba241f07a20ac9b6d22c1c59b263cb8b55f183394655a41273beea4",
+      "image": "IMG-8",
+      "job": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64",
+      "metrics": {
+        "eatr_p95": 0.5845520521543237,
+        "global": {
+          "h0_energy_ratio": 0.10317562574175256,
+          "h1_energy_ratio": 0.2778096406797755,
+          "h2_energy_ratio": 0.6853919136339023
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5523858102488288,
+        "protected_eatr_by_roi": [
+          0.5523858102488288
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.039367470673994834,
+          "h1_rms": 0.0119896438269662,
+          "h2_rms": 0.011299166015612363
+        },
+        "staircase_attribution_recipe": 0.473297927270045,
+        "texture_h1_energy": 0.11969109116046961,
+        "texture_residual": {
+          "chroma_rms_255": 17.788820743705024,
+          "luma_rms_255": 19.188303474590132,
+          "rho1": 0.787700059522514
+        },
+        "width": 1080
+      },
+      "seed": "lab-ctla2"
+    },
+    {
+      "delivered_pixel_sha256": "6941fc6166620910b26d0942d78889475916e6449b9ac0050551740b215a005c",
+      "delivered_sha256": "925affbdeb86b2580e20a497d35b3b6a151cdee751623b07df8b1e251c855f44",
+      "image": "IMG-9",
+      "job": "ef2935bd-9d2c-4b62-8005-361377e6db95",
+      "metrics": {
+        "eatr_p95": 0.6060700566232846,
+        "global": {
+          "h0_energy_ratio": 0.10070935573356465,
+          "h1_energy_ratio": 0.3461785529826614,
+          "h2_energy_ratio": 0.8535686667589666
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.45991774951604775,
+        "protected_eatr_by_roi": [
+          0.45991774951604775
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.07137996943511521,
+          "h1_rms": 0.019280790168240674,
+          "h2_rms": 0.02386106549907714
+        },
+        "staircase_attribution_recipe": 0.4459214659182521,
+        "texture_h1_energy": 0.32986168972168367,
+        "texture_residual": {
+          "chroma_rms_255": 47.84985001444862,
+          "luma_rms_255": 49.08338562736226,
+          "rho1": 0.6956625988261017
+        },
+        "width": 1250
+      },
+      "seed": "lab-ctla2"
+    },
+    {
+      "delivered_pixel_sha256": "bb8925c52e056017bd656097aa86f78459de04a9f4524b86921e4b38a38b408a",
+      "delivered_sha256": "b19e4bc3da6d0770e897585fbed0837ab432fd62e98ed98619971e81e67bfd88",
+      "image": "IMG-11",
+      "job": "4d01103a-865d-486f-869f-b56cbb9953b9",
+      "metrics": {
+        "eatr_p95": 0.6681756240636,
+        "global": {
+          "h0_energy_ratio": 0.2373892683603185,
+          "h1_energy_ratio": 0.4229954576238712,
+          "h2_energy_ratio": 0.7252174580240048
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.5939000835238044,
+        "protected_eatr_by_roi": [
+          0.5939000835238044
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.05350014708657569,
+          "h1_rms": 0.014491554310298646,
+          "h2_rms": 0.020737771996756676
+        },
+        "staircase_attribution_recipe": 0.4728493721039554,
+        "texture_h1_energy": 0.46036420833380265,
+        "texture_residual": {
+          "chroma_rms_255": 39.97102508372949,
+          "luma_rms_255": 42.07794750770306,
+          "rho1": 0.842241511528275
+        },
+        "width": 1250
+      },
+      "seed": "lab-ctla2"
+    }
+  ],
+  "cohort": {
+    "band_h0_residual_rms": 0.047825513716655804,
+    "band_h1_residual_rms": 0.013345682551536675,
+    "band_h2_residual_rms": 0.015008661819817555,
+    "cell_count": 12,
+    "eatr_p95": 0.5985547774167972,
+    "h0_energy_ratio": 0.12552110918622436,
+    "h1_energy_ratio": 0.36171542324984357,
+    "h2_energy_ratio": 0.7546285287909195,
+    "protected_eatr_absolute_min": 0.4430363813105404,
+    "staircase": 0.4490379267416465,
+    "texture_h1_energy": 0.32234791703104587,
+    "texture_residual_chroma_rms_255": 28.72214932026301,
+    "texture_residual_luma_rms_255": 30.268014718173973,
+    "texture_residual_rho1": 0.6531877860593392
+  }
+}

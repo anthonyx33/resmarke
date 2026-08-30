@@ -1,0 +1,2065 @@
+{
+  "checks": [
+    {
+      "actual": "41758ffbd3b4fbc8ff5ee97b5d7c8ec336a26e5c3465960c0d9e04098472a2e8",
+      "check": "byte pin C8_MASTER_PROMPT_4D_AR1_MASTER_FREEZE.md",
+      "expected": "41758ffbd3b4fbc8ff5ee97b5d7c8ec336a26e5c3465960c0d9e04098472a2e8",
+      "pass": true
+    },
+    {
+      "actual": "b00a084d947dc449baf78a3e36c94ce2d801cc3600b45e89b30a015151d9ab85",
+      "check": "byte pin deepclean-worker/max_cx_remint.py",
+      "expected": "b00a084d947dc449baf78a3e36c94ce2d801cc3600b45e89b30a015151d9ab85",
+      "pass": true
+    },
+    {
+      "actual": "538c9edb3bdc7c0ebe7e8faf16b37a76d6d0c29b107a1914168bed8e4f587175",
+      "check": "byte pin deepclean-worker/quality_finish.py",
+      "expected": "538c9edb3bdc7c0ebe7e8faf16b37a76d6d0c29b107a1914168bed8e4f587175",
+      "pass": true
+    },
+    {
+      "actual": "d9f0557bf713cd826ce6d6e4ba4111fee09d83b37fa82fe2b5c974c74bebab03",
+      "check": "byte pin deepclean-worker/tools/checkpoint_capture.py",
+      "expected": "d9f0557bf713cd826ce6d6e4ba4111fee09d83b37fa82fe2b5c974c74bebab03",
+      "pass": true
+    },
+    {
+      "actual": "2e5a281f6e46f8785694eccced0c98cb60e41e9d8ed2eea0f89bfc932bb5a5ab",
+      "check": "byte pin deepclean-worker/tools/transfer_4d_1b.py",
+      "expected": "2e5a281f6e46f8785694eccced0c98cb60e41e9d8ed2eea0f89bfc932bb5a5ab",
+      "pass": true
+    },
+    {
+      "actual": "335d8967560a60f32c5732fde63258d9919520fd7006d8d74c1ffa46eef53a44",
+      "check": "byte pin deepclean-worker/tools/checkpoint_attribution.py",
+      "expected": "335d8967560a60f32c5732fde63258d9919520fd7006d8d74c1ffa46eef53a44",
+      "pass": true
+    },
+    {
+      "actual": "17691de31256b5a5f6db99bc0b94560606556e10b40a04fbb805340dffa439f6",
+      "check": "byte pin round-4d-1a/cell-settings.json",
+      "expected": "17691de31256b5a5f6db99bc0b94560606556e10b40a04fbb805340dffa439f6",
+      "pass": true
+    },
+    {
+      "actual": "6d1c730c629fda80b04b742bc75423f2f4710802a6cabc330910aaff7739c76a",
+      "check": "byte pin round-4d-1a/expected-manifest.json",
+      "expected": "6d1c730c629fda80b04b742bc75423f2f4710802a6cabc330910aaff7739c76a",
+      "pass": true
+    },
+    {
+      "actual": "5b0d73779e2855e5deafff5534d01aca647342e2b21370bf8664f9571ad3d329",
+      "check": "byte pin round-4d-cam-1/roi-manifest.json",
+      "expected": "5b0d73779e2855e5deafff5534d01aca647342e2b21370bf8664f9571ad3d329",
+      "pass": true
+    },
+    {
+      "actual": 24,
+      "check": "manifest cell count",
+      "expected": 24,
+      "pass": true
+    },
+    {
+      "actual": 12,
+      "check": "B-cell count",
+      "expected": 12,
+      "pass": true
+    },
+    {
+      "actual": [
+        [
+          "IMG-11",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-11",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-5",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-5",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-6",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-6",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-7",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-7",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-8",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-8",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-9",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-9",
+          "lab-ctla2"
+        ]
+      ],
+      "check": "B-cell cohort",
+      "expected": [
+        [
+          "IMG-11",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-11",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-5",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-5",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-6",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-6",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-7",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-7",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-8",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-8",
+          "lab-ctla2"
+        ],
+        [
+          "IMG-9",
+          "lab-ctla1"
+        ],
+        [
+          "IMG-9",
+          "lab-ctla2"
+        ]
+      ],
+      "pass": true
+    },
+    {
+      "actual": 12,
+      "check": "settings job count",
+      "expected": 12,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ROI manifest FINAL",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "4D-CAM-1",
+      "check": "ROI manifest round",
+      "expected": "4D-CAM-1",
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "355a909f28fc4febb7534cdcd831a9844f7945cf7cdada52d4a71ea533c2b206",
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 O0_source.png pixel pin",
+      "expected": "355a909f28fc4febb7534cdcd831a9844f7945cf7cdada52d4a71ea533c2b206",
+      "pass": true
+    },
+    {
+      "actual": "173ffb1a652b6b1a70176e38103ee95bdc62534a200064fc6863e0148a874311",
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 O1_postwash.png pixel pin",
+      "expected": "173ffb1a652b6b1a70176e38103ee95bdc62534a200064fc6863e0148a874311",
+      "pass": true
+    },
+    {
+      "actual": "70dd6e2a353d538363f694c79cd6c71589ae23000082250fb53d84f31e6e9a07",
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 OR_postresample.png pixel pin",
+      "expected": "70dd6e2a353d538363f694c79cd6c71589ae23000082250fb53d84f31e6e9a07",
+      "pass": true
+    },
+    {
+      "actual": "d0e52004fd6a70a058a36057ffc5a9510b8170edb917f7eba7f4fe77e70a8c55",
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 O2_precamera.png pixel pin",
+      "expected": "d0e52004fd6a70a058a36057ffc5a9510b8170edb917f7eba7f4fe77e70a8c55",
+      "pass": true
+    },
+    {
+      "actual": "3ae2fd0e84bb4bedb5d74605d08abd6fc9c939b44f4dbfc3582e5898bcfdf75b",
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 O5_final.png pixel pin",
+      "expected": "3ae2fd0e84bb4bedb5d74605d08abd6fc9c939b44f4dbfc3582e5898bcfdf75b",
+      "pass": true
+    },
+    {
+      "actual": 1250,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 square delivery",
+      "expected": 1250,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 OR_postresample.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 O2_precamera.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5 O5_final.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-5 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-5 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-5 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "a31f7160a70b83af8a94cb1f3c98c2766c8b1daf5f9f31bf1c03cb35a8899d89",
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 O0_source.png pixel pin",
+      "expected": "a31f7160a70b83af8a94cb1f3c98c2766c8b1daf5f9f31bf1c03cb35a8899d89",
+      "pass": true
+    },
+    {
+      "actual": "ed0d2c219dd46c3edb479217ce82a3e3bbf1504190c4dfaa10378c15cf4fe897",
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 O1_postwash.png pixel pin",
+      "expected": "ed0d2c219dd46c3edb479217ce82a3e3bbf1504190c4dfaa10378c15cf4fe897",
+      "pass": true
+    },
+    {
+      "actual": "ed0d2c219dd46c3edb479217ce82a3e3bbf1504190c4dfaa10378c15cf4fe897",
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 OR_postresample.png pixel pin",
+      "expected": "ed0d2c219dd46c3edb479217ce82a3e3bbf1504190c4dfaa10378c15cf4fe897",
+      "pass": true
+    },
+    {
+      "actual": "a3edf07c1b84146bc6a6c3632e6a3d129bcac0030109204ac1a200fb0d4ae38b",
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 O2_precamera.png pixel pin",
+      "expected": "a3edf07c1b84146bc6a6c3632e6a3d129bcac0030109204ac1a200fb0d4ae38b",
+      "pass": true
+    },
+    {
+      "actual": "59a5750a7f65e996b30c3c72e929e61702dbe37a7e56a086098b102fe7fcc027",
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 O5_final.png pixel pin",
+      "expected": "59a5750a7f65e996b30c3c72e929e61702dbe37a7e56a086098b102fe7fcc027",
+      "pass": true
+    },
+    {
+      "actual": 800,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 square delivery",
+      "expected": 800,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        800,
+        800
+      ],
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 OR_postresample.png geometry",
+      "expected": [
+        800,
+        800
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        800,
+        800
+      ],
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 O2_precamera.png geometry",
+      "expected": [
+        800,
+        800
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        800,
+        800
+      ],
+      "check": "cfca4ae3-5400-4a2c-a025-53271e40aaa7 O5_final.png geometry",
+      "expected": [
+        800,
+        800
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-6 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-6 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-6 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "35211ee3e5a60787970ee18824a4ea7ebd29e5bd768fbfbe61e8b49f28e5fcf9",
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 O0_source.png pixel pin",
+      "expected": "35211ee3e5a60787970ee18824a4ea7ebd29e5bd768fbfbe61e8b49f28e5fcf9",
+      "pass": true
+    },
+    {
+      "actual": "8e856a437f369686b8b60ddbe158621f2f7cf68bf1ced4a662dcc9a1a3d4695d",
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 O1_postwash.png pixel pin",
+      "expected": "8e856a437f369686b8b60ddbe158621f2f7cf68bf1ced4a662dcc9a1a3d4695d",
+      "pass": true
+    },
+    {
+      "actual": "8e856a437f369686b8b60ddbe158621f2f7cf68bf1ced4a662dcc9a1a3d4695d",
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 OR_postresample.png pixel pin",
+      "expected": "8e856a437f369686b8b60ddbe158621f2f7cf68bf1ced4a662dcc9a1a3d4695d",
+      "pass": true
+    },
+    {
+      "actual": "f59a0c49753014045119f68f3f6c55171d02f9b858811b81428f6d53931064f5",
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 O2_precamera.png pixel pin",
+      "expected": "f59a0c49753014045119f68f3f6c55171d02f9b858811b81428f6d53931064f5",
+      "pass": true
+    },
+    {
+      "actual": "6b22cb5fd8a4405c4ef07fb02e684193d49b5e1dba32d6d831b2e0faad7ee15d",
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 O5_final.png pixel pin",
+      "expected": "6b22cb5fd8a4405c4ef07fb02e684193d49b5e1dba32d6d831b2e0faad7ee15d",
+      "pass": true
+    },
+    {
+      "actual": 1080,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 square delivery",
+      "expected": 1080,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 OR_postresample.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 O2_precamera.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7 O5_final.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-7 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-7 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-7 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "a491df33d5ad77c26fba11bb2a153537eb8ec1700520bd20fabebddbfef82675",
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 O0_source.png pixel pin",
+      "expected": "a491df33d5ad77c26fba11bb2a153537eb8ec1700520bd20fabebddbfef82675",
+      "pass": true
+    },
+    {
+      "actual": "19a4dd16971cb65249abc176836a4fce052ebb90acab598ec9f9f4c1664a59c3",
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 O1_postwash.png pixel pin",
+      "expected": "19a4dd16971cb65249abc176836a4fce052ebb90acab598ec9f9f4c1664a59c3",
+      "pass": true
+    },
+    {
+      "actual": "19a4dd16971cb65249abc176836a4fce052ebb90acab598ec9f9f4c1664a59c3",
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 OR_postresample.png pixel pin",
+      "expected": "19a4dd16971cb65249abc176836a4fce052ebb90acab598ec9f9f4c1664a59c3",
+      "pass": true
+    },
+    {
+      "actual": "01f25cbf1a0447ffbe2393d1c1d6dd7095dbe6d6d6ba5ecc49727b22b879b228",
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 O2_precamera.png pixel pin",
+      "expected": "01f25cbf1a0447ffbe2393d1c1d6dd7095dbe6d6d6ba5ecc49727b22b879b228",
+      "pass": true
+    },
+    {
+      "actual": "c2e1e7d401325e9ca4eefe27d6b6556c36e196a2e6094d02ce32a66e1486fda3",
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 O5_final.png pixel pin",
+      "expected": "c2e1e7d401325e9ca4eefe27d6b6556c36e196a2e6094d02ce32a66e1486fda3",
+      "pass": true
+    },
+    {
+      "actual": 1080,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 square delivery",
+      "expected": 1080,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 OR_postresample.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 O2_precamera.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "24ba6a88-6889-4704-b48c-3fe31c352b42 O5_final.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-8 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-8 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-8 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "c85fb7f3c37a649b9b77b7dda701b429d6aa7ee18a4542403bba552a4dd1a6e6",
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f O0_source.png pixel pin",
+      "expected": "c85fb7f3c37a649b9b77b7dda701b429d6aa7ee18a4542403bba552a4dd1a6e6",
+      "pass": true
+    },
+    {
+      "actual": "9fd82c20c7094a5ad5271463857c3e7997e9bfdda5b521c645ebf42288ac5275",
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f O1_postwash.png pixel pin",
+      "expected": "9fd82c20c7094a5ad5271463857c3e7997e9bfdda5b521c645ebf42288ac5275",
+      "pass": true
+    },
+    {
+      "actual": "99127ba62f498372ddfe7d4ebcbe93fc47ace760e953a846bee1180df76ae18b",
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f OR_postresample.png pixel pin",
+      "expected": "99127ba62f498372ddfe7d4ebcbe93fc47ace760e953a846bee1180df76ae18b",
+      "pass": true
+    },
+    {
+      "actual": "16401e1c3c40d6db2df279272c7e05a872adfaca51c7658cd841f389d15e22e2",
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f O2_precamera.png pixel pin",
+      "expected": "16401e1c3c40d6db2df279272c7e05a872adfaca51c7658cd841f389d15e22e2",
+      "pass": true
+    },
+    {
+      "actual": "324e7b0771739b44259f0a8ab0eedf834a7097449c3b3c033fba56c2ab2cb577",
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f O5_final.png pixel pin",
+      "expected": "324e7b0771739b44259f0a8ab0eedf834a7097449c3b3c033fba56c2ab2cb577",
+      "pass": true
+    },
+    {
+      "actual": 1250,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f square delivery",
+      "expected": 1250,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f OR_postresample.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f O2_precamera.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "3d92e342-ff7f-4ae8-9af6-9d778f42270f O5_final.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-9 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-9 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-9 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "7182b8d7a0dd645400e081b1b152a429efa669748a103eeba2aaa4ad75ef4ba8",
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab O0_source.png pixel pin",
+      "expected": "7182b8d7a0dd645400e081b1b152a429efa669748a103eeba2aaa4ad75ef4ba8",
+      "pass": true
+    },
+    {
+      "actual": "b5e9c4c8a3185e0d8b4ba9229d152589771df79d712588c9cf115d460f5c5bfd",
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab O1_postwash.png pixel pin",
+      "expected": "b5e9c4c8a3185e0d8b4ba9229d152589771df79d712588c9cf115d460f5c5bfd",
+      "pass": true
+    },
+    {
+      "actual": "ac7da8b0d5cebf3c441b6d4982575a72bce3b32bff1ce3fd96e32f4d52d76db8",
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab OR_postresample.png pixel pin",
+      "expected": "ac7da8b0d5cebf3c441b6d4982575a72bce3b32bff1ce3fd96e32f4d52d76db8",
+      "pass": true
+    },
+    {
+      "actual": "034a4d349ca971166cf02f461c67aab7f689e4b5180dede429b3b4318464dcc7",
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab O2_precamera.png pixel pin",
+      "expected": "034a4d349ca971166cf02f461c67aab7f689e4b5180dede429b3b4318464dcc7",
+      "pass": true
+    },
+    {
+      "actual": "adbd0fa2e753cc867c5025127e32047e1a67f257010fd552e2228b32ba099698",
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab O5_final.png pixel pin",
+      "expected": "adbd0fa2e753cc867c5025127e32047e1a67f257010fd552e2228b32ba099698",
+      "pass": true
+    },
+    {
+      "actual": 1250,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab square delivery",
+      "expected": 1250,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab OR_postresample.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab O2_precamera.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab O5_final.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-11 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-11 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-11 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "355a909f28fc4febb7534cdcd831a9844f7945cf7cdada52d4a71ea533c2b206",
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e O0_source.png pixel pin",
+      "expected": "355a909f28fc4febb7534cdcd831a9844f7945cf7cdada52d4a71ea533c2b206",
+      "pass": true
+    },
+    {
+      "actual": "faf3b6d9d532f03bb63c5220049c1803c41ad40dd2babdbdf3b32961209b0303",
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e O1_postwash.png pixel pin",
+      "expected": "faf3b6d9d532f03bb63c5220049c1803c41ad40dd2babdbdf3b32961209b0303",
+      "pass": true
+    },
+    {
+      "actual": "17f3cc9ed232d40232400fca000267f33be78fac132939642b2b77e43dcc8bf3",
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e OR_postresample.png pixel pin",
+      "expected": "17f3cc9ed232d40232400fca000267f33be78fac132939642b2b77e43dcc8bf3",
+      "pass": true
+    },
+    {
+      "actual": "66f86373955e0642639ae12bd99360e13e6d95cf31719473f28058d6ed1e7684",
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e O2_precamera.png pixel pin",
+      "expected": "66f86373955e0642639ae12bd99360e13e6d95cf31719473f28058d6ed1e7684",
+      "pass": true
+    },
+    {
+      "actual": "d386bd2a03e49cf8ed7281c6802990401587a9c70f589ed940535d1db174199e",
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e O5_final.png pixel pin",
+      "expected": "d386bd2a03e49cf8ed7281c6802990401587a9c70f589ed940535d1db174199e",
+      "pass": true
+    },
+    {
+      "actual": 1250,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e square delivery",
+      "expected": 1250,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e OR_postresample.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e O2_precamera.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e O5_final.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-5 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-5 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-5 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "a31f7160a70b83af8a94cb1f3c98c2766c8b1daf5f9f31bf1c03cb35a8899d89",
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db O0_source.png pixel pin",
+      "expected": "a31f7160a70b83af8a94cb1f3c98c2766c8b1daf5f9f31bf1c03cb35a8899d89",
+      "pass": true
+    },
+    {
+      "actual": "17b2ef10004774daafb6ff4b27c070dce968052b2493a5d9b169e757b7b06f6c",
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db O1_postwash.png pixel pin",
+      "expected": "17b2ef10004774daafb6ff4b27c070dce968052b2493a5d9b169e757b7b06f6c",
+      "pass": true
+    },
+    {
+      "actual": "17b2ef10004774daafb6ff4b27c070dce968052b2493a5d9b169e757b7b06f6c",
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db OR_postresample.png pixel pin",
+      "expected": "17b2ef10004774daafb6ff4b27c070dce968052b2493a5d9b169e757b7b06f6c",
+      "pass": true
+    },
+    {
+      "actual": "b289f2bdf8bf1f7c23f81b46d384cf436f6ec4c42dd6c77b2c358dcdc5e01879",
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db O2_precamera.png pixel pin",
+      "expected": "b289f2bdf8bf1f7c23f81b46d384cf436f6ec4c42dd6c77b2c358dcdc5e01879",
+      "pass": true
+    },
+    {
+      "actual": "c1debbc919db0766f94f0a5abc0f3749c762e7665ee4e0e57028799989f5a4ac",
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db O5_final.png pixel pin",
+      "expected": "c1debbc919db0766f94f0a5abc0f3749c762e7665ee4e0e57028799989f5a4ac",
+      "pass": true
+    },
+    {
+      "actual": 800,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db square delivery",
+      "expected": 800,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        800,
+        800
+      ],
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db OR_postresample.png geometry",
+      "expected": [
+        800,
+        800
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        800,
+        800
+      ],
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db O2_precamera.png geometry",
+      "expected": [
+        800,
+        800
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        800,
+        800
+      ],
+      "check": "58914774-02ed-45f0-a823-95dce8ad09db O5_final.png geometry",
+      "expected": [
+        800,
+        800
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-6 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-6 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-6 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "35211ee3e5a60787970ee18824a4ea7ebd29e5bd768fbfbe61e8b49f28e5fcf9",
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 O0_source.png pixel pin",
+      "expected": "35211ee3e5a60787970ee18824a4ea7ebd29e5bd768fbfbe61e8b49f28e5fcf9",
+      "pass": true
+    },
+    {
+      "actual": "10b7e4b0f3a7bf11c5ec367c33d7d2e25ab43a72dcc2c19bd2e4ef6439d314b4",
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 O1_postwash.png pixel pin",
+      "expected": "10b7e4b0f3a7bf11c5ec367c33d7d2e25ab43a72dcc2c19bd2e4ef6439d314b4",
+      "pass": true
+    },
+    {
+      "actual": "10b7e4b0f3a7bf11c5ec367c33d7d2e25ab43a72dcc2c19bd2e4ef6439d314b4",
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 OR_postresample.png pixel pin",
+      "expected": "10b7e4b0f3a7bf11c5ec367c33d7d2e25ab43a72dcc2c19bd2e4ef6439d314b4",
+      "pass": true
+    },
+    {
+      "actual": "2d880f610bae0292cb1e3eeface8b0166e57fc9faed150f82f53deb170eed39b",
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 O2_precamera.png pixel pin",
+      "expected": "2d880f610bae0292cb1e3eeface8b0166e57fc9faed150f82f53deb170eed39b",
+      "pass": true
+    },
+    {
+      "actual": "f78e0b0271a6c4fafbc07f3e244cf7350c837006e8679dee33bd1833b8287823",
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 O5_final.png pixel pin",
+      "expected": "f78e0b0271a6c4fafbc07f3e244cf7350c837006e8679dee33bd1833b8287823",
+      "pass": true
+    },
+    {
+      "actual": 1080,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 square delivery",
+      "expected": 1080,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 OR_postresample.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 O2_precamera.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "5a702b8a-106d-4c98-928e-517bbaef8fe5 O5_final.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-7 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-7 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-7 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "a491df33d5ad77c26fba11bb2a153537eb8ec1700520bd20fabebddbfef82675",
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 O0_source.png pixel pin",
+      "expected": "a491df33d5ad77c26fba11bb2a153537eb8ec1700520bd20fabebddbfef82675",
+      "pass": true
+    },
+    {
+      "actual": "d019ae5e75350dd102a6d8afa4140738077fecd2b82e64e096de538d4f6811c9",
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 O1_postwash.png pixel pin",
+      "expected": "d019ae5e75350dd102a6d8afa4140738077fecd2b82e64e096de538d4f6811c9",
+      "pass": true
+    },
+    {
+      "actual": "d019ae5e75350dd102a6d8afa4140738077fecd2b82e64e096de538d4f6811c9",
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 OR_postresample.png pixel pin",
+      "expected": "d019ae5e75350dd102a6d8afa4140738077fecd2b82e64e096de538d4f6811c9",
+      "pass": true
+    },
+    {
+      "actual": "6ec0e302805e83cf6f1b05eee3de41c1d8178df03bc843b9da3a00d65fefe523",
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 O2_precamera.png pixel pin",
+      "expected": "6ec0e302805e83cf6f1b05eee3de41c1d8178df03bc843b9da3a00d65fefe523",
+      "pass": true
+    },
+    {
+      "actual": "1d41498f1b110eafdc053b7361103bda1645ccef28cc991ccae27bd9404c8e6f",
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 O5_final.png pixel pin",
+      "expected": "1d41498f1b110eafdc053b7361103bda1645ccef28cc991ccae27bd9404c8e6f",
+      "pass": true
+    },
+    {
+      "actual": 1080,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 square delivery",
+      "expected": 1080,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 OR_postresample.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 O2_precamera.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1080,
+        1080
+      ],
+      "check": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64 O5_final.png geometry",
+      "expected": [
+        1080,
+        1080
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-8 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-8 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-8 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "c85fb7f3c37a649b9b77b7dda701b429d6aa7ee18a4542403bba552a4dd1a6e6",
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 O0_source.png pixel pin",
+      "expected": "c85fb7f3c37a649b9b77b7dda701b429d6aa7ee18a4542403bba552a4dd1a6e6",
+      "pass": true
+    },
+    {
+      "actual": "206e2bb1d00574ec675062d910365f9f5a1cfe3fa8357f5e64d21456d4533848",
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 O1_postwash.png pixel pin",
+      "expected": "206e2bb1d00574ec675062d910365f9f5a1cfe3fa8357f5e64d21456d4533848",
+      "pass": true
+    },
+    {
+      "actual": "4eb851615212fc43a623abd7f994fb49f32cf5a4f2d0381f4a9c17c99119a980",
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 OR_postresample.png pixel pin",
+      "expected": "4eb851615212fc43a623abd7f994fb49f32cf5a4f2d0381f4a9c17c99119a980",
+      "pass": true
+    },
+    {
+      "actual": "4668ff138c6e05437162c6b1dc9a9186ded695349b9f9163901a68a6cfc65896",
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 O2_precamera.png pixel pin",
+      "expected": "4668ff138c6e05437162c6b1dc9a9186ded695349b9f9163901a68a6cfc65896",
+      "pass": true
+    },
+    {
+      "actual": "318ebb1a92aa4a98d56ad4b7fcb293bfa20ea3a7cbad4f338cd909467c2c4bb7",
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 O5_final.png pixel pin",
+      "expected": "318ebb1a92aa4a98d56ad4b7fcb293bfa20ea3a7cbad4f338cd909467c2c4bb7",
+      "pass": true
+    },
+    {
+      "actual": 1250,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 square delivery",
+      "expected": 1250,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 OR_postresample.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 O2_precamera.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "ef2935bd-9d2c-4b62-8005-361377e6db95 O5_final.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-9 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-9 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-9 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 settings seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 effective seed",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 output mode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 tone-lock strength",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 finish preset",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 finish scale",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 finish overrides",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 stage-1 encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 QF encode",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 naturalization off",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": "7182b8d7a0dd645400e081b1b152a429efa669748a103eeba2aaa4ad75ef4ba8",
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 O0_source.png pixel pin",
+      "expected": "7182b8d7a0dd645400e081b1b152a429efa669748a103eeba2aaa4ad75ef4ba8",
+      "pass": true
+    },
+    {
+      "actual": "7863610e7aa7fb2a59ff555da0f8f24f91e8a2101658d2c5ddf99b69a11cd9f6",
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 O1_postwash.png pixel pin",
+      "expected": "7863610e7aa7fb2a59ff555da0f8f24f91e8a2101658d2c5ddf99b69a11cd9f6",
+      "pass": true
+    },
+    {
+      "actual": "75d42e94a23121c888a465c13e59320178b6ff12bb26a7dcb34a50942ebfc911",
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 OR_postresample.png pixel pin",
+      "expected": "75d42e94a23121c888a465c13e59320178b6ff12bb26a7dcb34a50942ebfc911",
+      "pass": true
+    },
+    {
+      "actual": "56e256fe6386d32ae7086c2a974a7a56942bf4eae525876fb739fac72d0762b9",
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 O2_precamera.png pixel pin",
+      "expected": "56e256fe6386d32ae7086c2a974a7a56942bf4eae525876fb739fac72d0762b9",
+      "pass": true
+    },
+    {
+      "actual": "2a122fd646457a588ab6158918fe214b5fabd37484ee06728e44fd9f1c6411be",
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 O5_final.png pixel pin",
+      "expected": "2a122fd646457a588ab6158918fe214b5fabd37484ee06728e44fd9f1c6411be",
+      "pass": true
+    },
+    {
+      "actual": 1250,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 square delivery",
+      "expected": 1250,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 delivery edge",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 OR_postresample.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 O2_precamera.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": [
+        1250,
+        1250
+      ],
+      "check": "4d01103a-865d-486f-869f-b56cbb9953b9 O5_final.png geometry",
+      "expected": [
+        1250,
+        1250
+      ],
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-11 protected ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-11 smooth ROI syntax",
+      "expected": true,
+      "pass": true
+    },
+    {
+      "actual": true,
+      "check": "IMG-11 texture ROI syntax",
+      "expected": true,
+      "pass": true
+    }
+  ],
+  "pass": true
+}

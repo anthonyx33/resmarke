@@ -1,0 +1,74 @@
+{
+  "FINAL": true,
+  "round": "4D-CAM-1",
+  "note": "Authored independently from originals only; freeze-before-first-light rule applies.",
+  "images": {
+    "IMG-1": {
+      "object_sha256": "442a1ccd4338d777b9a1bc7bfedb21aeb3846ae6f4f9f8ee761b9ef38d3b0dc8",
+      "protected": [[0.65, 0.19, 0.84, 0.61]],
+      "smooth": [[0.50, 0.56, 0.63, 0.72]],
+      "texture": [[0.10, 0.72, 0.46, 0.92]]
+    },
+    "IMG-2": {
+      "object_sha256": "90b8cc8a257454b39bb67d3f8065b01ec3e17b29a3f6e1ebb80e620f02d38e91",
+      "protected": [[0.34, 0.35, 0.48, 0.66]],
+      "smooth": [[0.69, 0.13, 0.92, 0.30]],
+      "texture": [[0.18, 0.68, 0.34, 0.90]]
+    },
+    "IMG-3": {
+      "object_sha256": "357d9aa522ea4d12ba3583f86477472b526168747c682cdc828ac073ce5af6a6",
+      "protected": [[0.63, 0.24, 0.75, 0.52]],
+      "smooth": [[0.37, 0.03, 0.70, 0.17]],
+      "texture": [[0.45, 0.72, 0.62, 0.90]]
+    },
+    "IMG-4": {
+      "object_sha256": "9f4cfa27845ffb49f595f90c332c43b4db2bbcde6ce30633b7dcea2396fe8e1a",
+      "protected": [[0.68, 0.36, 0.79, 0.59]],
+      "smooth": [[0.42, 0.04, 0.72, 0.20]],
+      "texture": [[0.52, 0.60, 0.65, 0.75]]
+    },
+    "IMG-5": {
+      "object_sha256": "91fffe56122550743c9c18da0bed78c89ca702cabb08ce125e626a89a67b0d6b",
+      "protected": [[0.44, 0.21, 0.56, 0.32]],
+      "smooth": [[0.31, 0.04, 0.65, 0.17]],
+      "texture": [[0.40, 0.46, 0.64, 0.69]]
+    },
+    "IMG-6": {
+      "object_sha256": "57db03058e1ce49e15aff4a7b95f0d6d6e1e23660732aa1c54f991bec1ea567f",
+      "protected": [[0.38, 0.18, 0.57, 0.31]],
+      "smooth": [[0.31, 0.02, 0.68, 0.14]],
+      "texture": [[0.36, 0.48, 0.63, 0.75]]
+    },
+    "IMG-7": {
+      "object_sha256": "dd6b9afc1cc79c2a6dcd6a4e5fb9592e9838614876754e72f9bccbcd21f7a69b",
+      "protected": [[0.44, 0.51, 0.62, 0.68]],
+      "smooth": [[0.32, 0.05, 0.68, 0.22]],
+      "texture": [[0.53, 0.70, 0.71, 0.83]]
+    },
+    "IMG-8": {
+      "object_sha256": "bb1325d84ba3dd2ac8162b5c9f3607932ae6d50a7b245c467024599ad4d2319c",
+      "protected": [[0.42, 0.56, 0.82, 0.89]],
+      "smooth": [[0.64, 0.05, 0.90, 0.20]],
+      "texture": [[0.10, 0.79, 0.38, 0.96]]
+    },
+    "IMG-9": {
+      "object_sha256": "70df003ece40710c00ae4173237322e88125baa4993aa8a79a69b2beccee9b70",
+      "protected": [[0.44, 0.69, 0.57, 0.91]],
+      "smooth": [[0.63, 0.02, 0.88, 0.16]],
+      "texture": [[0.05, 0.58, 0.39, 0.76]]
+    },
+    "IMG-10": {
+      "object_sha256": "96379ecb1b1b5fa97ec5ef3c3149765eb9a0d4162e038db1fe882e3f7aea8de3",
+      "protected": [[0.69, 0.14, 0.84, 0.31]],
+      "smooth": [[0.39, 0.04, 0.63, 0.20]],
+      "texture": [[0.60, 0.52, 0.84, 0.77]]
+    },
+    "IMG-11": {
+      "object_sha256": "dc9bdc02806d2391a22f092f4539be875b06c0fdf049d67b4cc3ea843da0a8c8",
+      "protected": [[0.24, 0.55, 0.46, 0.82]],
+      "smooth": [[0.46, 0.04, 0.71, 0.18]],
+      "texture": [[0.48, 0.55, 0.80, 0.72]]
+    }
+  },
+  "roi_format": "boxes as [x0,y0,x1,y1] normalized 0-1"
+}

@@ -1,0 +1,24 @@
+{
+  "calibration": {
+    "band_h0_residual_rms": 0.047825513716655804,
+    "band_h1_residual_rms": 0.013345682551536675,
+    "band_h2_residual_rms": 0.015008661819817555,
+    "cell_count": 12,
+    "eatr_p95": 0.5985547774167972,
+    "h0_energy_ratio": 0.12552110918622436,
+    "h1_energy_ratio": 0.36171542324984357,
+    "h2_energy_ratio": 0.7546285287909195,
+    "protected_eatr_absolute_min": 0.4430363813105404,
+    "staircase": 0.4490379267416465,
+    "texture_h1_energy": 0.32234791703104587,
+    "texture_residual_chroma_rms_255": 28.72214932026301,
+    "texture_residual_luma_rms_255": 30.268014718173973,
+    "texture_residual_rho1": 0.6531877860593392
+  },
+  "candidate": null,
+  "output_target": 1800,
+  "reason": "ValidationStop: exact camera replay provenance is absent for 12/12 cells; required fields are the selected attempt/rung and raw creator_id",
+  "regen_process_cap": 1536,
+  "settings_marker_unseeded": "SEQ-1.01-sywgbtfbjwhg",
+  "status": "HARD STOP \u2014 1.01 REMAINS NON-PRODUCTION"
+}

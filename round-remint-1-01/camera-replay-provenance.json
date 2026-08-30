@@ -1,0 +1,77 @@
+{
+  "errors": [
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-5",
+      "job": "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5",
+      "seed": "lab-ctla1"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-6",
+      "job": "cfca4ae3-5400-4a2c-a025-53271e40aaa7",
+      "seed": "lab-ctla1"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-7",
+      "job": "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7",
+      "seed": "lab-ctla1"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-8",
+      "job": "24ba6a88-6889-4704-b48c-3fe31c352b42",
+      "seed": "lab-ctla1"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-9",
+      "job": "3d92e342-ff7f-4ae8-9af6-9d778f42270f",
+      "seed": "lab-ctla1"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-11",
+      "job": "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab",
+      "seed": "lab-ctla1"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-5",
+      "job": "2f4fa3d1-b871-4d60-a53a-29ef62abde9e",
+      "seed": "lab-ctla2"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-6",
+      "job": "58914774-02ed-45f0-a823-95dce8ad09db",
+      "seed": "lab-ctla2"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-7",
+      "job": "5a702b8a-106d-4c98-928e-517bbaef8fe5",
+      "seed": "lab-ctla2"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-8",
+      "job": "d6fef99d-87ba-4cba-b8ed-63c3b9238c64",
+      "seed": "lab-ctla2"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-9",
+      "job": "ef2935bd-9d2c-4b62-8005-361377e6db95",
+      "seed": "lab-ctla2"
+    },
+    {
+      "error": "camera replay provenance missing: engine.attempts, unambiguous chosen camera attempt, raw creator_id (creator_id_hash is not replayable)",
+      "image": "IMG-11",
+      "job": "4d01103a-865d-486f-869f-b56cbb9953b9",
+      "seed": "lab-ctla2"
+    }
+  ],
+  "pass": false
+}

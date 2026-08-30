@@ -1,0 +1,89 @@
+{
+  "A4_candidate_report": null,
+  "A4_recovery_metrics": null,
+  "arm": {
+    "camera": false,
+    "composition": "OR -> tone-lock -> q92 -> q97",
+    "intermediate_jpeg": true,
+    "label": "QF-off + camera-off",
+    "name": "A6",
+    "preservation": false,
+    "quality_finish": false
+  },
+  "cell": {
+    "image": "IMG-6",
+    "job": "58914774-02ed-45f0-a823-95dce8ad09db",
+    "seed": "lab-ctla2"
+  },
+  "delivered": {
+    "bytes": 260053,
+    "exif_present": false,
+    "format": "JPEG",
+    "height": 800,
+    "jpeg": {
+      "height": 800,
+      "sampling": "4:4:4",
+      "sampling_bytes": [
+        "0x11",
+        "0x11",
+        "0x11"
+      ],
+      "width": 800
+    },
+    "mode": "RGB",
+    "path": "O5_final.jpg",
+    "pixel_sha256": "fe9fa404801f2a0f4e59e49f3fae9fe06e1e1c90d3032a87abd500740c797d67",
+    "sha256": "18125ffac98fee02e379f9ddebc8127e50b2565a5677db1f48b2358a88fe50ae",
+    "width": 800
+  },
+  "delivery_contract": {
+    "exif_present": false,
+    "optimize": true,
+    "output_mode": "stripped",
+    "quality": 97,
+    "sampling": "4:4:4",
+    "single_final_encode": true
+  },
+  "effective_seed": "lab:lab-ctla2",
+  "input_at_O2_position": "OR_postresample",
+  "input_pixel_sha256": "17b2ef10004774daafb6ff4b27c070dce968052b2493a5d9b169e757b7b06f6c",
+  "intermediate_jpeg": {
+    "bytes": 142929,
+    "exif_present": false,
+    "format": "JPEG",
+    "height": 800,
+    "jpeg": {
+      "height": 800,
+      "sampling": "4:2:0",
+      "sampling_bytes": [
+        "0x22",
+        "0x11",
+        "0x11"
+      ],
+      "width": 800
+    },
+    "mode": "RGB",
+    "path": "stage1-q92.jpg",
+    "pixel_sha256": "617dd0948224fc4963ad5da4ffafb73b45d4a3fb53c75ad9a10ec4565cca5e09",
+    "sha256": "07701683de0847d61e0a364d342be03d46c94737b502e0bd5f5da95390ed353e",
+    "width": 800
+  },
+  "pre_final": {
+    "bytes": 748911,
+    "exif_present": false,
+    "format": "PNG",
+    "height": 800,
+    "mode": "RGB",
+    "path": "O4_preencode.png",
+    "pixel_sha256": "617dd0948224fc4963ad5da4ffafb73b45d4a3fb53c75ad9a10ec4565cca5e09",
+    "sha256": "805c245e18e773e61ef3be84291870e7377f0b3e5fa0896540e4f9e220ea7f03",
+    "width": 800
+  },
+  "quality_finish_report": null,
+  "tone_lock": {
+    "function": "max_cx_remint._histogram_match",
+    "pixel_sha256": "41a4ff4efc5a613f6085855111dfac2c1e9a95438be0f0117b9fa413c7514566",
+    "reference": "O0_source resized LANCZOS to delivery geometry",
+    "strength": 0.8
+  }
+}

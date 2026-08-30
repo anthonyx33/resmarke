@@ -1,0 +1,12 @@
+# Historical experiment archives are committed to GitHub for provenance, but
+# are not inputs to the web build. SlashBase's round-remint-1-01/full-corpus
+# source assets remain included.
+IMG-REMINT-v1/
+round-4d-1a/
+round-4d-1b-replay/
+round-4d-ar1/
+round-4d-ar2/
+round-4d-cam-1/
+round-remint-1-01/arms/
+round-remint-1-01/battery-live/
+round-remint-1-01/full-corpus/pairs/

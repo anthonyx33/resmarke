@@ -1,0 +1,71 @@
+{
+ "adjudication": "protected-EATR floor basis corrected: v2.1 Gate F is 0.98 x INCUMBENT (paired), not 0.98 absolute vs source; my acceptance mis-grounded it. Amendment issued pre-registration of any next stage, computed on frozen files only.",
+ "floors_corrected": {
+  "h1_energy": {
+   "floor": 0.342,
+   "value": 0.34773259312415083,
+   "pass": true
+  },
+  "protected_eatr_ratio_vs_A0": {
+   "floor": 0.98,
+   "cohort_min": 0.9468033818971067,
+   "pass": false
+  }
+ },
+ "cells": [
+  {
+   "image": "IMG-5",
+   "a0_protected_eatr": 0.7162310928775417,
+   "one01_protected_eatr": 0.7978231695321678,
+   "ratio_vs_A0": 1.1139186464620245,
+   "ratio_pass": true,
+   "a0_h1": 0.3986680700306379,
+   "one01_h1": 0.31625036845329463
+  },
+  {
+   "image": "IMG-6",
+   "a0_protected_eatr": 0.7263906545680427,
+   "one01_protected_eatr": 0.7263906545680427,
+   "ratio_vs_A0": 1.0,
+   "ratio_pass": true,
+   "a0_h1": 0.45040589397505465,
+   "one01_h1": 0.45040589397505465
+  },
+  {
+   "image": "IMG-7",
+   "a0_protected_eatr": 0.556317000029829,
+   "one01_protected_eatr": 0.556317000029829,
+   "ratio_vs_A0": 1.0,
+   "ratio_pass": true,
+   "a0_h1": 0.26601468537361245,
+   "one01_h1": 0.26601468537361245
+  },
+  {
+   "image": "IMG-8",
+   "a0_protected_eatr": 0.5674205277768172,
+   "one01_protected_eatr": 0.5674205277768172,
+   "ratio_vs_A0": 1.0,
+   "ratio_pass": true,
+   "a0_h1": 0.27684099881457475,
+   "one01_h1": 0.27684099881457475
+  },
+  {
+   "image": "IMG-9",
+   "a0_protected_eatr": 0.44296211767505245,
+   "one01_protected_eatr": 0.41939803106704376,
+   "ratio_vs_A0": 0.9468033818971067,
+   "ratio_pass": false,
+   "a0_h1": 0.333273815164376,
+   "one01_h1": 0.306212801807518
+  },
+  {
+   "image": "IMG-11",
+   "a0_protected_eatr": 0.5715096470611774,
+   "one01_protected_eatr": 0.6270460580214675,
+   "ratio_vs_A0": 1.0971749317721409,
+   "ratio_pass": true,
+   "a0_h1": 0.41674530456068987,
+   "one01_h1": 0.4706708103208508
+  }
+ ]
+}

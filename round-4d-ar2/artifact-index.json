@@ -1,0 +1,36 @@
+{
+  "files": [
+    {
+      "bytes": 2708,
+      "path": "C8_4D_AR2_MASTER_VERIFICATION.md",
+      "sha256": "984e66191114010766a3e555476fe35fe9a308b726f42c66a822ed887ade60e7"
+    },
+    {
+      "bytes": 1316,
+      "path": "C8_4D_AR2_SHORTLIST.md",
+      "sha256": "40e217e606c36d27989896a3b078f25ec166ffd4286f3a58bc6c065f6f538e8f"
+    },
+    {
+      "bytes": 8259,
+      "path": "C8_MASTER_PROMPT_4D_AR2_METRIC_DOMAIN_REANALYSIS.md",
+      "sha256": "b615303e31aff2676c01097ecc686d7e9efeef80b4d0819297ec0c5d9cfe12c2"
+    },
+    {
+      "bytes": 35884,
+      "path": "deepclean-worker/tools/round_4d_ar2_floors.py",
+      "sha256": "3b3c18d571be29a71825ca97c0c01705b2880c53ca3754064dd76fe0c38ae39f"
+    },
+    {
+      "bytes": 15901,
+      "path": "deepclean-worker/tools/test_round_4d_ar2_floors.py",
+      "sha256": "c53b1a01ed9725bf4e1367308bcaf86eaf65b667434fd3a522fcfa1888f663d3"
+    },
+    {
+      "bytes": 1347276,
+      "path": "round-4d-ar2/floors.json",
+      "sha256": "8aebdaf45cffcb2972985e253fe46fdd035cdbaf32bc9dfa78003d492d09cf86"
+    }
+  ],
+  "scope": "4D-AR2 floor reanalysis, shortlist report, master verification, authority, evaluator, and tests",
+  "self_exclusion": "artifact-index.json cannot hash itself"
+}

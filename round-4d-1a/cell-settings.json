@@ -1,0 +1,880 @@
+{
+ "jobs": {
+  "e286b8c6-6e58-4df2-b9f4-b2e5e7c19ca5": {
+   "seed": "lab-ctla1",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla1",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1250,
+     "height": 1250,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "cfca4ae3-5400-4a2c-a025-53271e40aaa7": {
+   "seed": "lab-ctla1",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla1",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 800,
+     "height": 800,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "f8b00791-fad5-4d51-a0ba-56a4b6bf98a7": {
+   "seed": "lab-ctla1",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla1",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1080,
+     "height": 1080,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "24ba6a88-6889-4704-b48c-3fe31c352b42": {
+   "seed": "lab-ctla1",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla1",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1080,
+     "height": 1080,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "3d92e342-ff7f-4ae8-9af6-9d778f42270f": {
+   "seed": "lab-ctla1",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla1",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1250,
+     "height": 1250,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "0e8faaa6-647b-4e8b-86e5-a8ad133d19ab": {
+   "seed": "lab-ctla1",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla1",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1250,
+     "height": 1250,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "2f4fa3d1-b871-4d60-a53a-29ef62abde9e": {
+   "seed": "lab-ctla2",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla2",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1250,
+     "height": 1250,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "58914774-02ed-45f0-a823-95dce8ad09db": {
+   "seed": "lab-ctla2",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla2",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 800,
+     "height": 800,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "5a702b8a-106d-4c98-928e-517bbaef8fe5": {
+   "seed": "lab-ctla2",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla2",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1080,
+     "height": 1080,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "d6fef99d-87ba-4cba-b8ed-63c3b9238c64": {
+   "seed": "lab-ctla2",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla2",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1080,
+     "height": 1080,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "ef2935bd-9d2c-4b62-8005-361377e6db95": {
+   "seed": "lab-ctla2",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla2",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1250,
+     "height": 1250,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  },
+  "4d01103a-865d-486f-869f-b56cbb9953b9": {
+   "seed": "lab-ctla2",
+   "remint": {
+    "engine_mode": "adaptive",
+    "wash_model": "qwen",
+    "strength": "deep",
+    "iphone_exif": true,
+    "metadata_mode": "device",
+    "deep_degrade_scale": 0.75,
+    "min_ssim": 0.85,
+    "color_restore": true,
+    "color_restore_strength": 0.8,
+    "jpeg_quality": 92,
+    "jpeg_subsampling": "4:2:0"
+   },
+   "finish": {
+    "preset": "strong",
+    "scale": null,
+    "overrides": {
+     "dither": 1,
+     "smoothness": 1.25,
+     "sharpen": 1
+    },
+    "material_clean": true,
+    "finish_mode": "adaptive"
+   },
+   "executed": {
+    "engine": "ds_remint_v8_8",
+    "profile": "max",
+    "effective_seed": "lab:lab-ctla2",
+    "output_mode": "stripped",
+    "finish": {
+     "mode": "quality-finish",
+     "preset": "strong",
+     "applied": true,
+     "scale": 1,
+     "width": 1250,
+     "height": 1250,
+     "overrides": {
+      "dither": 1,
+      "sharpen": 1,
+      "smoothness": 1.25
+     }
+    },
+    "finish_preset_selected": "strong",
+    "finish_qc_passed": true,
+    "finish_adaptive": {
+     "enabled": false,
+     "chosen": "strong",
+     "ai_threshold": 0.45
+    },
+    "stage1_encode": {
+     "quality": 92,
+     "subsampling": "4:2:0"
+    },
+    "qf_encode": {
+     "quality": 97,
+     "subsampling": "4:4:4",
+     "single_encode": true
+    },
+    "finalize_passthrough": true,
+    "finalize": {
+     "expert_refinement_applied": false,
+     "expert_refinement_passthrough": true,
+     "photo_naturalization_enabled": false,
+     "photo_naturalization_passthrough": true,
+     "photo_naturalization_final_jpeg_quality": null,
+     "photo_naturalization_final_jpeg_subsampling": "passthrough_single_encode"
+    },
+    "provenance": "extracted from deepclean_jobs.report (Supabase REST, owner session) by master engineer 2026-08-27; matches archived O3/O4/O5 checkpoint pixels"
+   },
+   "source": "frozen settingsIdentity PRESET_DEFINITIONS['config-a'] + worker DEFAULT_SETTINGS, cross-checked against CAM-1 engine reports"
+  }
+ }
+}

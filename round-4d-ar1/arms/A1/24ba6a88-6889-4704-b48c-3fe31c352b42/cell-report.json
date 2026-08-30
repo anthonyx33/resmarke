@@ -1,0 +1,220 @@
+{
+  "A4_candidate_report": null,
+  "A4_recovery_metrics": null,
+  "arm": {
+    "camera": false,
+    "composition": "OR -> tone-lock -> q92 -> QF -> q97",
+    "intermediate_jpeg": true,
+    "label": "camera-off",
+    "name": "A1",
+    "preservation": false,
+    "quality_finish": true
+  },
+  "cell": {
+    "image": "IMG-8",
+    "job": "24ba6a88-6889-4704-b48c-3fe31c352b42",
+    "seed": "lab-ctla1"
+  },
+  "delivered": {
+    "bytes": 517559,
+    "exif_present": false,
+    "format": "JPEG",
+    "height": 1080,
+    "jpeg": {
+      "height": 1080,
+      "sampling": "4:4:4",
+      "sampling_bytes": [
+        "0x11",
+        "0x11",
+        "0x11"
+      ],
+      "width": 1080
+    },
+    "mode": "RGB",
+    "path": "O5_final.jpg",
+    "pixel_sha256": "7c15625752effdb1b86b41420fe38d2e979fef35e23278caf33e8af4377f1cdf",
+    "sha256": "0b859b070cd514b0b006fa97a044c078428bc7d96365040becb3a715126c6884",
+    "width": 1080
+  },
+  "delivery_contract": {
+    "exif_present": false,
+    "optimize": true,
+    "output_mode": "stripped",
+    "quality": 97,
+    "sampling": "4:4:4",
+    "single_final_encode": true
+  },
+  "effective_seed": "lab:lab-ctla1",
+  "input_at_O2_position": "OR_postresample",
+  "input_pixel_sha256": "19a4dd16971cb65249abc176836a4fce052ebb90acab598ec9f9f4c1664a59c3",
+  "intermediate_jpeg": {
+    "bytes": 296521,
+    "exif_present": false,
+    "format": "JPEG",
+    "height": 1080,
+    "jpeg": {
+      "height": 1080,
+      "sampling": "4:2:0",
+      "sampling_bytes": [
+        "0x22",
+        "0x11",
+        "0x11"
+      ],
+      "width": 1080
+    },
+    "mode": "RGB",
+    "path": "stage1-q92.jpg",
+    "pixel_sha256": "7933a79d47797e75328a353f94f2a28d78ea0db4f149b9339c6990dbecf88a5d",
+    "sha256": "dd85b29661ddb7d783df77b96de239389809a27e98c95585fb0be03ae15ee5bd",
+    "width": 1080
+  },
+  "pre_final": {
+    "bytes": 1604799,
+    "exif_present": false,
+    "format": "PNG",
+    "height": 1080,
+    "mode": "RGB",
+    "path": "O4_preencode.png",
+    "pixel_sha256": "2e95a14d32053b5848de0ea8ec310a64c1793e0b777d9b284f12657ab86ec20d",
+    "sha256": "33b1104f187e8e22aa70616812404b609c1652df6271d956d2b5846014c78228",
+    "width": 1080
+  },
+  "quality_finish_report": {
+    "applied": true,
+    "checkpoint_errors": [],
+    "delivery_check": {
+      "height": 1080,
+      "sampling": "4:4:4",
+      "sampling_bytes": [
+        "0x11",
+        "0x11",
+        "0x11"
+      ],
+      "width": 1080
+    },
+    "encode": {
+      "quality": 97,
+      "single_encode": true,
+      "subsampling": "4:4:4"
+    },
+    "height": 1080,
+    "mode": "quality-finish",
+    "output_height": 1080,
+    "output_width": 1080,
+    "overrides": {
+      "dither": 1.0,
+      "sharpen": 1.0,
+      "smoothness": 1.25
+    },
+    "preset": "strong",
+    "qc": {
+      "b8_ok": true,
+      "banding_after": 0.762,
+      "banding_before": 0.702,
+      "banding_origin": "quantization",
+      "banding_worse": false,
+      "chroma_spread_after": 0.251,
+      "chroma_spread_before": 0.232,
+      "dithered": true,
+      "final_polish": {
+        "applied": true,
+        "coverage": 0.002,
+        "mean_gain_per_scale": [
+          0.684,
+          0.757,
+          0.871
+        ]
+      },
+      "flatness_delta": 0.0,
+      "gradient_alpha": 1.0,
+      "gradient_ladder_attempts": 1,
+      "gradient_rois": [
+        {
+          "banding": 1.118,
+          "coverage": 0.544,
+          "residual_rms": 0.404,
+          "rho1": 0.202,
+          "tile": "2,0"
+        },
+        {
+          "banding": 1.063,
+          "coverage": 0.379,
+          "residual_rms": 0.414,
+          "rho1": 0.202,
+          "tile": "1,0"
+        },
+        {
+          "banding": 1.205,
+          "coverage": 0.295,
+          "residual_rms": 0.403,
+          "rho1": 0.224,
+          "tile": "0,0"
+        },
+        {
+          "banding": 0.595,
+          "coverage": 0.048,
+          "residual_rms": 0.571,
+          "rho1": 0.311,
+          "tile": "1,2"
+        },
+        {
+          "banding": 1.681,
+          "coverage": 0.047,
+          "residual_rms": 0.412,
+          "rho1": 0.36,
+          "tile": "2,1"
+        },
+        {
+          "banding": 0.613,
+          "coverage": 0.042,
+          "residual_rms": 0.563,
+          "rho1": 0.309,
+          "tile": "2,2"
+        }
+      ],
+      "h1h0_ratio": 0.79,
+      "material_wall": {
+        "applied": false,
+        "cnf_after": 1.326,
+        "cnf_before": 0.0,
+        "correlation_length_px": 1,
+        "coverage": 0.002,
+        "enabled": true,
+        "h1h0": 1.001,
+        "reason": "below_threshold_or_no_material",
+        "rho1": 0.152,
+        "rms_after": 0.328,
+        "rms_before": 0.0,
+        "would_trigger": false
+      },
+      "noise_floor_ratio": 0.901,
+      "passed": true,
+      "reference": {
+        "edge_acutance_ratio": 0.908,
+        "edge_width_ratio_est": 1.101,
+        "ms_ssim": 0.9704,
+        "texture_detail_transfer": 0.968
+      },
+      "residual_rms": 0.428,
+      "rho1": 0.2007,
+      "ringing": 0.0,
+      "sharpen_retry": false,
+      "ssim": 0.9998,
+      "staircase_index_jpeg": 0.785,
+      "staircase_reconstructed": false,
+      "step_fraction_8bit": 0.39776,
+      "step_fraction_float": 0.22893,
+      "step_fraction_jpeg": 0.34373
+    },
+    "runtime_ms": 1279,
+    "scale": 1.0,
+    "standalone_jpeg": true,
+    "width": 1080
+  },
+  "tone_lock": {
+    "function": "max_cx_remint._histogram_match",
+    "pixel_sha256": "67b5ab7e06c3643c75ac682c8484a2e5c778e790f313299400dfd40bbd1f4811",
+    "reference": "O0_source resized LANCZOS to delivery geometry",
+    "strength": 0.8
+  }
+}

@@ -1,0 +1,135 @@
+{
+ "all_mean": 0.098217,
+ "cells": [
+  {
+   "B_job": "cdc39738-3f0c-4260-809d-12b60854acd5",
+   "O2_sha": "d0e52004fd6a70a058a36057ffc5a9510b8170edb917f7eba7f4fe77e70a8c55",
+   "O5_sha": "3ae2fd0e84bb4bedb5d74605d08abd6fc9c939b44f4dbfc3582e5898bcfdf75b",
+   "dEATR": -0.0617,
+   "dHFTR_H1": -0.0686,
+   "image": "IMG-5",
+   "loss": 0.0686,
+   "seed": "lab-ctla1"
+  },
+  {
+   "B_job": "fb8e1d63-bcc8-4a4f-a770-34be1d9ee62d",
+   "O2_sha": "a3edf07c1b84146bc6a6c3632e6a3d129bcac0030109204ac1a200fb0d4ae38b",
+   "O5_sha": "59a5750a7f65e996b30c3c72e929e61702dbe37a7e56a086098b102fe7fcc027",
+   "dEATR": -0.1876,
+   "dHFTR_H1": -0.188,
+   "image": "IMG-6",
+   "loss": 0.188,
+   "seed": "lab-ctla1"
+  },
+  {
+   "B_job": "b5bdd673-1fef-4cb5-80b6-946900e0331a",
+   "O2_sha": "f59a0c49753014045119f68f3f6c55171d02f9b858811b81428f6d53931064f5",
+   "O5_sha": "6b22cb5fd8a4405c4ef07fb02e684193d49b5e1dba32d6d831b2e0faad7ee15d",
+   "dEATR": -0.0737,
+   "dHFTR_H1": -0.0749,
+   "image": "IMG-7",
+   "loss": 0.0749,
+   "seed": "lab-ctla1"
+  },
+  {
+   "B_job": "b7c88690-6e2d-4b83-8d5c-27597c22c329",
+   "O2_sha": "01f25cbf1a0447ffbe2393d1c1d6dd7095dbe6d6d6ba5ecc49727b22b879b228",
+   "O5_sha": "c2e1e7d401325e9ca4eefe27d6b6556c36e196a2e6094d02ce32a66e1486fda3",
+   "dEATR": -0.0897,
+   "dHFTR_H1": -0.0902,
+   "image": "IMG-8",
+   "loss": 0.0902,
+   "seed": "lab-ctla1"
+  },
+  {
+   "B_job": "88cfd748-679e-4a01-8d7a-d380e61f6ba6",
+   "O2_sha": "16401e1c3c40d6db2df279272c7e05a872adfaca51c7658cd841f389d15e22e2",
+   "O5_sha": "324e7b0771739b44259f0a8ab0eedf834a7097449c3b3c033fba56c2ab2cb577",
+   "dEATR": -0.0538,
+   "dHFTR_H1": -0.0717,
+   "image": "IMG-9",
+   "loss": 0.0717,
+   "seed": "lab-ctla1"
+  },
+  {
+   "B_job": "33c5b63b-5b07-4f00-a796-0323d1ff29f3",
+   "O2_sha": "034a4d349ca971166cf02f461c67aab7f689e4b5180dede429b3b4318464dcc7",
+   "O5_sha": "adbd0fa2e753cc867c5025127e32047e1a67f257010fd552e2228b32ba099698",
+   "dEATR": -0.0732,
+   "dHFTR_H1": -0.0957,
+   "image": "IMG-11",
+   "loss": 0.0957,
+   "seed": "lab-ctla1"
+  },
+  {
+   "B_job": "5bd6bc05-5763-4c45-b709-b2ecedab38c2",
+   "O2_sha": "66f86373955e0642639ae12bd99360e13e6d95cf31719473f28058d6ed1e7684",
+   "O5_sha": "d386bd2a03e49cf8ed7281c6802990401587a9c70f589ed940535d1db174199e",
+   "dEATR": -0.0633,
+   "dHFTR_H1": -0.0691,
+   "image": "IMG-5",
+   "loss": 0.0691,
+   "seed": "lab-ctla2"
+  },
+  {
+   "B_job": "ebd7f10c-538a-49c9-b3b3-c77e0771e5fa",
+   "O2_sha": "b289f2bdf8bf1f7c23f81b46d384cf436f6ec4c42dd6c77b2c358dcdc5e01879",
+   "O5_sha": "c1debbc919db0766f94f0a5abc0f3749c762e7665ee4e0e57028799989f5a4ac",
+   "dEATR": -0.1857,
+   "dHFTR_H1": -0.1883,
+   "image": "IMG-6",
+   "loss": 0.1883,
+   "seed": "lab-ctla2"
+  },
+  {
+   "B_job": "f1e03428-3a1e-4c0d-9626-7c2f4220a770",
+   "O2_sha": "4668ff138c6e05437162c6b1dc9a9186ded695349b9f9163901a68a6cfc65896",
+   "O5_sha": "318ebb1a92aa4a98d56ad4b7fcb293bfa20ea3a7cbad4f338cd909467c2c4bb7",
+   "dEATR": -0.0508,
+   "dHFTR_H1": -0.0701,
+   "image": "IMG-9",
+   "loss": 0.0701,
+   "seed": "lab-ctla2"
+  },
+  {
+   "B_job": "963c40d7-4ea5-4fe4-a56e-fc84fbd97dd6",
+   "O2_sha": "56e256fe6386d32ae7086c2a974a7a56942bf4eae525876fb739fac72d0762b9",
+   "O5_sha": "2a122fd646457a588ab6158918fe214b5fabd37484ee06728e44fd9f1c6411be",
+   "dEATR": -0.0723,
+   "dHFTR_H1": -0.0967,
+   "image": "IMG-11",
+   "loss": 0.0967,
+   "seed": "lab-ctla2"
+  },
+  {
+   "B_job": "c526e593-4a41-409e-8700-e6e825939409",
+   "O2_sha": "2d880f610bae0292cb1e3eeface8b0166e57fc9faed150f82f53deb170eed39b",
+   "O5_sha": "f78e0b0271a6c4fafbc07f3e244cf7350c837006e8679dee33bd1833b8287823",
+   "dEATR": -0.0735,
+   "dHFTR_H1": -0.075,
+   "image": "IMG-7",
+   "loss": 0.075,
+   "seed": "lab-ctla2"
+  },
+  {
+   "B_job": "ded27f0f-011d-49ce-93a3-cf4e1c0d1b00",
+   "O2_sha": "6ec0e302805e83cf6f1b05eee3de41c1d8178df03bc843b9da3a00d65fefe523",
+   "O5_sha": "1d41498f1b110eafdc053b7361103bda1645ccef28cc991ccae27bd9404c8e6f",
+   "dEATR": -0.0897,
+   "dHFTR_H1": -0.0903,
+   "image": "IMG-8",
+   "loss": 0.0903,
+   "seed": "lab-ctla2"
+  }
+ ],
+ "formula": "combined transition-loss scalar, max(|min(dEATR,0)|,|min(dHFTR_H1,0)|), O2_precamera -> O5_final, geometry-matched references, 5 positional bands averaged",
+ "frozen_at": "2026-08-27",
+ "gate_g2_denominator": 0.098217,
+ "gate_g3_threshold": 0.07951875,
+ "hard_subset": "IMG-5/6/9/11 x two seeds (8 cells)",
+ "metric_source": "frozen checkpoint_attribution recipe (transition_loss in round_4d_cam_1_gates.py)",
+ "pair_cells": 12,
+ "population": "4D-1a v3 screening set = six sentinels x two seeds (12 B/C pairs)",
+ "subset_mean": 0.106025,
+ "well_conditioned": true
+}
