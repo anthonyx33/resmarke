@@ -1,0 +1,580 @@
+{
+  "per_image_best": {
+    "IMG-1": {
+      "all": {
+        "Config 1A": 0.996132,
+        "Config 2B": 0.998485,
+        "Config 3C": 0.999272,
+        "Config A": 0.987332,
+        "ReMint 1.01": 0.987332
+      },
+      "best_ai": 0.987332,
+      "best_preset": "Config A"
+    },
+    "IMG-10": {
+      "all": {
+        "Config 1A": 0.004154,
+        "Config 2B": 0.008184,
+        "Config 3C": 0.007064,
+        "Config A": 0.00274,
+        "ReMint 1.01": 0.015009
+      },
+      "best_ai": 0.00274,
+      "best_preset": "Config A"
+    },
+    "IMG-11": {
+      "all": {
+        "Config 1A": 0.879782,
+        "Config 2B": 0.791454,
+        "Config 3C": 0.937536,
+        "Config A": 0.535292,
+        "ReMint 1.01": 0.946219
+      },
+      "best_ai": 0.535292,
+      "best_preset": "Config A"
+    },
+    "IMG-2": {
+      "all": {
+        "Config 1A": 0.965115,
+        "Config 2B": 0.991327,
+        "Config 3C": 0.998177,
+        "Config A": 0.820858,
+        "ReMint 1.01": 0.820858
+      },
+      "best_ai": 0.820858,
+      "best_preset": "Config A"
+    },
+    "IMG-3": {
+      "all": {
+        "Config 1A": 0.99892,
+        "Config 2B": 0.999848,
+        "Config 3C": 0.99987,
+        "Config A": 0.998974,
+        "ReMint 1.01": 0.998974
+      },
+      "best_ai": 0.99892,
+      "best_preset": "Config 1A"
+    },
+    "IMG-4": {
+      "all": {
+        "Config 1A": 0.998673,
+        "Config 2B": 0.983265,
+        "Config 3C": 0.999214,
+        "Config A": 0.958163,
+        "ReMint 1.01": 0.958163
+      },
+      "best_ai": 0.958163,
+      "best_preset": "Config A"
+    },
+    "IMG-5": {
+      "all": {
+        "Config 1A": 0.256401,
+        "Config 2B": 0.99739,
+        "Config 3C": 0.728938,
+        "Config A": 0.978127,
+        "ReMint 1.01": 0.959924
+      },
+      "best_ai": 0.256401,
+      "best_preset": "Config 1A"
+    },
+    "IMG-6": {
+      "all": {
+        "Config 1A": 0.39297,
+        "Config 2B": 0.779912,
+        "Config 3C": 0.894089,
+        "Config A": 0.164072,
+        "ReMint 1.01": 0.164072
+      },
+      "best_ai": 0.164072,
+      "best_preset": "Config A"
+    },
+    "IMG-7": {
+      "all": {
+        "Config 1A": 0.076845,
+        "Config 2B": 0.302829,
+        "Config 3C": 0.713742,
+        "Config A": 0.096325,
+        "ReMint 1.01": 0.096325
+      },
+      "best_ai": 0.076845,
+      "best_preset": "Config 1A"
+    },
+    "IMG-8": {
+      "all": {
+        "Config 1A": 0.835444,
+        "Config 2B": 0.665905,
+        "Config 3C": 0.895228,
+        "Config A": 0.463327,
+        "ReMint 1.01": 0.463327
+      },
+      "best_ai": 0.463327,
+      "best_preset": "Config A"
+    },
+    "IMG-9": {
+      "all": {
+        "Config 1A": 0.97478,
+        "Config 2B": 0.202236,
+        "Config 3C": 0.993085,
+        "Config A": 0.056723,
+        "ReMint 1.01": 0.220075
+      },
+      "best_ai": 0.056723,
+      "best_preset": "Config A"
+    }
+  },
+  "per_preset": {
+    "Config 1A": {
+      "border_count": 1,
+      "clear_count": 2,
+      "images": {
+        "IMG-1": {
+          "flux_family": 0.007131,
+          "og_ai": 0.99999,
+          "rm_ai": 0.996132,
+          "top_source": "ernie",
+          "verdict": "FAIL"
+        },
+        "IMG-10": {
+          "flux_family": 0.000456,
+          "og_ai": 0.999889,
+          "rm_ai": 0.004154,
+          "top_source": "ideogram",
+          "verdict": "CLEAR"
+        },
+        "IMG-11": {
+          "flux_family": 0.072663,
+          "og_ai": 0.99256,
+          "rm_ai": 0.879782,
+          "top_source": "wan",
+          "verdict": "FAIL"
+        },
+        "IMG-2": {
+          "flux_family": 0.07675,
+          "og_ai": 0.999825,
+          "rm_ai": 0.965115,
+          "top_source": "kling",
+          "verdict": "FAIL"
+        },
+        "IMG-3": {
+          "flux_family": 0.008338,
+          "og_ai": 0.999937,
+          "rm_ai": 0.99892,
+          "top_source": "stablediffusion",
+          "verdict": "FAIL"
+        },
+        "IMG-4": {
+          "flux_family": 0.044714,
+          "og_ai": 0.999633,
+          "rm_ai": 0.998673,
+          "top_source": "ernie",
+          "verdict": "FAIL"
+        },
+        "IMG-5": {
+          "flux_family": 0.327948,
+          "og_ai": 0.999978,
+          "rm_ai": 0.256401,
+          "top_source": "flux",
+          "verdict": "BORDER"
+        },
+        "IMG-6": {
+          "flux_family": 0.542565,
+          "og_ai": 0.994176,
+          "rm_ai": 0.39297,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-7": {
+          "flux_family": 0.160421,
+          "og_ai": 0.999796,
+          "rm_ai": 0.076845,
+          "top_source": "flux",
+          "verdict": "CLEAR"
+        },
+        "IMG-8": {
+          "flux_family": 0.662801,
+          "og_ai": 0.999895,
+          "rm_ai": 0.835444,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-9": {
+          "flux_family": 0.001187,
+          "og_ai": 0.99997,
+          "rm_ai": 0.97478,
+          "top_source": "gemini3",
+          "verdict": "FAIL"
+        }
+      },
+      "median_ai": 0.879782,
+      "non_amplification_count": 11,
+      "threshold_pass_count": 2,
+      "threshold_pass_images": [
+        "IMG-10",
+        "IMG-7"
+      ]
+    },
+    "Config 2B": {
+      "border_count": 1,
+      "clear_count": 1,
+      "images": {
+        "IMG-1": {
+          "flux_family": 0.115013,
+          "og_ai": 0.99999,
+          "rm_ai": 0.998485,
+          "top_source": "ernie",
+          "verdict": "FAIL"
+        },
+        "IMG-10": {
+          "flux_family": 0.000628,
+          "og_ai": 0.999889,
+          "rm_ai": 0.008184,
+          "top_source": "adobefirefly",
+          "verdict": "CLEAR"
+        },
+        "IMG-11": {
+          "flux_family": 0.164094,
+          "og_ai": 0.99256,
+          "rm_ai": 0.791454,
+          "top_source": "wan",
+          "verdict": "FAIL"
+        },
+        "IMG-2": {
+          "flux_family": 0.038912,
+          "og_ai": 0.999825,
+          "rm_ai": 0.991327,
+          "top_source": "krea",
+          "verdict": "FAIL"
+        },
+        "IMG-3": {
+          "flux_family": 0.006446,
+          "og_ai": 0.999937,
+          "rm_ai": 0.999848,
+          "top_source": "stablediffusion",
+          "verdict": "FAIL"
+        },
+        "IMG-4": {
+          "flux_family": 0.061333,
+          "og_ai": 0.999633,
+          "rm_ai": 0.983265,
+          "top_source": "kling",
+          "verdict": "FAIL"
+        },
+        "IMG-5": {
+          "flux_family": 0.021684,
+          "og_ai": 0.999978,
+          "rm_ai": 0.99739,
+          "top_source": "wan",
+          "verdict": "FAIL"
+        },
+        "IMG-6": {
+          "flux_family": 0.800043,
+          "og_ai": 0.994176,
+          "rm_ai": 0.779912,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-7": {
+          "flux_family": 0.319721,
+          "og_ai": 0.999796,
+          "rm_ai": 0.302829,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-8": {
+          "flux_family": 0.381874,
+          "og_ai": 0.999895,
+          "rm_ai": 0.665905,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-9": {
+          "flux_family": 0.003175,
+          "og_ai": 0.99997,
+          "rm_ai": 0.202236,
+          "top_source": "gemini3",
+          "verdict": "BORDER"
+        }
+      },
+      "median_ai": 0.791454,
+      "non_amplification_count": 11,
+      "threshold_pass_count": 2,
+      "threshold_pass_images": [
+        "IMG-10",
+        "IMG-9"
+      ]
+    },
+    "Config 3C": {
+      "border_count": 0,
+      "clear_count": 1,
+      "images": {
+        "IMG-1": {
+          "flux_family": 0.008135,
+          "og_ai": 0.99999,
+          "rm_ai": 0.999272,
+          "top_source": "ernie",
+          "verdict": "FAIL"
+        },
+        "IMG-10": {
+          "flux_family": 0.000492,
+          "og_ai": 0.999889,
+          "rm_ai": 0.007064,
+          "top_source": "ideogram",
+          "verdict": "CLEAR"
+        },
+        "IMG-11": {
+          "flux_family": 0.070526,
+          "og_ai": 0.99256,
+          "rm_ai": 0.937536,
+          "top_source": "wan",
+          "verdict": "FAIL"
+        },
+        "IMG-2": {
+          "flux_family": 0.039997,
+          "og_ai": 0.999825,
+          "rm_ai": 0.998177,
+          "top_source": "ernie",
+          "verdict": "FAIL"
+        },
+        "IMG-3": {
+          "flux_family": 0.004134,
+          "og_ai": 0.999937,
+          "rm_ai": 0.99987,
+          "top_source": "mai",
+          "verdict": "FAIL"
+        },
+        "IMG-4": {
+          "flux_family": 0.031601,
+          "og_ai": 0.999633,
+          "rm_ai": 0.999214,
+          "top_source": "ernie",
+          "verdict": "FAIL"
+        },
+        "IMG-5": {
+          "flux_family": 0.717807,
+          "og_ai": 0.999978,
+          "rm_ai": 0.728938,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-6": {
+          "flux_family": 0.911588,
+          "og_ai": 0.994176,
+          "rm_ai": 0.894089,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-7": {
+          "flux_family": 0.155313,
+          "og_ai": 0.999796,
+          "rm_ai": 0.713742,
+          "top_source": "gemini3",
+          "verdict": "FAIL"
+        },
+        "IMG-8": {
+          "flux_family": 0.303073,
+          "og_ai": 0.999895,
+          "rm_ai": 0.895228,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-9": {
+          "flux_family": 0.000698,
+          "og_ai": 0.99997,
+          "rm_ai": 0.993085,
+          "top_source": "gemini3",
+          "verdict": "FAIL"
+        }
+      },
+      "median_ai": 0.937536,
+      "non_amplification_count": 11,
+      "threshold_pass_count": 1,
+      "threshold_pass_images": [
+        "IMG-10"
+      ]
+    },
+    "Config A": {
+      "border_count": 1,
+      "clear_count": 3,
+      "images": {
+        "IMG-1": {
+          "flux_family": 0.173757,
+          "og_ai": 0.99999,
+          "rm_ai": 0.987332,
+          "top_source": "bria",
+          "verdict": "FAIL"
+        },
+        "IMG-10": {
+          "flux_family": 0.000339,
+          "og_ai": 0.999889,
+          "rm_ai": 0.00274,
+          "top_source": "flux2",
+          "verdict": "CLEAR"
+        },
+        "IMG-11": {
+          "flux_family": 0.168566,
+          "og_ai": 0.99256,
+          "rm_ai": 0.535292,
+          "top_source": "wan",
+          "verdict": "FAIL"
+        },
+        "IMG-2": {
+          "flux_family": 0.09936,
+          "og_ai": 0.999825,
+          "rm_ai": 0.820858,
+          "top_source": "stablediffusion",
+          "verdict": "FAIL"
+        },
+        "IMG-3": {
+          "flux_family": 0.005264,
+          "og_ai": 0.999937,
+          "rm_ai": 0.998974,
+          "top_source": "stablediffusion",
+          "verdict": "FAIL"
+        },
+        "IMG-4": {
+          "flux_family": 0.085708,
+          "og_ai": 0.999633,
+          "rm_ai": 0.958163,
+          "top_source": "kling",
+          "verdict": "FAIL"
+        },
+        "IMG-5": {
+          "flux_family": 0.103089,
+          "og_ai": 0.999978,
+          "rm_ai": 0.978127,
+          "top_source": "wan",
+          "verdict": "FAIL"
+        },
+        "IMG-6": {
+          "flux_family": 0.234163,
+          "og_ai": 0.994176,
+          "rm_ai": 0.164072,
+          "top_source": "flux",
+          "verdict": "BORDER"
+        },
+        "IMG-7": {
+          "flux_family": 0.151713,
+          "og_ai": 0.999796,
+          "rm_ai": 0.096325,
+          "top_source": "flux",
+          "verdict": "CLEAR"
+        },
+        "IMG-8": {
+          "flux_family": 0.512653,
+          "og_ai": 0.999895,
+          "rm_ai": 0.463327,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-9": {
+          "flux_family": 0.002093,
+          "og_ai": 0.99997,
+          "rm_ai": 0.056723,
+          "top_source": "gemini3",
+          "verdict": "CLEAR"
+        }
+      },
+      "median_ai": 0.535292,
+      "non_amplification_count": 11,
+      "threshold_pass_count": 4,
+      "threshold_pass_images": [
+        "IMG-10",
+        "IMG-6",
+        "IMG-7",
+        "IMG-9"
+      ]
+    },
+    "ReMint 1.01": {
+      "border_count": 2,
+      "clear_count": 2,
+      "images": {
+        "IMG-1": {
+          "flux_family": 0.173757,
+          "og_ai": 0.99999,
+          "rm_ai": 0.987332,
+          "top_source": "bria",
+          "verdict": "FAIL"
+        },
+        "IMG-10": {
+          "flux_family": 0.00053,
+          "og_ai": 0.999889,
+          "rm_ai": 0.015009,
+          "top_source": "adobefirefly",
+          "verdict": "CLEAR"
+        },
+        "IMG-11": {
+          "flux_family": 0.271642,
+          "og_ai": 0.99256,
+          "rm_ai": 0.946219,
+          "top_source": "wan",
+          "verdict": "FAIL"
+        },
+        "IMG-2": {
+          "flux_family": 0.09936,
+          "og_ai": 0.999825,
+          "rm_ai": 0.820858,
+          "top_source": "stablediffusion",
+          "verdict": "FAIL"
+        },
+        "IMG-3": {
+          "flux_family": 0.005264,
+          "og_ai": 0.999937,
+          "rm_ai": 0.998974,
+          "top_source": "stablediffusion",
+          "verdict": "FAIL"
+        },
+        "IMG-4": {
+          "flux_family": 0.085708,
+          "og_ai": 0.999633,
+          "rm_ai": 0.958163,
+          "top_source": "kling",
+          "verdict": "FAIL"
+        },
+        "IMG-5": {
+          "flux_family": 0.175658,
+          "og_ai": 0.999978,
+          "rm_ai": 0.959924,
+          "top_source": "wan",
+          "verdict": "FAIL"
+        },
+        "IMG-6": {
+          "flux_family": 0.234163,
+          "og_ai": 0.994176,
+          "rm_ai": 0.164072,
+          "top_source": "flux",
+          "verdict": "BORDER"
+        },
+        "IMG-7": {
+          "flux_family": 0.151713,
+          "og_ai": 0.999796,
+          "rm_ai": 0.096325,
+          "top_source": "flux",
+          "verdict": "CLEAR"
+        },
+        "IMG-8": {
+          "flux_family": 0.512653,
+          "og_ai": 0.999895,
+          "rm_ai": 0.463327,
+          "top_source": "flux",
+          "verdict": "FAIL"
+        },
+        "IMG-9": {
+          "flux_family": 0.003943,
+          "og_ai": 0.99997,
+          "rm_ai": 0.220075,
+          "top_source": "gemini3",
+          "verdict": "BORDER"
+        }
+      },
+      "median_ai": 0.820858,
+      "non_amplification_count": 11,
+      "threshold_pass_count": 4,
+      "threshold_pass_images": [
+        "IMG-10",
+        "IMG-6",
+        "IMG-7",
+        "IMG-9"
+      ]
+    }
+  }
+}

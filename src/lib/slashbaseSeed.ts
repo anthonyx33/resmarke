@@ -1,8 +1,8 @@
 export const SLASHBASE_PRESETS = [
   "Config A",
-  "1A",
-  "2B",
-  "3C",
+  "Config 1A",
+  "Config 2B",
+  "Config 3C",
   "ReMint 1.01",
 ] as const;
 
@@ -26,7 +26,7 @@ export type SlashBaseSeedRow = {
   imageName: string;
   sequenceCode: string;
   side: SlashBaseSide;
-  preset: "ReMint 1.01";
+  preset: SlashBasePreset;
   timestamp: string;
   grade: SlashBaseGrade;
 };
@@ -64,13 +64,15 @@ export function parseSlashBaseSeedLedger(
   const sequenceCodes = new Map<string, string>();
   for (const record of records) {
     if (record.event !== "cell_complete") continue;
+    const preset = presetOf(record);
     const imageName = requiredString(record.image, "cell image");
     const sequenceCode = requiredString(record.settings_code, "settings code");
-    const existing = sequenceCodes.get(imageName);
+    const key = `${preset}:${imageName}`;
+    const existing = sequenceCodes.get(key);
     if (existing && existing !== sequenceCode) {
-      throw new Error(`SlashBase import found conflicting settings codes for ${imageName}.`);
+      throw new Error(`SlashBase import found conflicting settings codes for ${preset} ${imageName}.`);
     }
-    sequenceCodes.set(imageName, sequenceCode);
+    sequenceCodes.set(key, sequenceCode);
   }
 
   const rows = gradeRecords.map((record) => importGradeRow(record, sequenceCodes));
@@ -82,20 +84,21 @@ export function parseSlashBaseSeedLedger(
   }
 
   const identities = new Set<string>();
-  const sidesByImage = new Map<string, Set<SlashBaseSide>>();
+  const sidesByKey = new Map<string, Set<SlashBaseSide>>();
   for (const row of rows) {
-    const identity = `${row.imageName}:${row.side}`;
+    const identity = `${row.preset}:${row.imageName}:${row.side}`;
     if (identities.has(identity)) {
       throw new Error(`SlashBase import found a duplicate ${identity} row.`);
     }
     identities.add(identity);
-    const sides = sidesByImage.get(row.imageName) ?? new Set<SlashBaseSide>();
+    const key = `${row.preset}:${row.imageName}`;
+    const sides = sidesByKey.get(key) ?? new Set<SlashBaseSide>();
     sides.add(row.side);
-    sidesByImage.set(row.imageName, sides);
+    sidesByKey.set(key, sides);
   }
-  for (const [imageName, sides] of sidesByImage) {
+  for (const [key, sides] of sidesByKey) {
     if (!sides.has("original") || !sides.has("delivered")) {
-      throw new Error(`SlashBase import requires an original and delivery for ${imageName}.`);
+      throw new Error(`SlashBase import requires an original and delivery for ${key}.`);
     }
   }
 
@@ -176,6 +179,7 @@ function importGradeRow(
   if (group !== "OG" && group !== "RM") {
     throw new Error(`SlashBase import found an invalid group for ${imageName}.`);
   }
+  const preset = presetOf(record);
   if (record.mock !== false) {
     throw new Error(`SlashBase requires an explicit real grade for ${imageName}.`);
   }
@@ -190,9 +194,9 @@ function importGradeRow(
   if (!VERDICTS.has(verdict)) {
     throw new Error(`SlashBase found an invalid verdict for ${imageName}.`);
   }
-  const sequenceCode = sequenceCodes.get(imageName);
+  const sequenceCode = sequenceCodes.get(`${preset}:${imageName}`);
   if (!sequenceCode?.startsWith("SEQ-")) {
-    throw new Error(`SlashBase is missing a SEQ code for ${imageName}.`);
+    throw new Error(`SlashBase is missing a SEQ code for ${preset} ${imageName}.`);
   }
 
   const timestamp = requiredString(record.timestamp, "timestamp");
@@ -205,7 +209,7 @@ function importGradeRow(
     imageName,
     sequenceCode,
     side: group === "OG" ? "original" : "delivered",
-    preset: "ReMint 1.01",
+    preset,
     timestamp,
     grade: {
       ai_probability: requiredProbability(record.ai_probability, "AI probability"),
@@ -221,6 +225,15 @@ function importGradeRow(
       verdict,
     },
   };
+}
+
+function presetOf(record: Record<string, unknown>): SlashBasePreset {
+  const value = record.preset;
+  if (value === undefined || value === null || value === "") return "ReMint 1.01";
+  if (typeof value !== "string" || !(SLASHBASE_PRESETS as readonly string[]).includes(value)) {
+    throw new Error(`SlashBase import found an invalid preset: ${String(value)}.`);
+  }
+  return value as SlashBasePreset;
 }
 
 function parseJsonl(text: string): Record<string, unknown>[] {

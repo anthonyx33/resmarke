@@ -46,7 +46,10 @@ export default function SlashBaseApp() {
   const [gradingCardId, setGradingCardId] = useState("");
   const [cardNotice, setCardNotice] = useState<Record<string, string>>({});
 
-  const cards = preset === "ReMint 1.01" ? slashBaseCards : [];
+  const cards = useMemo(
+    () => slashBaseCards.filter((card) => card.preset === preset),
+    [preset],
+  );
   const latestGrades = useMemo(() => {
     const latest = new Map<string, DetectionOnlyLedgerRow>();
     for (const row of savedGrades) latest.set(row.file_id, row);

@@ -1,0 +1,1933 @@
+{
+  "cohort_summary": {
+    "Config 1A": {
+      "band_residual": {
+        "h0_rms": 0.033479,
+        "h1_rms": 0.009904,
+        "h2_rms": 0.00945
+      },
+      "cell_count": 11,
+      "eatr_p95": 0.638193,
+      "global": {
+        "h0_energy_ratio": 0.130713,
+        "h1_energy_ratio": 0.385339,
+        "h2_energy_ratio": 0.667219
+      },
+      "protected_eatr_absolute_min": 0.31895,
+      "staircase": 0.464526,
+      "texture_h1_energy": 0.290435,
+      "texture_residual": {
+        "chroma_rms_255": 18.573506,
+        "luma_rms_255": 18.693214,
+        "rho1": 0.62876
+      }
+    },
+    "Config 2B": {
+      "band_residual": {
+        "h0_rms": 0.041391,
+        "h1_rms": 0.01124,
+        "h2_rms": 0.013038
+      },
+      "cell_count": 11,
+      "eatr_p95": 0.711648,
+      "global": {
+        "h0_energy_ratio": 0.247407,
+        "h1_energy_ratio": 0.487319,
+        "h2_energy_ratio": 0.780591
+      },
+      "protected_eatr_absolute_min": 0.462255,
+      "staircase": 0.414364,
+      "texture_h1_energy": 0.403281,
+      "texture_residual": {
+        "chroma_rms_255": 23.38475,
+        "luma_rms_255": 24.025563,
+        "rho1": 0.716988
+      }
+    },
+    "Config 3C": {
+      "band_residual": {
+        "h0_rms": 0.033835,
+        "h1_rms": 0.009992,
+        "h2_rms": 0.009455
+      },
+      "cell_count": 11,
+      "eatr_p95": 0.660436,
+      "global": {
+        "h0_energy_ratio": 0.211197,
+        "h1_energy_ratio": 0.418473,
+        "h2_energy_ratio": 0.672773
+      },
+      "protected_eatr_absolute_min": 0.343237,
+      "staircase": 0.417677,
+      "texture_h1_energy": 0.313303,
+      "texture_residual": {
+        "chroma_rms_255": 19.444388,
+        "luma_rms_255": 18.782822,
+        "rho1": 0.616749
+      }
+    },
+    "Config A": {
+      "band_residual": {
+        "h0_rms": 0.041022,
+        "h1_rms": 0.011113,
+        "h2_rms": 0.012991
+      },
+      "cell_count": 11,
+      "eatr_p95": 0.691386,
+      "global": {
+        "h0_energy_ratio": 0.162196,
+        "h1_energy_ratio": 0.455002,
+        "h2_energy_ratio": 0.774995
+      },
+      "protected_eatr_absolute_min": 0.442962,
+      "staircase": 0.459759,
+      "texture_h1_energy": 0.384475,
+      "texture_residual": {
+        "chroma_rms_255": 22.798128,
+        "luma_rms_255": 23.900619,
+        "rho1": 0.725397
+      }
+    },
+    "ReMint 1.01": {
+      "band_residual": {
+        "h0_rms": 0.041865,
+        "h1_rms": 0.010817,
+        "h2_rms": 0.013353
+      },
+      "cell_count": 11,
+      "eatr_p95": 0.690867,
+      "global": {
+        "h0_energy_ratio": 0.158957,
+        "h1_energy_ratio": 0.450879,
+        "h2_energy_ratio": 0.782859
+      },
+      "protected_eatr_absolute_min": 0.419398,
+      "staircase": 0.462897,
+      "texture_h1_energy": 0.379223,
+      "texture_residual": {
+        "chroma_rms_255": 23.22506,
+        "luma_rms_255": 24.570646,
+        "rho1": 0.749299
+      }
+    }
+  },
+  "files": [
+    {
+      "delivered_sha256": "b1ee85bbb274968542ca4f3878d4bf9aed10b096f7f9348cf4c290b86c422b80",
+      "file": "A_IMG-1_lab-ctla1.jpg",
+      "image": "IMG-1",
+      "metrics": {
+        "eatr_p95": 0.8682754357142948,
+        "global": {
+          "h0_energy_ratio": 0.25758559208426773,
+          "h1_energy_ratio": 0.614567828615309,
+          "h2_energy_ratio": 0.7969854030548941
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.688180643084708,
+        "protected_eatr_by_roi": [
+          0.688180643084708
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.0283279827472436,
+          "h1_rms": 0.007134841907230079,
+          "h2_rms": 0.009818145307235486
+        },
+        "staircase_attribution_recipe": 0.4833341949492077,
+        "texture_h1_energy": 0.49080980974291893,
+        "texture_residual": {
+          "chroma_rms_255": 15.797161370218769,
+          "luma_rms_255": 16.058851334336488,
+          "rho1": 0.8938629694132515
+        },
+        "width": 1024
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "922df16652e0ac2bba97ce670079a40667ddd0f78a2f7dafda4f9d1e432fb459",
+      "file": "A_IMG-2_lab-ctla1.jpg",
+      "image": "IMG-2",
+      "metrics": {
+        "eatr_p95": 0.8739995037255529,
+        "global": {
+          "h0_energy_ratio": 0.23046844491533616,
+          "h1_energy_ratio": 0.6782719141866561,
+          "h2_energy_ratio": 0.8663164992028328
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6938049158241847,
+        "protected_eatr_by_roi": [
+          0.6938049158241847
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.025444398593713616,
+          "h1_rms": 0.006335084779392743,
+          "h2_rms": 0.007945039207229306
+        },
+        "staircase_attribution_recipe": 0.49399433971314816,
+        "texture_h1_energy": 0.5478473348897946,
+        "texture_residual": {
+          "chroma_rms_255": 12.283140007965574,
+          "luma_rms_255": 12.434022825108807,
+          "rho1": 0.8904989013456094
+        },
+        "width": 1024
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "042a9dcd9cb4054a3f273d2be2e4c368a496d0bef83f388842a102d33d41718a",
+      "file": "A_IMG-3_lab-ctla1.jpg",
+      "image": "IMG-3",
+      "metrics": {
+        "eatr_p95": 0.7945716928560294,
+        "global": {
+          "h0_energy_ratio": 0.17647227074112237,
+          "h1_energy_ratio": 0.5461424631069223,
+          "h2_energy_ratio": 0.8280398646551053
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6619396536263293,
+        "protected_eatr_by_roi": [
+          0.6619396536263293
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.0342746213051668,
+          "h1_rms": 0.008128285880083796,
+          "h2_rms": 0.010952617099947371
+        },
+        "staircase_attribution_recipe": 0.48482309768271364,
+        "texture_h1_energy": 0.5139019265439226,
+        "texture_residual": {
+          "chroma_rms_255": 16.923095573597152,
+          "luma_rms_255": 17.30650054858693,
+          "rho1": 0.8729217896778846
+        },
+        "width": 1024
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "9336f2a4fc4c914cb0c75ef374dbfdf5f56be125be394512eb46594a57816aee",
+      "file": "A_IMG-4_lab-ctla1.jpg",
+      "image": "IMG-4",
+      "metrics": {
+        "eatr_p95": 0.7633910093634964,
+        "global": {
+          "h0_energy_ratio": 0.20460649787954122,
+          "h1_energy_ratio": 0.6120782422615483,
+          "h2_energy_ratio": 0.8114117713563588
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.7008145002068179,
+        "protected_eatr_by_roi": [
+          0.7008145002068179
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03133233433293905,
+          "h1_rms": 0.0076848990563301006,
+          "h2_rms": 0.009223261661060054
+        },
+        "staircase_attribution_recipe": 0.4545112697737085,
+        "texture_h1_energy": 0.5084930046635576,
+        "texture_residual": {
+          "chroma_rms_255": 9.46175729390481,
+          "luma_rms_255": 9.739305205029725,
+          "rho1": 0.7910643554070621
+        },
+        "width": 1024
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "07bcc5ef616e3bb0cc10d68e2270775dc543840dbe042f4d02612b1c0bcc67c5",
+      "file": "A_IMG-5_lab-ctla1.jpg",
+      "image": "IMG-5",
+      "metrics": {
+        "eatr_p95": 0.5688341338908851,
+        "global": {
+          "h0_energy_ratio": 0.07129343413346287,
+          "h1_energy_ratio": 0.3986680700306379,
+          "h2_energy_ratio": 0.8260846551916342
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.7162310928775417,
+        "protected_eatr_by_roi": [
+          0.7162310928775417
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04433045947782325,
+          "h1_rms": 0.011577355192303228,
+          "h2_rms": 0.012545861563412848
+        },
+        "staircase_attribution_recipe": 0.4491172397616503,
+        "texture_h1_energy": 0.3927650171139206,
+        "texture_residual": {
+          "chroma_rms_255": 15.029385849873915,
+          "luma_rms_255": 16.378884574082885,
+          "rho1": 0.5696444311116954
+        },
+        "width": 1250
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "0d23d2b9f3b3377c01ee4b40fbcfefec4af9a7abe6e4f09edf6dfd34dde45924",
+      "file": "A_IMG-6_lab-ctla1.jpg",
+      "image": "IMG-6",
+      "metrics": {
+        "eatr_p95": 0.661860138862399,
+        "global": {
+          "h0_energy_ratio": 0.1586191241968148,
+          "h1_energy_ratio": 0.45040589397505465,
+          "h2_energy_ratio": 0.6298503088800149
+        },
+        "height": 800,
+        "protected_eatr_absolute_min": 0.7263906545680427,
+        "protected_eatr_by_roi": [
+          0.7263906545680427
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.02954083845876496,
+          "h1_rms": 0.008548437761275484,
+          "h2_rms": 0.009446393861050117
+        },
+        "staircase_attribution_recipe": 0.4209514900139759,
+        "texture_h1_energy": 0.42353675256241824,
+        "texture_residual": {
+          "chroma_rms_255": 10.049171268951971,
+          "luma_rms_255": 9.936213219598244,
+          "rho1": 0.5085942167891081
+        },
+        "width": 800
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "12f2bdc4f35876966f25e257ab71f4ee2fc6cea8a6cf2a7faab88126c447860a",
+      "file": "A_IMG-7_lab-ctla1.jpg",
+      "image": "IMG-7",
+      "metrics": {
+        "eatr_p95": 0.5028024677440808,
+        "global": {
+          "h0_energy_ratio": 0.08122381755059507,
+          "h1_energy_ratio": 0.26601468537361245,
+          "h2_energy_ratio": 0.8130363520051775
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.556317000029829,
+        "protected_eatr_by_roi": [
+          0.556317000029829
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04904578939400911,
+          "h1_rms": 0.014124970829861935,
+          "h2_rms": 0.011846313268813377
+        },
+        "staircase_attribution_recipe": 0.43185755976386436,
+        "texture_h1_energy": 0.1842538471167013,
+        "texture_residual": {
+          "chroma_rms_255": 41.50341181390276,
+          "luma_rms_255": 44.77281816662758,
+          "rho1": 0.5076926401350513
+        },
+        "width": 1080
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "59a899714baff8ad19f69a0e0f285d62ac4c17bb62182e9881827068fbabf4dd",
+      "file": "A_IMG-8_lab-ctla1.jpg",
+      "image": "IMG-8",
+      "metrics": {
+        "eatr_p95": 0.5784022551000608,
+        "global": {
+          "h0_energy_ratio": 0.10310516952230442,
+          "h1_energy_ratio": 0.27684099881457475,
+          "h2_energy_ratio": 0.6596421200142942
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5674205277768172,
+        "protected_eatr_by_roi": [
+          0.5674205277768172
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03954730643755486,
+          "h1_rms": 0.012090165799964785,
+          "h2_rms": 0.011675533060244636
+        },
+        "staircase_attribution_recipe": 0.475953999727809,
+        "texture_h1_energy": 0.12679404668950317,
+        "texture_residual": {
+          "chroma_rms_255": 17.756571795482632,
+          "luma_rms_255": 18.942112983214788,
+          "rho1": 0.7809878515776727
+        },
+        "width": 1080
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "fcd0ed7d528c8a7b676a119017258cfdc80bddc8fbdbac3f227c293841302b56",
+      "file": "A_IMG-9_lab-ctla1.jpg",
+      "image": "IMG-9",
+      "metrics": {
+        "eatr_p95": 0.5922437998154205,
+        "global": {
+          "h0_energy_ratio": 0.09648771170267821,
+          "h1_energy_ratio": 0.333273815164376,
+          "h2_energy_ratio": 0.8302875129378547
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.44296211767505245,
+        "protected_eatr_by_roi": [
+          0.44296211767505245
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.07122031948928641,
+          "h1_rms": 0.01920136839926936,
+          "h2_rms": 0.02354090009734781
+        },
+        "staircase_attribution_recipe": 0.44418160965173475,
+        "texture_h1_energy": 0.29416313711739395,
+        "texture_residual": {
+          "chroma_rms_255": 46.71868909880831,
+          "luma_rms_255": 48.439936605828464,
+          "rho1": 0.6909670687409556
+        },
+        "width": 1250
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "d4b6e0690d19446d970301fb317e7b3e57ec5762877e2af80b34465f3abf5077",
+      "file": "A_IMG-10_lab-ctla1.jpg",
+      "image": "IMG-10",
+      "metrics": {
+        "eatr_p95": 0.7403164177253764,
+        "global": {
+          "h0_energy_ratio": 0.17262523312440484,
+          "h1_energy_ratio": 0.4120116524324673,
+          "h2_energy_ratio": 0.754442716951667
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.6940143302916761,
+        "protected_eatr_by_roi": [
+          0.6940143302916761
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04487577973492895,
+          "h1_rms": 0.01291785687413684,
+          "h2_rms": 0.015234687468680097
+        },
+        "staircase_attribution_recipe": 0.44771116232752833,
+        "texture_h1_energy": 0.2932431444864066,
+        "texture_residual": {
+          "chroma_rms_255": 24.598630833623417,
+          "luma_rms_255": 26.18200908500694,
+          "rho1": 0.6274204076257001
+        },
+        "width": 1250
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "1f19567a23f1cc17aad30b8e7f66313b95f0ef483ef82878f2b6090e25ff2068",
+      "file": "A_IMG-11_lab-ctla1.jpg",
+      "image": "IMG-11",
+      "metrics": {
+        "eatr_p95": 0.6605467206469587,
+        "global": {
+          "h0_energy_ratio": 0.23167060466523565,
+          "h1_energy_ratio": 0.41674530456068987,
+          "h2_energy_ratio": 0.7088508269637209
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.5715096470611774,
+        "protected_eatr_by_roi": [
+          0.5715096470611774
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.05329704062460102,
+          "h1_rms": 0.014495102589401631,
+          "h2_rms": 0.020669392684000493
+        },
+        "staircase_attribution_recipe": 0.4709163121407355,
+        "texture_h1_energy": 0.453416852835249,
+        "texture_residual": {
+          "chroma_rms_255": 40.65839497766266,
+          "luma_rms_255": 42.716153003735364,
+          "rho1": 0.8457097992488729
+        },
+        "width": 1250
+      },
+      "preset": "Config A",
+      "settings_code": "SEQ-CFA-lhbmeve33nn3"
+    },
+    {
+      "delivered_sha256": "a843df301bca61578c3cf55e6240992530113520d71f5358db420c2a2cc33739",
+      "file": "1A_IMG-1_lab-ctla1.jpg",
+      "image": "IMG-1",
+      "metrics": {
+        "eatr_p95": 0.8260037151268215,
+        "global": {
+          "h0_energy_ratio": 0.21064758449491627,
+          "h1_energy_ratio": 0.5261210334464721,
+          "h2_energy_ratio": 0.6751966654670903
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6531819985286832,
+        "protected_eatr_by_roi": [
+          0.6531819985286832
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.02128405676635678,
+          "h1_rms": 0.006564760216814655,
+          "h2_rms": 0.007553594071192541
+        },
+        "staircase_attribution_recipe": 0.48495598267254414,
+        "texture_h1_energy": 0.37390114523370854,
+        "texture_residual": {
+          "chroma_rms_255": 11.250740679637003,
+          "luma_rms_255": 11.16192659169653,
+          "rho1": 0.8316544653078103
+        },
+        "width": 1024
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "0d3d535308a998c7f6b32930919c9a4f8f9440e6d076a38f0cf370a77b46a5f3",
+      "file": "1A_IMG-2_lab-ctla1.jpg",
+      "image": "IMG-2",
+      "metrics": {
+        "eatr_p95": 0.8322615456514928,
+        "global": {
+          "h0_energy_ratio": 0.20785232432586062,
+          "h1_energy_ratio": 0.6231497952076543,
+          "h2_energy_ratio": 0.7692019685215206
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6724664910695107,
+        "protected_eatr_by_roi": [
+          0.6724664910695107
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.020328072861458088,
+          "h1_rms": 0.005960982389278933,
+          "h2_rms": 0.00581209952747201
+        },
+        "staircase_attribution_recipe": 0.4954594288945435,
+        "texture_h1_energy": 0.4915634521783863,
+        "texture_residual": {
+          "chroma_rms_255": 9.11006322878828,
+          "luma_rms_255": 8.887821007069702,
+          "rho1": 0.8244148996742893
+        },
+        "width": 1024
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "6d41b7475b3f968522a6293b2b5e9a50233b5cfa71a1365166a4a4bf76ce66c2",
+      "file": "1A_IMG-3_lab-ctla1.jpg",
+      "image": "IMG-3",
+      "metrics": {
+        "eatr_p95": 0.7200612232969558,
+        "global": {
+          "h0_energy_ratio": 0.14146041404000675,
+          "h1_energy_ratio": 0.4518517981072662,
+          "h2_energy_ratio": 0.6698546579552802
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6447839206268233,
+        "protected_eatr_by_roi": [
+          0.6447839206268233
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.026101801688863318,
+          "h1_rms": 0.007162707470749228,
+          "h2_rms": 0.007428682462345471
+        },
+        "staircase_attribution_recipe": 0.4913352838033833,
+        "texture_h1_energy": 0.3600638837952735,
+        "texture_residual": {
+          "chroma_rms_255": 11.963611432203473,
+          "luma_rms_255": 11.723842769928957,
+          "rho1": 0.7925830295427576
+        },
+        "width": 1024
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "ba266566f62de054363fc411f6a8c491bd6928ca336c7a160940ee0ebafdf098",
+      "file": "1A_IMG-4_lab-ctla1.jpg",
+      "image": "IMG-4",
+      "metrics": {
+        "eatr_p95": 0.7147580972262423,
+        "global": {
+          "h0_energy_ratio": 0.17684980234603784,
+          "h1_energy_ratio": 0.5361811263795876,
+          "h2_energy_ratio": 0.7300309556703027
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6689777866657652,
+        "protected_eatr_by_roi": [
+          0.6689777866657652
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.02472823425354317,
+          "h1_rms": 0.0069051644358034125,
+          "h2_rms": 0.00650478801703312
+        },
+        "staircase_attribution_recipe": 0.4610841547943885,
+        "texture_h1_energy": 0.4293404397068621,
+        "texture_residual": {
+          "chroma_rms_255": 7.83781877713965,
+          "luma_rms_255": 7.8243500398899535,
+          "rho1": 0.711446847428773
+        },
+        "width": 1024
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "bb077687e2572f2cce15bd73b558fe23ba132952452e51a1c3bfd4ff23c1b575",
+      "file": "1A_IMG-5_lab-ctla1.jpg",
+      "image": "IMG-5",
+      "metrics": {
+        "eatr_p95": 0.48310443907548795,
+        "global": {
+          "h0_energy_ratio": 0.04877999025962204,
+          "h1_energy_ratio": 0.30845531558417993,
+          "h2_energy_ratio": 0.6677225887413493
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.7474755753284941,
+        "protected_eatr_by_roi": [
+          0.7474755753284941
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03731566127379002,
+          "h1_rms": 0.010231493487136489,
+          "h2_rms": 0.008570665168032746
+        },
+        "staircase_attribution_recipe": 0.45863773629515,
+        "texture_h1_energy": 0.24553016396065638,
+        "texture_residual": {
+          "chroma_rms_255": 12.659059317764699,
+          "luma_rms_255": 13.306349038681722,
+          "rho1": 0.38189220078439134
+        },
+        "width": 1250
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "a07e7bf69ff67e2f5ff1a737d69d9d22d6c271f9a0a2f99a8f1a8fa22beb7932",
+      "file": "1A_IMG-6_lab-ctla1.jpg",
+      "image": "IMG-6",
+      "metrics": {
+        "eatr_p95": 0.6374137232856718,
+        "global": {
+          "h0_energy_ratio": 0.14170324429424783,
+          "h1_energy_ratio": 0.4154630293130272,
+          "h2_energy_ratio": 0.5854950918409539
+        },
+        "height": 800,
+        "protected_eatr_absolute_min": 0.6788565348777208,
+        "protected_eatr_by_roi": [
+          0.6788565348777208
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.025239430012484,
+          "h1_rms": 0.008075817859651639,
+          "h2_rms": 0.008237502621700471
+        },
+        "staircase_attribution_recipe": 0.42514479352388124,
+        "texture_h1_energy": 0.3721281023078222,
+        "texture_residual": {
+          "chroma_rms_255": 9.009702346266094,
+          "luma_rms_255": 8.39064359392861,
+          "rho1": 0.3478999401220437
+        },
+        "width": 800
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "fead64f24ecdb772ab05a7a28e8d1154a150482f1b401ccddd9acb5767e1e254",
+      "file": "1A_IMG-7_lab-ctla1.jpg",
+      "image": "IMG-7",
+      "metrics": {
+        "eatr_p95": 0.4465948743621233,
+        "global": {
+          "h0_energy_ratio": 0.05776343493651197,
+          "h1_energy_ratio": 0.20884584031048578,
+          "h2_energy_ratio": 0.67682334261953
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.4927104397109703,
+        "protected_eatr_by_roi": [
+          0.4927104397109703
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.043998804337893,
+          "h1_rms": 0.012674383873022587,
+          "h2_rms": 0.008812519467482523
+        },
+        "staircase_attribution_recipe": 0.43807511377702163,
+        "texture_h1_energy": 0.10829025043082906,
+        "texture_residual": {
+          "chroma_rms_255": 35.438823067539516,
+          "luma_rms_255": 37.686680255536594,
+          "rho1": 0.3862996409876607
+        },
+        "width": 1080
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "bd242d46a1a3349d5ca77242da34bb85d329ead4f09f627da30cf1efcc5892fe",
+      "file": "1A_IMG-8_lab-ctla1.jpg",
+      "image": "IMG-8",
+      "metrics": {
+        "eatr_p95": 0.5480231608174875,
+        "global": {
+          "h0_energy_ratio": 0.08508940287955287,
+          "h1_energy_ratio": 0.24523056480520034,
+          "h2_energy_ratio": 0.6152142158247338
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5093993559423151,
+        "protected_eatr_by_roi": [
+          0.5093993559423151
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.035981140843398,
+          "h1_rms": 0.011635847652195913,
+          "h2_rms": 0.01075907016707836
+        },
+        "staircase_attribution_recipe": 0.4752706085607504,
+        "texture_h1_energy": 0.1077203904730813,
+        "texture_residual": {
+          "chroma_rms_255": 17.32951083735002,
+          "luma_rms_255": 18.610350411453307,
+          "rho1": 0.7747889054125443
+        },
+        "width": 1080
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "1c2e5f427631873d13b330a819176ec6c92bb84a8c722979a1f6df3ca51de8ba",
+      "file": "1A_IMG-9_lab-ctla1.jpg",
+      "image": "IMG-9",
+      "metrics": {
+        "eatr_p95": 0.5125140501094917,
+        "global": {
+          "h0_energy_ratio": 0.0633858388991427,
+          "h1_energy_ratio": 0.24254023648010087,
+          "h2_energy_ratio": 0.6615510275286314
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.3189504468630264,
+        "protected_eatr_by_roi": [
+          0.3189504468630264
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.05660365875075296,
+          "h1_rms": 0.016337878651031788,
+          "h2_rms": 0.015290537861595515
+        },
+        "staircase_attribution_recipe": 0.4542227763067064,
+        "texture_h1_energy": 0.18734057358283077,
+        "texture_residual": {
+          "chroma_rms_255": 38.56267110321041,
+          "luma_rms_255": 37.49478187692254,
+          "rho1": 0.5567177402622663
+        },
+        "width": 1250
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "849372c2cf8d608f7acf1dc03d5292a2fa57939f046c4776c0ecbedf9cd8ba95",
+      "file": "1A_IMG-10_lab-ctla1.jpg",
+      "image": "IMG-10",
+      "metrics": {
+        "eatr_p95": 0.689033954206127,
+        "global": {
+          "h0_energy_ratio": 0.13447647405475516,
+          "h1_energy_ratio": 0.3433974092982226,
+          "h2_energy_ratio": 0.6673965077642481
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.6656897285832015,
+        "protected_eatr_by_roi": [
+          0.6656897285832015
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03660777997462851,
+          "h1_rms": 0.011354584106798881,
+          "h2_rms": 0.010970625123910714
+        },
+        "staircase_attribution_recipe": 0.4523769593902652,
+        "texture_h1_energy": 0.20374373893030207,
+        "texture_residual": {
+          "chroma_rms_255": 21.03427237429998,
+          "luma_rms_255": 21.687029045481754,
+          "rho1": 0.5168132458497596
+        },
+        "width": 1250
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "c48349bc03a5858f1cf7ad6cb2ef2a4b6ebdf9171999e4e2b91829718a42b050",
+      "file": "1A_IMG-11_lab-ctla1.jpg",
+      "image": "IMG-11",
+      "metrics": {
+        "eatr_p95": 0.6103510394549833,
+        "global": {
+          "h0_energy_ratio": 0.1698316089496142,
+          "h1_energy_ratio": 0.3374893510382959,
+          "h2_energy_ratio": 0.620925741249868
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.5092029499385001,
+        "protected_eatr_by_roi": [
+          0.5092029499385001
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04008220042497094,
+          "h1_rms": 0.012040766739199796,
+          "h2_rms": 0.014014047766234772
+        },
+        "staircase_attribution_recipe": 0.4732189287571502,
+        "texture_h1_energy": 0.31516656865044146,
+        "texture_residual": {
+          "chroma_rms_255": 30.1122935527119,
+          "luma_rms_255": 28.85157588914214,
+          "rho1": 0.7918522643763565
+        },
+        "width": 1250
+      },
+      "preset": "Config 1A",
+      "settings_code": "SEQ-1A-tpxokpv5c53f"
+    },
+    {
+      "delivered_sha256": "8198a5fcb15e5bcf94ad8a78aa881d0c727af4fe6e560c4d4ff1c2b4ecf0433a",
+      "file": "2B_IMG-1_lab-ctla1.jpg",
+      "image": "IMG-1",
+      "metrics": {
+        "eatr_p95": 0.9021389958047159,
+        "global": {
+          "h0_energy_ratio": 0.45086464466617343,
+          "h1_energy_ratio": 0.7017131371113127,
+          "h2_energy_ratio": 0.8094528693174337
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6982450564651755,
+        "protected_eatr_by_roi": [
+          0.6982450564651755
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.028837953998943806,
+          "h1_rms": 0.007373896638376572,
+          "h2_rms": 0.009867419140003716
+        },
+        "staircase_attribution_recipe": 0.42047660491813854,
+        "texture_h1_energy": 0.505642161401901,
+        "texture_residual": {
+          "chroma_rms_255": 16.217932967110585,
+          "luma_rms_255": 16.21572619663361,
+          "rho1": 0.8837034672195346
+        },
+        "width": 1024
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "1663e4b6a543d6bb9ebd319cb65b0711058349d87f40a86da15ea4ec5fd02ddc",
+      "file": "2B_IMG-2_lab-ctla1.jpg",
+      "image": "IMG-2",
+      "metrics": {
+        "eatr_p95": 0.9123459345840723,
+        "global": {
+          "h0_energy_ratio": 0.38545230324547963,
+          "h1_energy_ratio": 0.7371321945759013,
+          "h2_energy_ratio": 0.8613988476655353
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6912424132591388,
+        "protected_eatr_by_roi": [
+          0.6912424132591388
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.025857827478083018,
+          "h1_rms": 0.006515442840699246,
+          "h2_rms": 0.00793349630409861
+        },
+        "staircase_attribution_recipe": 0.4468969621353133,
+        "texture_h1_energy": 0.5525701396858059,
+        "texture_residual": {
+          "chroma_rms_255": 12.651520148172734,
+          "luma_rms_255": 12.536392332943304,
+          "rho1": 0.8777825003968311
+        },
+        "width": 1024
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "902ee919587f3a4494b6873ff1a5432c219648470b0ff64c94c8b2d02fb04a9e",
+      "file": "2B_IMG-3_lab-ctla1.jpg",
+      "image": "IMG-3",
+      "metrics": {
+        "eatr_p95": 0.8295926993010907,
+        "global": {
+          "h0_energy_ratio": 0.3076405619207425,
+          "h1_energy_ratio": 0.5909546102970001,
+          "h2_energy_ratio": 0.8394713344197412
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6722509738512537,
+        "protected_eatr_by_roi": [
+          0.6722509738512537
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.0347148735460185,
+          "h1_rms": 0.008287232333322247,
+          "h2_rms": 0.011002311573259519
+        },
+        "staircase_attribution_recipe": 0.4434992381919756,
+        "texture_h1_energy": 0.5263700682301565,
+        "texture_residual": {
+          "chroma_rms_255": 17.543455096321296,
+          "luma_rms_255": 17.465770899255237,
+          "rho1": 0.8615962201860455
+        },
+        "width": 1024
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "0a7479e2d6302610c29826fdad0ba32d532b63624cc0185d90f39757b330b8c8",
+      "file": "2B_IMG-4_lab-ctla1.jpg",
+      "image": "IMG-4",
+      "metrics": {
+        "eatr_p95": 0.7883088647722494,
+        "global": {
+          "h0_energy_ratio": 0.3314423525016646,
+          "h1_energy_ratio": 0.6607493548162574,
+          "h2_energy_ratio": 0.8227446096725864
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.7035918645218706,
+        "protected_eatr_by_roi": [
+          0.7035918645218706
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.031823099768008824,
+          "h1_rms": 0.007807897424159299,
+          "h2_rms": 0.009282261915291558
+        },
+        "staircase_attribution_recipe": 0.39961535856495595,
+        "texture_h1_energy": 0.5863557628247835,
+        "texture_residual": {
+          "chroma_rms_255": 9.84099988727614,
+          "luma_rms_255": 9.916983923815266,
+          "rho1": 0.7694934521166806
+        },
+        "width": 1024
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "1e64f56fada2166cae86de54097364c3b51219dc4a23440cdcdbf1eb1d210f69",
+      "file": "2B_IMG-5_lab-ctla1.jpg",
+      "image": "IMG-5",
+      "metrics": {
+        "eatr_p95": 0.5822201095689984,
+        "global": {
+          "h0_energy_ratio": 0.10352581907855006,
+          "h1_energy_ratio": 0.4077771348361771,
+          "h2_energy_ratio": 0.8220663669973498
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.7164654719403392,
+        "protected_eatr_by_roi": [
+          0.7164654719403392
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04460294750898929,
+          "h1_rms": 0.011634162002060827,
+          "h2_rms": 0.01255244110219167
+        },
+        "staircase_attribution_recipe": 0.41313442922640836,
+        "texture_h1_energy": 0.40925459848774787,
+        "texture_residual": {
+          "chroma_rms_255": 15.71381967950061,
+          "luma_rms_255": 16.5259788101818,
+          "rho1": 0.5604228401586855
+        },
+        "width": 1250
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "58bc4f699033c60c64ef13945df4b8b3b5cf747f06605c5b98e6a9bb76a76943",
+      "file": "2B_IMG-6_lab-ctla1.jpg",
+      "image": "IMG-6",
+      "metrics": {
+        "eatr_p95": 0.6900139610578091,
+        "global": {
+          "h0_energy_ratio": 0.24738558659900198,
+          "h1_energy_ratio": 0.48931547871412684,
+          "h2_energy_ratio": 0.6386057033627218
+        },
+        "height": 800,
+        "protected_eatr_absolute_min": 0.7298958973367269,
+        "protected_eatr_by_roi": [
+          0.7298958973367269
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03007608953631149,
+          "h1_rms": 0.008708413008802025,
+          "h2_rms": 0.00944600847578317
+        },
+        "staircase_attribution_recipe": 0.38764771488762706,
+        "texture_h1_energy": 0.48702118342077466,
+        "texture_residual": {
+          "chroma_rms_255": 10.953135747305545,
+          "luma_rms_255": 10.180873845538533,
+          "rho1": 0.5005916935135006
+        },
+        "width": 800
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "239df38f4514d24d25210eaf0144e5f5c0f081bea2c5a94331b60f29a8c45507",
+      "file": "2B_IMG-7_lab-ctla1.jpg",
+      "image": "IMG-7",
+      "metrics": {
+        "eatr_p95": 0.511302124141195,
+        "global": {
+          "h0_energy_ratio": 0.1054718077247732,
+          "h1_energy_ratio": 0.2723541120040979,
+          "h2_energy_ratio": 0.8097317295572483
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5856171035739243,
+        "protected_eatr_by_roi": [
+          0.5856171035739243
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04926023698099757,
+          "h1_rms": 0.014177798332840283,
+          "h2_rms": 0.011869600160788437
+        },
+        "staircase_attribution_recipe": 0.39612996554190233,
+        "texture_h1_energy": 0.188165888456058,
+        "texture_residual": {
+          "chroma_rms_255": 41.665571021431745,
+          "luma_rms_255": 44.86309001248664,
+          "rho1": 0.5062896989472089
+        },
+        "width": 1080
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "59581d4b680455acf8f54f71ca37f439e88d80f1dbd58da8953fc937d65fd540",
+      "file": "2B_IMG-8_lab-ctla1.jpg",
+      "image": "IMG-8",
+      "metrics": {
+        "eatr_p95": 0.5902647509295685,
+        "global": {
+          "h0_energy_ratio": 0.14495314713386845,
+          "h1_energy_ratio": 0.28811858545110686,
+          "h2_energy_ratio": 0.655063605734644
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5796810411125825,
+        "protected_eatr_by_roi": [
+          0.5796810411125825
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03977730792175235,
+          "h1_rms": 0.012182225122633667,
+          "h2_rms": 0.01175488385190807
+        },
+        "staircase_attribution_recipe": 0.4179996701186772,
+        "texture_h1_energy": 0.1277141265030165,
+        "texture_residual": {
+          "chroma_rms_255": 18.838113386888654,
+          "luma_rms_255": 19.033050482433783,
+          "rho1": 0.7716995484837786
+        },
+        "width": 1080
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "8d59c6031b683d575d37daf8106f804e04a39d7f661404643081aa38a171eb09",
+      "file": "2B_IMG-9_lab-ctla1.jpg",
+      "image": "IMG-9",
+      "metrics": {
+        "eatr_p95": 0.6030682610260986,
+        "global": {
+          "h0_energy_ratio": 0.12089012514596954,
+          "h1_energy_ratio": 0.3541370348007065,
+          "h2_energy_ratio": 0.8505211630674938
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.46225464477170003,
+        "protected_eatr_by_roi": [
+          0.46225464477170003
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.07173273610720546,
+          "h1_rms": 0.019347248255788898,
+          "h2_rms": 0.023697801013102326
+        },
+        "staircase_attribution_recipe": 0.4117479861631873,
+        "texture_h1_energy": 0.2990160319583741,
+        "texture_residual": {
+          "chroma_rms_255": 47.324103104449044,
+          "luma_rms_255": 48.530849842694984,
+          "rho1": 0.689643457301285
+        },
+        "width": 1250
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "517f558054662dc8969e088b02966149a348420521d3569892f646a16343ad46",
+      "file": "2B_IMG-10_lab-ctla1.jpg",
+      "image": "IMG-10",
+      "metrics": {
+        "eatr_p95": 0.7475889244472238,
+        "global": {
+          "h0_energy_ratio": 0.2262474973498917,
+          "h1_energy_ratio": 0.42535271718473644,
+          "h2_energy_ratio": 0.7579450385017618
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.6987255197096702,
+        "protected_eatr_by_roi": [
+          0.6987255197096702
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.045099583021778106,
+          "h1_rms": 0.013013033445218173,
+          "h2_rms": 0.015298968200151112
+        },
+        "staircase_attribution_recipe": 0.4002229728649748,
+        "texture_h1_energy": 0.2977940120694986,
+        "texture_residual": {
+          "chroma_rms_255": 25.221314097981885,
+          "luma_rms_255": 26.250143395524674,
+          "rho1": 0.6226035976733906
+        },
+        "width": 1250
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "c901c7932ec44f722ca0becce80b7f747b06d56b09040e5e701fad7e3c28c2b6",
+      "file": "2B_IMG-11_lab-ctla1.jpg",
+      "image": "IMG-11",
+      "metrics": {
+        "eatr_p95": 0.6712809307858414,
+        "global": {
+          "h0_energy_ratio": 0.29759931629418684,
+          "h1_energy_ratio": 0.4329068511773042,
+          "h2_energy_ratio": 0.7195037285120031
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.5779004316678045,
+        "protected_eatr_by_roi": [
+          0.5779004316678045
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.05352315394899015,
+          "h1_rms": 0.014592155661296987,
+          "h2_rms": 0.02071463249456412
+        },
+        "staircase_attribution_recipe": 0.42063221040290044,
+        "texture_h1_energy": 0.4561898194885088,
+        "texture_residual": {
+          "chroma_rms_255": 41.26228540911299,
+          "luma_rms_255": 42.762333371326044,
+          "rho1": 0.8430413833186728
+        },
+        "width": 1250
+      },
+      "preset": "Config 2B",
+      "settings_code": "SEQ-2B-vr6sikgjt3ap"
+    },
+    {
+      "delivered_sha256": "83e4beac07751e973ca3d6beeeb5f311fc6fc1729664d7a013ca216095604dfe",
+      "file": "3C_IMG-1_lab-ctla1.jpg",
+      "image": "IMG-1",
+      "metrics": {
+        "eatr_p95": 0.8588229780467609,
+        "global": {
+          "h0_energy_ratio": 0.38097179146958465,
+          "h1_energy_ratio": 0.6044614627277165,
+          "h2_energy_ratio": 0.6860068305477838
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6662459749805557,
+        "protected_eatr_by_roi": [
+          0.6662459749805557
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.022160671926514365,
+          "h1_rms": 0.006710637467227375,
+          "h2_rms": 0.0075205851363342475
+        },
+        "staircase_attribution_recipe": 0.43184802260275384,
+        "texture_h1_energy": 0.3972264915245067,
+        "texture_residual": {
+          "chroma_rms_255": 11.782001226940467,
+          "luma_rms_255": 11.266515473647159,
+          "rho1": 0.8137508487495535
+        },
+        "width": 1024
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "e2bef105deccc7cebe9c0b3111ff0cbf78ab6197c408916ee7adf502ee26dce7",
+      "file": "3C_IMG-2_lab-ctla1.jpg",
+      "image": "IMG-2",
+      "metrics": {
+        "eatr_p95": 0.8760097374626488,
+        "global": {
+          "h0_energy_ratio": 0.37022564596820057,
+          "h1_energy_ratio": 0.6831372720398639,
+          "h2_energy_ratio": 0.7646033857112029
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.673347214459576,
+        "protected_eatr_by_roi": [
+          0.673347214459576
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.020865857080841068,
+          "h1_rms": 0.006115391251591521,
+          "h2_rms": 0.005809412743541301
+        },
+        "staircase_attribution_recipe": 0.4492152874205168,
+        "texture_h1_energy": 0.5043884294250327,
+        "texture_residual": {
+          "chroma_rms_255": 9.731685599475872,
+          "luma_rms_255": 9.030582692375562,
+          "rho1": 0.7991461594176988
+        },
+        "width": 1024
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "0e9cd1f70793deaebd6071303f321c8e15569f2e855bdace36a87bd64c209a6e",
+      "file": "3C_IMG-3_lab-ctla1.jpg",
+      "image": "IMG-3",
+      "metrics": {
+        "eatr_p95": 0.7617192370062602,
+        "global": {
+          "h0_energy_ratio": 0.26397791979168883,
+          "h1_energy_ratio": 0.5008891308861015,
+          "h2_energy_ratio": 0.6811289025158911
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6539135473478405,
+        "protected_eatr_by_roi": [
+          0.6539135473478405
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.026596157835066747,
+          "h1_rms": 0.007291890931463789,
+          "h2_rms": 0.007437705348237633
+        },
+        "staircase_attribution_recipe": 0.44947567665148,
+        "texture_h1_energy": 0.3827086832068431,
+        "texture_residual": {
+          "chroma_rms_255": 12.854340530138746,
+          "luma_rms_255": 11.867076343004241,
+          "rho1": 0.7716440892605417
+        },
+        "width": 1024
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "aeb3253825b061fe4f3d8101f100d74e46f6403db9c56603cd4c80b5292b6cbd",
+      "file": "3C_IMG-4_lab-ctla1.jpg",
+      "image": "IMG-4",
+      "metrics": {
+        "eatr_p95": 0.7404547550518175,
+        "global": {
+          "h0_energy_ratio": 0.293974537007365,
+          "h1_energy_ratio": 0.588590619826759,
+          "h2_energy_ratio": 0.7397104013235857
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6739330835023377,
+        "protected_eatr_by_roi": [
+          0.6739330835023377
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.025223802791365307,
+          "h1_rms": 0.006999877362076087,
+          "h2_rms": 0.006524232699992242
+        },
+        "staircase_attribution_recipe": 0.4033825830123685,
+        "texture_h1_energy": 0.5109766822118587,
+        "texture_residual": {
+          "chroma_rms_255": 8.346130524790642,
+          "luma_rms_255": 7.975049139307281,
+          "rho1": 0.6758374007143303
+        },
+        "width": 1024
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "be52c1b777e6e3de1fca8f5905ff65c04189c3f099229008c816135b97a63785",
+      "file": "3C_IMG-5_lab-ctla1.jpg",
+      "image": "IMG-5",
+      "metrics": {
+        "eatr_p95": 0.49865531146635267,
+        "global": {
+          "h0_energy_ratio": 0.07433030072550785,
+          "h1_energy_ratio": 0.3197904973714378,
+          "h2_energy_ratio": 0.6636378389233075
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.74645262242411,
+        "protected_eatr_by_roi": [
+          0.74645262242411
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.037555877601736294,
+          "h1_rms": 0.01024564675141904,
+          "h2_rms": 0.008563270439215849
+        },
+        "staircase_attribution_recipe": 0.4141495974195911,
+        "texture_h1_energy": 0.274699506366638,
+        "texture_residual": {
+          "chroma_rms_255": 13.331531091902212,
+          "luma_rms_255": 13.409833745071749,
+          "rho1": 0.3746357247607045
+        },
+        "width": 1250
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "c205a14e024330b7635a67723d5642a978c33288194e63da59728c3e7f8359d0",
+      "file": "3C_IMG-6_lab-ctla1.jpg",
+      "image": "IMG-6",
+      "metrics": {
+        "eatr_p95": 0.6642392152382228,
+        "global": {
+          "h0_energy_ratio": 0.2258288051270749,
+          "h1_energy_ratio": 0.45488639054658314,
+          "h2_energy_ratio": 0.5936511249868619
+        },
+        "height": 800,
+        "protected_eatr_absolute_min": 0.6860903118543885,
+        "protected_eatr_by_roi": [
+          0.6860903118543885
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.02578430705303362,
+          "h1_rms": 0.008213076940679756,
+          "h2_rms": 0.00822097845368
+        },
+        "staircase_attribution_recipe": 0.3888999595229941,
+        "texture_h1_energy": 0.44300426187184616,
+        "texture_residual": {
+          "chroma_rms_255": 9.847456204014634,
+          "luma_rms_255": 8.587934713578026,
+          "rho1": 0.3462822163578779
+        },
+        "width": 800
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "775b93a11ecb0b0689f3082679ce3a245688d1ba4bb9b7d4df1fbc8968d4438b",
+      "file": "3C_IMG-7_lab-ctla1.jpg",
+      "image": "IMG-7",
+      "metrics": {
+        "eatr_p95": 0.45635323763448776,
+        "global": {
+          "h0_energy_ratio": 0.07996759625258815,
+          "h1_energy_ratio": 0.21485362456356746,
+          "h2_energy_ratio": 0.6728585931661718
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5178564194236633,
+        "protected_eatr_by_roi": [
+          0.5178564194236633
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04413156551617061,
+          "h1_rms": 0.012698154593577532,
+          "h2_rms": 0.008821041844612763
+        },
+        "staircase_attribution_recipe": 0.3978111418411695,
+        "texture_h1_energy": 0.11095626974764736,
+        "texture_residual": {
+          "chroma_rms_255": 35.88983794334283,
+          "luma_rms_255": 37.69123017960771,
+          "rho1": 0.384837533228394
+        },
+        "width": 1080
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "37bda1b089711cfde8669ac49c07ad4dcbdd1b9985863c20fb248fdcb7174eaf",
+      "file": "3C_IMG-8_lab-ctla1.jpg",
+      "image": "IMG-8",
+      "metrics": {
+        "eatr_p95": 0.5622277708047734,
+        "global": {
+          "h0_energy_ratio": 0.1260129228876454,
+          "h1_energy_ratio": 0.2559161259436958,
+          "h2_energy_ratio": 0.6106017069101928
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5257488808198628,
+        "protected_eatr_by_roi": [
+          0.5257488808198628
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03620816188571522,
+          "h1_rms": 0.011719901662144252,
+          "h2_rms": 0.010834555035019483
+        },
+        "staircase_attribution_recipe": 0.42015786759747725,
+        "texture_h1_energy": 0.10912267850846273,
+        "texture_residual": {
+          "chroma_rms_255": 18.541024678670162,
+          "luma_rms_255": 18.701295847102713,
+          "rho1": 0.7651935655260508
+        },
+        "width": 1080
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "78da43529cfecce83bb22e1c783c07b1f39c39a3e80a4b1ec7c239cc0aa29ff2",
+      "file": "3C_IMG-9_lab-ctla1.jpg",
+      "image": "IMG-9",
+      "metrics": {
+        "eatr_p95": 0.5200563461160591,
+        "global": {
+          "h0_energy_ratio": 0.08326841775448299,
+          "h1_energy_ratio": 0.25613739997453006,
+          "h2_energy_ratio": 0.6724593444827961
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.34323718327292047,
+        "protected_eatr_by_roi": [
+          0.34323718327292047
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.05672128827703707,
+          "h1_rms": 0.016351573893091692,
+          "h2_rms": 0.015300612477155487
+        },
+        "staircase_attribution_recipe": 0.4212761472037991,
+        "texture_h1_energy": 0.1896114032561735,
+        "texture_residual": {
+          "chroma_rms_255": 39.82815826585097,
+          "luma_rms_255": 37.462327615281495,
+          "rho1": 0.5542125263276335
+        },
+        "width": 1250
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "5570f0eb2e8cc456b20bb82f5a8a9f9f7a4bfbbe9b64e38201ec859732759a0f",
+      "file": "3C_IMG-10_lab-ctla1.jpg",
+      "image": "IMG-10",
+      "metrics": {
+        "eatr_p95": 0.6980033827462974,
+        "global": {
+          "h0_energy_ratio": 0.18237945567285846,
+          "h1_energy_ratio": 0.35687138220410025,
+          "h2_energy_ratio": 0.670413213797845
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.6715548114847538,
+        "protected_eatr_by_roi": [
+          0.6715548114847538
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03678558329771135,
+          "h1_rms": 0.011418220557837377,
+          "h2_rms": 0.010998301137554898
+        },
+        "staircase_attribution_recipe": 0.40259956287112436,
+        "texture_h1_energy": 0.20712136458888902,
+        "texture_residual": {
+          "chroma_rms_255": 22.067907529601506,
+          "luma_rms_255": 21.749999701918856,
+          "rho1": 0.5118538115681225
+        },
+        "width": 1250
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "2c3d9c72d00bafe22495aafbbc71ab8e891e209662d386204a5f64bd272a53a2",
+      "file": "3C_IMG-11_lab-ctla1.jpg",
+      "image": "IMG-11",
+      "metrics": {
+        "eatr_p95": 0.628257272065262,
+        "global": {
+          "h0_energy_ratio": 0.24222783879459714,
+          "h1_energy_ratio": 0.36766959053923987,
+          "h2_energy_ratio": 0.6454311229649178
+        },
+        "height": 1250,
+        "protected_eatr_absolute_min": 0.5291877560895644,
+        "protected_eatr_by_roi": [
+          0.5291877560895644
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.040148636363203406,
+          "h1_rms": 0.012149251608564714,
+          "h2_rms": 0.013977922241463107
+        },
+        "staircase_attribution_recipe": 0.41562822582024944,
+        "texture_h1_energy": 0.3165213671254484,
+        "texture_residual": {
+          "chroma_rms_255": 31.668190227742244,
+          "luma_rms_255": 28.86919986858937,
+          "rho1": 0.7868501857341506
+        },
+        "width": 1250
+      },
+      "preset": "Config 3C",
+      "settings_code": "SEQ-3C-nzzomjahxuyi"
+    },
+    {
+      "delivered_sha256": "c523f2a0ced05aab3893221d2e506b90788dbe67a9c78905ec7aa5eaf976319a",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-1_lab-ctla1.jpg",
+      "image": "IMG-1",
+      "metrics": {
+        "eatr_p95": 0.8682754357142948,
+        "global": {
+          "h0_energy_ratio": 0.25758559208426773,
+          "h1_energy_ratio": 0.614567828615309,
+          "h2_energy_ratio": 0.7969854030548941
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.688180643084708,
+        "protected_eatr_by_roi": [
+          0.688180643084708
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.0283279827472436,
+          "h1_rms": 0.007134841907230079,
+          "h2_rms": 0.009818145307235486
+        },
+        "staircase_attribution_recipe": 0.4833341949492077,
+        "texture_h1_energy": 0.49080980974291893,
+        "texture_residual": {
+          "chroma_rms_255": 15.797161370218769,
+          "luma_rms_255": 16.058851334336488,
+          "rho1": 0.8938629694132515
+        },
+        "width": 1024
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "3d6f49c1610d434be9186ff3f6d3f0665d62bf80e18cea645285404e3c53b444",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-2_lab-ctla1.jpg",
+      "image": "IMG-2",
+      "metrics": {
+        "eatr_p95": 0.8739995037255529,
+        "global": {
+          "h0_energy_ratio": 0.23046844491533616,
+          "h1_energy_ratio": 0.6782719141866561,
+          "h2_energy_ratio": 0.8663164992028328
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6938049158241847,
+        "protected_eatr_by_roi": [
+          0.6938049158241847
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.025444398593713616,
+          "h1_rms": 0.006335084779392743,
+          "h2_rms": 0.007945039207229306
+        },
+        "staircase_attribution_recipe": 0.49399433971314816,
+        "texture_h1_energy": 0.5478473348897946,
+        "texture_residual": {
+          "chroma_rms_255": 12.283140007965574,
+          "luma_rms_255": 12.434022825108807,
+          "rho1": 0.8904989013456094
+        },
+        "width": 1024
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "cfaa0000e0b7a83d2b4da9f8314334b9740e4288547dfe99a442b4fd8a382367",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-3_lab-ctla1.jpg",
+      "image": "IMG-3",
+      "metrics": {
+        "eatr_p95": 0.7945716928560294,
+        "global": {
+          "h0_energy_ratio": 0.17647227074112237,
+          "h1_energy_ratio": 0.5461424631069223,
+          "h2_energy_ratio": 0.8280398646551053
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.6619396536263293,
+        "protected_eatr_by_roi": [
+          0.6619396536263293
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.0342746213051668,
+          "h1_rms": 0.008128285880083796,
+          "h2_rms": 0.010952617099947371
+        },
+        "staircase_attribution_recipe": 0.48482309768271364,
+        "texture_h1_energy": 0.5139019265439226,
+        "texture_residual": {
+          "chroma_rms_255": 16.923095573597152,
+          "luma_rms_255": 17.30650054858693,
+          "rho1": 0.8729217896778846
+        },
+        "width": 1024
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "7b80335fc206477df15e3a733aa5835b9a9ec9217d69ad7cad3333c7c69a53d0",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-4_lab-ctla1.jpg",
+      "image": "IMG-4",
+      "metrics": {
+        "eatr_p95": 0.7633910093634964,
+        "global": {
+          "h0_energy_ratio": 0.20460649787954122,
+          "h1_energy_ratio": 0.6120782422615483,
+          "h2_energy_ratio": 0.8114117713563588
+        },
+        "height": 1024,
+        "protected_eatr_absolute_min": 0.7008145002068179,
+        "protected_eatr_by_roi": [
+          0.7008145002068179
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03133233433293905,
+          "h1_rms": 0.0076848990563301006,
+          "h2_rms": 0.009223261661060054
+        },
+        "staircase_attribution_recipe": 0.4545112697737085,
+        "texture_h1_energy": 0.5084930046635576,
+        "texture_residual": {
+          "chroma_rms_255": 9.46175729390481,
+          "luma_rms_255": 9.739305205029725,
+          "rho1": 0.7910643554070621
+        },
+        "width": 1024
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "4a6265d032c0a4d06a5ba9a10099bbeba52a03d6292792439e17b7a5eb1e9a2c",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-5_lab-ctla1.jpg",
+      "image": "IMG-5",
+      "metrics": {
+        "eatr_p95": 0.49719129660443073,
+        "global": {
+          "h0_energy_ratio": 0.05618049995377321,
+          "h1_energy_ratio": 0.31625036845329463,
+          "h2_energy_ratio": 0.8469805316139597
+        },
+        "height": 1800,
+        "protected_eatr_absolute_min": 0.7978231695321678,
+        "protected_eatr_by_roi": [
+          0.7978231695321678
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04862386004211432,
+          "h1_rms": 0.01246223413863747,
+          "h2_rms": 0.013595410157602433
+        },
+        "staircase_attribution_recipe": 0.45603259881273,
+        "texture_h1_energy": 0.23746880001726156,
+        "texture_residual": {
+          "chroma_rms_255": 17.70817822230069,
+          "luma_rms_255": 19.078695762393526,
+          "rho1": 0.628378602745289
+        },
+        "width": 1800
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "41045ec112e904d3d4a672fa9b5cdcc658e50d4df55d1d2f8f4dc66b33975723",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-6_lab-ctla1.jpg",
+      "image": "IMG-6",
+      "metrics": {
+        "eatr_p95": 0.661860138862399,
+        "global": {
+          "h0_energy_ratio": 0.1586191241968148,
+          "h1_energy_ratio": 0.45040589397505465,
+          "h2_energy_ratio": 0.6298503088800149
+        },
+        "height": 800,
+        "protected_eatr_absolute_min": 0.7263906545680427,
+        "protected_eatr_by_roi": [
+          0.7263906545680427
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.02954083845876496,
+          "h1_rms": 0.008548437761275484,
+          "h2_rms": 0.009446393861050117
+        },
+        "staircase_attribution_recipe": 0.4209514900139759,
+        "texture_h1_energy": 0.42353675256241824,
+        "texture_residual": {
+          "chroma_rms_255": 10.049171268951971,
+          "luma_rms_255": 9.936213219598244,
+          "rho1": 0.5085942167891081
+        },
+        "width": 800
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "105592c1ea2c8bbabcec4676bf93b80cf67fc423e08c48fdaab5a4fdee9a4bf1",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-7_lab-ctla1.jpg",
+      "image": "IMG-7",
+      "metrics": {
+        "eatr_p95": 0.5028024677440808,
+        "global": {
+          "h0_energy_ratio": 0.08122381755059507,
+          "h1_energy_ratio": 0.26601468537361245,
+          "h2_energy_ratio": 0.8130363520051775
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.556317000029829,
+        "protected_eatr_by_roi": [
+          0.556317000029829
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04904578939400911,
+          "h1_rms": 0.014124970829861935,
+          "h2_rms": 0.011846313268813377
+        },
+        "staircase_attribution_recipe": 0.43185755976386436,
+        "texture_h1_energy": 0.1842538471167013,
+        "texture_residual": {
+          "chroma_rms_255": 41.50341181390276,
+          "luma_rms_255": 44.77281816662758,
+          "rho1": 0.5076926401350513
+        },
+        "width": 1080
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "0f58b3aee3d03c43f2e66312e159ac9fa381346b415565fe9911b3b2552370ff",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-8_lab-ctla1.jpg",
+      "image": "IMG-8",
+      "metrics": {
+        "eatr_p95": 0.5784022551000608,
+        "global": {
+          "h0_energy_ratio": 0.10310516952230442,
+          "h1_energy_ratio": 0.27684099881457475,
+          "h2_energy_ratio": 0.6596421200142942
+        },
+        "height": 1080,
+        "protected_eatr_absolute_min": 0.5674205277768172,
+        "protected_eatr_by_roi": [
+          0.5674205277768172
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.03954730643755486,
+          "h1_rms": 0.012090165799964785,
+          "h2_rms": 0.011675533060244636
+        },
+        "staircase_attribution_recipe": 0.475953999727809,
+        "texture_h1_energy": 0.12679404668950317,
+        "texture_residual": {
+          "chroma_rms_255": 17.756571795482632,
+          "luma_rms_255": 18.942112983214788,
+          "rho1": 0.7809878515776727
+        },
+        "width": 1080
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "0e2a224474ecdc19c687fb12e3586ba680f1c1497ee5ac4ac0430daad165498d",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-9_lab-ctla1.jpg",
+      "image": "IMG-9",
+      "metrics": {
+        "eatr_p95": 0.6010422176869554,
+        "global": {
+          "h0_energy_ratio": 0.07763589287013603,
+          "h1_energy_ratio": 0.306212801807518,
+          "h2_energy_ratio": 0.8478908710431949
+        },
+        "height": 1600,
+        "protected_eatr_absolute_min": 0.41939803106704376,
+        "protected_eatr_by_roi": [
+          0.41939803106704376
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.07462379148600008,
+          "h1_rms": 0.018647470698374916,
+          "h2_rms": 0.0250995399176032
+        },
+        "staircase_attribution_recipe": 0.4478865055527821,
+        "texture_h1_energy": 0.27715458331567977,
+        "texture_residual": {
+          "chroma_rms_255": 48.14953369613988,
+          "luma_rms_255": 50.679283158395556,
+          "rho1": 0.7508558718493762
+        },
+        "width": 1600
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "2171b52433810c31b9dff6016b981c1874433722e2a65392212fa085093fb65b",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-10_lab-ctla1.jpg",
+      "image": "IMG-10",
+      "metrics": {
+        "eatr_p95": 0.7335361260727498,
+        "global": {
+          "h0_energy_ratio": 0.14053367121189764,
+          "h1_energy_ratio": 0.42221498584017064,
+          "h2_energy_ratio": 0.7746050330428951
+        },
+        "height": 1800,
+        "protected_eatr_absolute_min": 0.6795648885496621,
+        "protected_eatr_by_roi": [
+          0.6795648885496621
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.04607842359389854,
+          "h1_rms": 0.011778173724299469,
+          "h2_rms": 0.015924211674830026
+        },
+        "staircase_attribution_recipe": 0.4570332998106624,
+        "texture_h1_energy": 0.2893888515675688,
+        "texture_residual": {
+          "chroma_rms_255": 25.947876388919582,
+          "luma_rms_255": 27.78733368316298,
+          "rho1": 0.6995177544717879
+        },
+        "width": 1800
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    },
+    {
+      "delivered_sha256": "51c319077fba4cc29bf420e3762e0d45c4e0d9790cd5eac2aee619573532a78e",
+      "file": "/Users/a/Documents/NOSYNF/round-remint-1-01/full-corpus/1.01_IMG-11_lab-ctla1.jpg",
+      "image": "IMG-11",
+      "metrics": {
+        "eatr_p95": 0.7244654455772217,
+        "global": {
+          "h0_energy_ratio": 0.26209910359648736,
+          "h1_energy_ratio": 0.4706708103208508,
+          "h2_energy_ratio": 0.7366869326318465
+        },
+        "height": 1800,
+        "protected_eatr_absolute_min": 0.6270460580214675,
+        "protected_eatr_by_roi": [
+          0.6270460580214675
+        ],
+        "source_relative_band_residual_rms": {
+          "h0_rms": 0.05368104660241811,
+          "h1_rms": 0.012047260714097969,
+          "h2_rms": 0.02135737159280457
+        },
+        "staircase_attribution_recipe": 0.48548897049882045,
+        "texture_h1_energy": 0.5718053323061802,
+        "texture_residual": {
+          "chroma_rms_255": 39.895757926685164,
+          "luma_rms_255": 43.541972646365764,
+          "rho1": 0.9179118557187752
+        },
+        "width": 1800
+      },
+      "preset": "ReMint 1.01",
+      "settings_code": "SEQ-1.01-yg63qja3got4"
+    }
+  ],
+  "note_resolution_sensitivity": "vs-source energy ratios are resolution-sensitive; delivered dims differ per preset/cell (Config A delivers min(src,1800)). Compare cohorts with care.",
+  "recipe": "tools/round_remint_1_01_validate.metric_record + _roi_for (frozen 1.01)"
+}
