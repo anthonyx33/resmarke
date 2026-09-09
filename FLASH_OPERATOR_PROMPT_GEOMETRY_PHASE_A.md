@@ -1,4 +1,10 @@
-# FLASH OPERATOR PROMPT — GEOMETRY LADDER PHASE A (99 cells)
+# FLASH OPERATOR PROMPT — GEOMETRY LADDER PHASE A (SUPERSEDED)
+
+The authoritative executable prompt is now
+`C8_MASTER_OPERATOR_PROMPT_GEOMETRY_PHASE_A.md`. It incorporates the deployed
+image pin, source-hash manifest, first-light control pair, history-aware cache
+rules, artifact layout and final evidence validation. Do not execute this older
+prompt independently.
 
 Role: mechanical operator. Execute exactly. The Phase A build is
 master-verified: geometry 15/15 (unittest + pytest), TypeScript 4/4, Deno
