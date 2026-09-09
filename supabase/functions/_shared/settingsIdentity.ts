@@ -7,8 +7,28 @@
 export type SettingsCodeMode = "sequence" | "remint" | "finish";
 export type ConfigLabel = "A" | "1A" | "2B" | "3C" | "CUSTOM";
 export type FrozenPresetId = "config-a" | "config-1a" | "config-2b" | "config-3c";
-export type PresetId = FrozenPresetId | "remint-1-01" | "4d-cam-1" | "4d-1a";
+export type GeometryPresetId =
+  | "geom-r0"
+  | "geom-x0"
+  | "geom-r1"
+  | "geom-r2"
+  | "geom-r3"
+  | "geom-r4"
+  | "geom-r5"
+  | "geom-r6";
+export type PresetId = FrozenPresetId | "remint-1-01" | "4d-cam-1" | "4d-1a" | GeometryPresetId;
 export type OpticsPsfScale = 0.5 | 1;
+export type GeometryResampleMode = "bypass" | "affine";
+export type GeometryResizeTarget = 1250 | 1000 | 800;
+export type GeometryTiltDegrees = 0 | 0.6 | 1.2;
+export type GeometryMicroWarp = "none" | "shift" | "shift_squash";
+
+export interface GeometrySettings {
+  resampleMode: GeometryResampleMode;
+  resizeTarget: GeometryResizeTarget;
+  tiltDegrees: GeometryTiltDegrees;
+  microWarp: GeometryMicroWarp;
+}
 
 export class SettingsValidationError extends Error {
   constructor(message: string) {
@@ -29,6 +49,7 @@ export interface RemintSettings {
   seed?: string;
   opticsPsfScale?: number;
   transfer4d1a?: boolean;
+  geometry?: GeometrySettings;
 }
 
 export interface FinishSettings {
@@ -155,6 +176,62 @@ export const PRESET_DEFINITIONS: Record<FrozenPresetId, PresetDefinition> = {
   },
 };
 
+export const GEOMETRY_PRESET_IDS: readonly GeometryPresetId[] = [
+  "geom-r0",
+  "geom-x0",
+  "geom-r1",
+  "geom-r2",
+  "geom-r3",
+  "geom-r4",
+  "geom-r5",
+  "geom-r6",
+] as const;
+
+const GEOMETRY_PRESET_GEOMETRY: Record<GeometryPresetId, GeometrySettings> = {
+  "geom-r0": { resampleMode: "bypass", resizeTarget: 1250, tiltDegrees: 0, microWarp: "none" },
+  "geom-x0": { resampleMode: "affine", resizeTarget: 1250, tiltDegrees: 0, microWarp: "none" },
+  "geom-r1": { resampleMode: "affine", resizeTarget: 1000, tiltDegrees: 0, microWarp: "none" },
+  "geom-r2": { resampleMode: "affine", resizeTarget: 800, tiltDegrees: 0, microWarp: "none" },
+  "geom-r3": { resampleMode: "affine", resizeTarget: 1250, tiltDegrees: 0.6, microWarp: "none" },
+  "geom-r4": { resampleMode: "affine", resizeTarget: 1250, tiltDegrees: 1.2, microWarp: "none" },
+  "geom-r5": { resampleMode: "affine", resizeTarget: 1250, tiltDegrees: 0, microWarp: "shift" },
+  "geom-r6": { resampleMode: "affine", resizeTarget: 1250, tiltDegrees: 0, microWarp: "shift_squash" },
+};
+
+function geometryDefinition(
+  id: GeometryPresetId,
+  label: string,
+  detail: string,
+): PresetDefinition {
+  return {
+    id,
+    label,
+    detail,
+    remint: {
+      engineMode: "adaptive",
+      washModel: "qwen",
+      strength: "deep",
+      iphoneExif: true,
+      metadataMode: "device",
+      geometry: { ...GEOMETRY_PRESET_GEOMETRY[id] },
+    },
+    finish: cloneFinish(COMMON_FINISH),
+    finishMode: "adaptive",
+  };
+}
+
+/** Phase-A geometry presets. Joint Phase-B tuples require a separate build. */
+export const GEOMETRY_PRESET_DEFINITIONS: Record<GeometryPresetId, PresetDefinition> = {
+  "geom-r0": geometryDefinition("geom-r0", "Geometry R0 — bypass control", "Config A with geometry bypassed"),
+  "geom-x0": geometryDefinition("geom-x0", "Geometry X0 — identity", "1250 cap · identity affine resample"),
+  "geom-r1": geometryDefinition("geom-r1", "Geometry R1 — 1000 px", "1000 cap · identity affine resample"),
+  "geom-r2": geometryDefinition("geom-r2", "Geometry R2 — 800 px", "800 cap · identity affine resample"),
+  "geom-r3": geometryDefinition("geom-r3", "Geometry R3 — tilt 0.6°", "1250 cap · 0.6° displayed CCW tilt"),
+  "geom-r4": geometryDefinition("geom-r4", "Geometry R4 — tilt 1.2°", "1250 cap · 1.2° displayed CCW tilt"),
+  "geom-r5": geometryDefinition("geom-r5", "Geometry R5 — micro shift", "1250 cap · +0.5/+0.3 px source shift"),
+  "geom-r6": geometryDefinition("geom-r6", "Geometry R6 — shift + squash", "1250 cap · 0.988 horizontal squash + shift"),
+};
+
 /** Kept separate so shared consumers still enumerate exactly four frozen configs. */
 export const CAM1_PRESET_DEFINITION: PresetDefinition = {
   id: "4d-cam-1",
@@ -222,6 +299,70 @@ export function validate4d1aTuple(
   }
 }
 
+export function geometryPresetIdForGeometry(value: GeometrySettings): GeometryPresetId | null {
+  for (const id of GEOMETRY_PRESET_IDS) {
+    const frozen = GEOMETRY_PRESET_GEOMETRY[id];
+    if (
+      value.resampleMode === frozen.resampleMode &&
+      value.resizeTarget === frozen.resizeTarget &&
+      value.tiltDegrees === frozen.tiltDegrees &&
+      value.microWarp === frozen.microWarp
+    ) return id;
+  }
+  return null;
+}
+
+/** Strict canonical parser: only one of the eight registered Phase-A tuples is valid. */
+export function validateGeometrySettings(value: unknown, supplied: boolean): GeometrySettings | undefined {
+  if (!supplied) return undefined;
+  if (!isRecord(value)) {
+    throw new SettingsValidationError("geometry must be an object when supplied.");
+  }
+  assertExactKeys(value, ["resampleMode", "resizeTarget", "tiltDegrees", "microWarp"], "geometry");
+  const geometry = {
+    resampleMode: value.resampleMode,
+    resizeTarget: value.resizeTarget,
+    tiltDegrees: value.tiltDegrees,
+    microWarp: value.microWarp,
+  } as GeometrySettings;
+  if (
+    (geometry.resampleMode !== "bypass" && geometry.resampleMode !== "affine") ||
+    (geometry.resizeTarget !== 1250 && geometry.resizeTarget !== 1000 && geometry.resizeTarget !== 800) ||
+    (geometry.tiltDegrees !== 0 && geometry.tiltDegrees !== 0.6 && geometry.tiltDegrees !== 1.2) ||
+    (geometry.microWarp !== "none" && geometry.microWarp !== "shift" && geometry.microWarp !== "shift_squash") ||
+    geometryPresetIdForGeometry(geometry) === null
+  ) {
+    throw new SettingsValidationError("geometry must exactly match one registered Phase-A preset.");
+  }
+  return { ...geometry };
+}
+
+/** Strict worker-wire parser plus the output_target conflict gate. */
+export function validateGeometryWire(
+  value: unknown,
+  supplied: boolean,
+  outputTarget?: unknown,
+): GeometrySettings | undefined {
+  if (!supplied) return undefined;
+  if (!isRecord(value)) {
+    throw new SettingsValidationError("geometry must be an object when supplied.");
+  }
+  assertExactKeys(value, ["resample_mode", "resize_target", "tilt_degrees", "micro_warp"], "geometry");
+  const geometry = validateGeometrySettings({
+    resampleMode: value.resample_mode,
+    resizeTarget: value.resize_target,
+    tiltDegrees: value.tilt_degrees,
+    microWarp: value.micro_warp,
+  }, true)!;
+  if (outputTarget !== undefined && outputTarget !== null) {
+    const parsedOutputTarget = Number(outputTarget);
+    if (!Number.isFinite(parsedOutputTarget) || parsedOutputTarget !== geometry.resizeTarget) {
+      throw new SettingsValidationError("output_target and geometry.resize_target must agree when both are supplied.");
+    }
+  }
+  return geometry;
+}
+
 /** Stable JSON stringify: sorted keys and no insignificant whitespace. */
 export function canonicalJson(value: unknown): string {
   const walk = (item: unknown): unknown => {
@@ -286,13 +427,30 @@ export function isRemint1_01(input: SettingsCodeInput): boolean {
 
 export function is4dCam1(input: SettingsCodeInput): boolean {
   return commonBaseTuple(input, "qwen") && input.remint.opticsPsfScale === 0.5 &&
-    default4d1a(input.remint) && defaultCodec(input.remint) && defaultOutputTarget(input.remint);
+    default4d1a(input.remint) && defaultGeometry(input.remint) &&
+    defaultCodec(input.remint) && defaultOutputTarget(input.remint);
 }
 
 export function is4d1a(input: SettingsCodeInput): boolean {
   return commonBaseTuple(input, "qwen") && defaultOpticsPsfScale(input.remint) &&
     input.remint.transfer4d1a === true && locked4d1aSeed(input.remint.seed) &&
-    defaultCodec(input.remint) && defaultOutputTarget(input.remint);
+    defaultGeometry(input.remint) && defaultCodec(input.remint) && defaultOutputTarget(input.remint);
+}
+
+export function geometryPresetIdForInput(input: SettingsCodeInput): GeometryPresetId | null {
+  if (
+    !commonBaseTuple(input, "qwen") ||
+    !defaultOpticsPsfScale(input.remint) ||
+    !default4d1a(input.remint) ||
+    !defaultCodec(input.remint) ||
+    !defaultOutputTarget(input.remint) ||
+    input.remint.geometry === undefined
+  ) return null;
+  return geometryPresetIdForGeometry(input.remint.geometry);
+}
+
+export function isGeometryPreset(input: SettingsCodeInput): boolean {
+  return geometryPresetIdForInput(input) !== null;
 }
 
 export function buildSettingsCode(input: SettingsCodeInput): string {
@@ -305,6 +463,20 @@ export function buildSettingsCode(input: SettingsCodeInput): string {
   if (isRemint1_01(input)) return `${marker}-1.01-${hash}`;
   if (is4dCam1(input)) return `${marker}-CAM1-${hash}`;
   if (is4d1a(input)) return `${marker}-4D1A-${hash}`;
+  const geometryId = geometryPresetIdForInput(input);
+  if (geometryId) {
+    const geometryMarker: Record<GeometryPresetId, string> = {
+      "geom-r0": "G0",
+      "geom-x0": "GX0",
+      "geom-r1": "G1",
+      "geom-r2": "G2",
+      "geom-r3": "G3",
+      "geom-r4": "G4",
+      "geom-r5": "G5",
+      "geom-r6": "G6",
+    };
+    return `${marker}-${geometryMarker[geometryId]}-${hash}`;
+  }
   const preset = ({ conservative: "CON", standard: "STD", strong: "STR", fidelity: "FID" } as Record<string, string>)[input.finish.preset ?? "standard"] ?? "STD";
   const scale = input.finish.scale == null ? "N" : String(input.finish.scale);
   const wall = input.finish.materialClean === false ? "M0" : "M1";
@@ -328,13 +500,20 @@ export function configIdentity(input: SettingsCodeInput): { label: ConfigLabel; 
     const key = buildSettingsCode(input);
     return { label: "CUSTOM", key };
   }
+  if (isGeometryPreset(input)) {
+    const key = buildSettingsCode(input);
+    return { label: "CUSTOM", key };
+  }
   return { label: "CUSTOM", key: buildSettingsCode(input) };
 }
 
 export function settingsForPreset(preset: PresetDefinition): SettingsCodeInput {
   return {
     mode: "sequence",
-    remint: { ...preset.remint },
+    remint: {
+      ...preset.remint,
+      geometry: preset.remint.geometry ? { ...preset.remint.geometry } : undefined,
+    },
     finish: { ...cloneFinish(preset.finish), finishMode: preset.finishMode },
   };
 }
@@ -350,7 +529,7 @@ export function presetFromRequested(value: unknown): PresetDefinition | null {
     : isRemint1_01(input) ? "remint-1-01"
     : is4dCam1(input) ? "4d-cam-1"
     : is4d1a(input) ? "4d-1a"
-    : null;
+    : geometryPresetIdForInput(input);
   if (!id) return null;
   const definition = id === "4d-cam-1"
     ? CAM1_PRESET_DEFINITION
@@ -358,7 +537,9 @@ export function presetFromRequested(value: unknown): PresetDefinition | null {
     ? TRANSFER_4D_1A_PRESET_DEFINITION
     : id === "remint-1-01"
     ? REMINT_1_01_PRESET_DEFINITION
-    : PRESET_DEFINITIONS[id];
+    : id.startsWith("geom-")
+    ? GEOMETRY_PRESET_DEFINITIONS[id as GeometryPresetId]
+    : PRESET_DEFINITIONS[id as FrozenPresetId];
   const result = clonePreset(definition);
   const seed = input.remint.seed;
   if (seed !== undefined) result.remint.seed = seed;
@@ -391,7 +572,7 @@ function commonBaseTuple(input: SettingsCodeInput, washModel: string): boolean {
 
 function commonTuple(input: SettingsCodeInput, washModel: string): boolean {
   return commonBaseTuple(input, washModel) && defaultOpticsPsfScale(input.remint) &&
-    default4d1a(input.remint);
+    default4d1a(input.remint) && defaultGeometry(input.remint);
 }
 
 function defaultOpticsPsfScale(remint: RemintSettings): boolean {
@@ -400,6 +581,10 @@ function defaultOpticsPsfScale(remint: RemintSettings): boolean {
 
 function default4d1a(remint: RemintSettings): boolean {
   return remint.transfer4d1a === undefined || remint.transfer4d1a === false;
+}
+
+function defaultGeometry(remint: RemintSettings): boolean {
+  return remint.geometry === undefined;
 }
 
 function locked4d1aSeed(seed: string | undefined): boolean {
@@ -426,7 +611,10 @@ function near(value: number | undefined, target: number): boolean {
 function clonePreset(preset: PresetDefinition): PresetDefinition {
   return {
     ...preset,
-    remint: { ...preset.remint },
+    remint: {
+      ...preset.remint,
+      geometry: preset.remint.geometry ? { ...preset.remint.geometry } : undefined,
+    },
     finish: cloneFinish(preset.finish),
   };
 }
@@ -440,4 +628,15 @@ function cloneFinish<T extends Omit<FinishSettings, "finishMode">>(finish: T): T
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertExactKeys(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
+  const allowedSet = new Set(allowed);
+  const unknown = Object.keys(value).filter((key) => !allowedSet.has(key));
+  const missing = allowed.filter((key) => !Object.prototype.hasOwnProperty.call(value, key));
+  if (unknown.length > 0 || missing.length > 0) {
+    throw new SettingsValidationError(
+      `${label} must contain exactly ${allowed.join(", ")}; unknown=${unknown.join(",") || "none"}; missing=${missing.join(",") || "none"}.`,
+    );
+  }
 }

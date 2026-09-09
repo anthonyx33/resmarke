@@ -4,6 +4,7 @@ import {
   SettingsValidationError,
   validate4d1aFlag,
   validate4d1aTuple,
+  validateGeometryWire,
   validateOpticsPsfScale,
 } from "../_shared/settingsIdentity.ts";
 import { userFromRequest } from "../_shared/supabase.ts";
@@ -1209,6 +1210,8 @@ function dsRemintV8_9ExpertRefinement(input: unknown) {
   const transfer4d1aSupplied = Object.prototype.hasOwnProperty.call(raw, "4d1a");
   const transfer4d1a = validate4d1aFlag(raw["4d1a"], transfer4d1aSupplied);
   validate4d1aTuple(transfer4d1a, raw.seed, opticsPsfScale);
+  const geometrySupplied = Object.prototype.hasOwnProperty.call(raw, "geometry");
+  const geometry = validateGeometryWire(raw.geometry, geometrySupplied, raw.output_target);
   return {
     ...base,
     mode: "ds-remint-v8.9",
@@ -1217,6 +1220,16 @@ function dsRemintV8_9ExpertRefinement(input: unknown) {
       ...(typeof raw.seed === "string" ? { seed: raw.seed } : {}),
       optics_psf_scale: opticsPsfScale,
       ...(transfer4d1aSupplied ? { "4d1a": transfer4d1a } : {}),
+      ...(geometry
+        ? {
+            geometry: {
+              resample_mode: geometry.resampleMode,
+              resize_target: geometry.resizeTarget,
+              tilt_degrees: geometry.tiltDegrees,
+              micro_warp: geometry.microWarp,
+            },
+          }
+        : {}),
       route_by_baseline:
         typeof raw.route_by_baseline === "boolean" ? raw.route_by_baseline : true,
       deep_degrade_scale: clampNumber(
@@ -1317,6 +1330,7 @@ const DS_REMINT_V8_9_KEYS = new Set([
   "optics_psf_scale",
   "route_by_baseline",
   "4d1a",
+  "geometry",
 ]);
 
 function assertOnlyKnownKeys(

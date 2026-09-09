@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { throwSupabaseFunctionError } from "./supabaseFunctionError";
+import type { GeometrySettings } from "./settingsCode";
 
 export type DeepCleanProfile =
   | "standard"
@@ -100,6 +101,8 @@ export type DsRemintV8_8Options = {
   opticsPsfScale?: number;
   /** Lab-only 4D-1a switch. The request boundary accepts booleans only. */
   transfer4d1a?: boolean;
+  /** Phase-A geometry ladder. The request boundary accepts only frozen tuples. */
+  geometry?: GeometrySettings;
 };
 
 export type QualityFinishOverrides = {
@@ -308,6 +311,14 @@ export async function createDeepCleanJob(params: {
             seed: params.dsRemintV89.seed,
             optics_psf_scale: params.dsRemintV89.opticsPsfScale,
             "4d1a": params.dsRemintV89.transfer4d1a,
+            geometry: params.dsRemintV89.geometry
+              ? {
+                  resample_mode: params.dsRemintV89.geometry.resampleMode,
+                  resize_target: params.dsRemintV89.geometry.resizeTarget,
+                  tilt_degrees: params.dsRemintV89.geometry.tiltDegrees,
+                  micro_warp: params.dsRemintV89.geometry.microWarp
+                }
+              : undefined,
             iphone_exif: params.dsRemintV89.iphoneExif,
             metadata_mode: params.dsRemintV89.metadataMode
           }
@@ -334,6 +345,14 @@ export async function createDeepCleanJob(params: {
               seed: params.dsRemintV89Hd.remint.seed,
               optics_psf_scale: params.dsRemintV89Hd.remint.opticsPsfScale,
               "4d1a": params.dsRemintV89Hd.remint.transfer4d1a,
+              geometry: params.dsRemintV89Hd.remint.geometry
+                ? {
+                    resample_mode: params.dsRemintV89Hd.remint.geometry.resampleMode,
+                    resize_target: params.dsRemintV89Hd.remint.geometry.resizeTarget,
+                    tilt_degrees: params.dsRemintV89Hd.remint.geometry.tiltDegrees,
+                    micro_warp: params.dsRemintV89Hd.remint.geometry.microWarp
+                  }
+                : undefined,
               iphone_exif: params.dsRemintV89Hd.remint.iphoneExif,
               metadata_mode: params.dsRemintV89Hd.remint.metadataMode
             },

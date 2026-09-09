@@ -127,6 +127,7 @@ COPY deepclean_detector.py /app/deepclean_detector.py
 COPY ds_remint_v6.py /app/ds_remint_v6.py
 COPY ds_remint_v7.py /app/ds_remint_v7.py
 COPY ds_remint_v8_8.py /app/ds_remint_v8_8.py
+COPY geometry_ladder.py /app/geometry_ladder.py
 COPY transfer_4d_1a.py /app/transfer_4d_1a.py
 COPY iphone_exif.py /app/iphone_exif.py
 COPY max_cx_remint.py /app/max_cx_remint.py
@@ -161,6 +162,7 @@ RUN chmod +x /app/start.sh
 # No PYTHONPATH=/app/ComfyUI here — deliberately. This gate must not be able to
 # reach into ComfyUI, because doing so pulls in comfy_kitchen and its GPU driver.
 RUN cd /app && python /app/build_gate.py
+RUN cd /app && python -m unittest tools/test_geometry_ladder.py
 RUN python /app/workflows/validate_api_workflow.py
 RUN python -m pip check
 

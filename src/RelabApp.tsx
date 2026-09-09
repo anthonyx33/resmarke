@@ -68,6 +68,7 @@ import {
 import { readLocalCredits, spendLocalPrivacyCredit, type CreditSnapshot } from "./lib/localCredits";
 import {
   CAM1_PRESET_DEFINITION,
+  GEOMETRY_PRESET_DEFINITIONS,
   PRESET_DEFINITIONS,
   REMINT_1_01_PRESET_DEFINITION,
   TRANSFER_4D_1A_PRESET_DEFINITION,
@@ -75,6 +76,7 @@ import {
   configIdentity,
   is4dCam1,
   is4d1a,
+  isGeometryPreset,
   isRemint1_01,
   presetFromRequested,
   settingsForPreset,
@@ -129,6 +131,7 @@ const PRESETS: Record<PresetId, PresetDefinition> = {
   "remint-1-01": REMINT_1_01_PRESET_DEFINITION,
   "4d-cam-1": CAM1_PRESET_DEFINITION,
   "4d-1a": TRANSFER_4D_1A_PRESET_DEFINITION,
+  ...GEOMETRY_PRESET_DEFINITIONS,
 };
 const LAB_SEED_RE = /^lab-[a-z0-9]{1,32}$/;
 const CAM1_LOCKED_SEEDS = new Set(["lab-ctla1", "lab-ctla2"]);
@@ -980,8 +983,8 @@ export default function RelabApp() {
             <div className="rl-panel-scroll rl-control-body">
               {(Object.values(PRESETS) as PresetDefinition[]).map((next) => (
                 <button key={next.id} className={`rl-preset${presetId === next.id ? " is-active" : ""}`} type="button" disabled={running} onClick={() => setPresetId(next.id)}>
-                  <span className="rl-preset-icon">{next.id === "config-3c" || next.id === "4d-cam-1" || next.id === "4d-1a" ? <FlaskConical size={15} /> : next.id === "config-2b" ? <Film size={15} /> : next.id === "config-1a" ? <Gauge size={15} /> : <Check size={15} />}</span>
-                  <span><b>{next.label}</b><small>{next.detail}</small></span>
+                  <span className="rl-preset-icon">{next.id === "config-3c" || next.id === "4d-cam-1" || next.id === "4d-1a" || next.id.startsWith("geom-") ? <FlaskConical size={15} /> : next.id === "config-2b" ? <Film size={15} /> : next.id === "config-1a" ? <Gauge size={15} /> : <Check size={15} />}</span>
+                  <span><b>{next.label}</b><small>{next.detail}</small><small>{settingsCodeForPreset(next)}</small></span>
                   <span>{presetId === next.id ? "ACTIVE" : "SELECT"}</span>
                 </button>
               ))}
@@ -1165,6 +1168,7 @@ function configLabelForPreset(preset: PresetDefinition): "A" | "1A" | "2B" | "3C
   const label = configIdentity(canonical).label;
   if (label === "CUSTOM") {
     if (isRemint1_01(canonical)) return label;
+    if (isGeometryPreset(canonical)) return label;
     const lockedSeed = CAM1_LOCKED_SEEDS.has(preset.remint.seed ?? "");
     if ((!is4dCam1(canonical) && !is4d1a(canonical)) || !lockedSeed) {
       throw new Error("CUSTOM is restricted to an exact seeded 4D lab tuple.");

@@ -38,6 +38,7 @@ from ds_remint_v7 import (
     _v7_verdict,
 )
 from max_cx_remint import _histogram_match
+from geometry_ladder import apply_geometry, normalize_geometry_settings
 from tools.auxiliary_checkpoints import build_auxiliary_manifest, save_auxiliary_checkpoint
 from tools.checkpoint_capture import save_checkpoint
 from transfer_4d_1a import (
@@ -137,7 +138,7 @@ def _strict_4d1a(value, supplied):
     return value
 
 
-_ALLOWED_REMINT_KEYS = frozenset(set(DEFAULT_SETTINGS) - {"enabled"}) | {"seed"}
+_ALLOWED_REMINT_KEYS = frozenset(set(DEFAULT_SETTINGS) - {"enabled"}) | {"seed", "geometry"}
 
 
 def normalize_ds_remint_v8_8_settings(settings):
@@ -188,6 +189,12 @@ def normalize_ds_remint_v8_8_settings(settings):
         cfg["output_target"] = int(_clamp(sub["output_target"], 256, 8192))
     else:
         cfg["output_target"] = None
+    geometry_supplied = "geometry" in sub
+    if geometry_supplied and cfg["mode"] != "ds-remint-v8.9":
+        raise ValueError("geometry is restricted to DS ReMint V8.9 jobs")
+    cfg["geometry"] = normalize_geometry_settings(
+        sub.get("geometry"), geometry_supplied, sub.get("output_target")
+    )
     cfg["min_ssim"] = float(_clamp(sub.get("min_ssim", cfg["min_ssim"]), 0.0, 1.0))
 
     cfg["ai_threshold"] = float(_clamp(sub.get("ai_threshold", cfg["ai_threshold"]), 0.0, 1.0))
@@ -217,6 +224,17 @@ def normalize_ds_remint_v8_8_settings(settings):
     cfg["color_restore"] = bool(sub.get("color_restore", cfg["color_restore"]))
     cfg["color_restore_strength"] = float(_clamp(sub.get("color_restore_strength", cfg["color_restore_strength"]), 0.0, 1.0))
     return cfg
+
+
+def _legacy_delivery_resize(image, delivery):
+    """The incumbent Pillow LANCZOS cap path, kept byte-for-byte unchanged."""
+    if max(image.size) > delivery:
+        ratio = delivery / float(max(image.size))
+        return image.resize(
+            (max(1, int(round(image.width * ratio))), max(1, int(round(image.height * ratio)))),
+            Image.Resampling.LANCZOS,
+        )
+    return image
 
 
 def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, seed_extra="", detector=None, return_buffer=False, checkpoint_dir=None, lab_seed=None):
@@ -249,6 +267,8 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     }
     if cfg["4d1a"]:
         report["settings"]["4d1a"] = True
+    if cfg["geometry"] is not None:
+        report["settings"]["geometry"] = dict(cfg["geometry"])
     if not cfg["enabled"]:
         report["auxiliary_checkpoints"] = build_auxiliary_manifest(
             checkpoint_dir,
@@ -303,18 +323,30 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     _ckpt_save(checkpoint_dir, "O1_postwash.png", base, report["checkpoint_errors"])
 
     # --- ONE resample to delivery (the lattice breaker) -----------------------
-    delivery = cfg["output_target"] or min(src_long, 1250)
+    delivery = (
+        cfg["geometry"]["resize_target"]
+        if cfg["geometry"] is not None
+        else cfg["output_target"] or min(src_long, 1250)
+    )
     delivery = min(delivery, src_long)
-    if max(base.size) > delivery:
-        ratio = delivery / float(max(base.size))
-        base = base.resize(
-            (max(1, int(round(base.width * ratio))), max(1, int(round(base.height * ratio)))),
-            Image.Resampling.LANCZOS,
-        )
+    base = _legacy_delivery_resize(base, delivery)
     report["layers"]["delivery_resample"] = {
         "method": "single_lanczos_resample", "delivery_long_edge": delivery,
         "micro_rotation": False,
     }
+    if cfg["geometry"] is not None:
+        if cfg["geometry"]["resample_mode"] == "affine":
+            base, geometry_report = apply_geometry(base, cfg["geometry"])
+            report["layers"]["geometry"] = geometry_report
+        else:
+            # geom-r0 is the alias control: no geometry processing call.
+            report["layers"]["geometry"] = {
+                "applied": False,
+                "preset_id": "geom-r0",
+                "resample_mode": "bypass",
+                "warp_affine_calls": 0,
+                "output_size": [base.width, base.height],
+            }
     reference = base  # all fidelity metrics measure against this, not the source
     auxiliary_error = save_auxiliary_checkpoint(
         checkpoint_dir, "OR_postresample.png", reference
