@@ -136,6 +136,7 @@ COPY max_remint.py /app/max_remint.py
 COPY neural_texture.py /app/neural_texture.py
 COPY photo_naturalization.py /app/photo_naturalization.py
 COPY quality_finish.py /app/quality_finish.py
+COPY quality_gate.py /app/quality_gate.py
 COPY worker.py /app/worker.py
 COPY zimage_wash.py /app/zimage_wash.py
 COPY workflows /app/workflows
@@ -162,7 +163,9 @@ RUN chmod +x /app/start.sh
 # No PYTHONPATH=/app/ComfyUI here — deliberately. This gate must not be able to
 # reach into ComfyUI, because doing so pulls in comfy_kitchen and its GPU driver.
 RUN cd /app && python /app/build_gate.py
-RUN cd /app && python -m unittest tools/test_geometry_ladder.py
+RUN cd /app && python -m unittest \
+    tools/test_geometry_ladder.py \
+    tools/test_geometry_quality_gate.py
 RUN python /app/workflows/validate_api_workflow.py
 RUN python -m pip check
 

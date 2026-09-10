@@ -35,6 +35,7 @@ from photo_naturalization import (
 )
 from neural_texture import apply_neural_texture_lab, is_neural_texture_lab
 from quality_finish import apply_quality_finish, is_quality_finish
+from quality_gate import pop_quality_reference, quality_check
 from transfer_4d_1a import LOCKED_SEEDS as TRANSFER_4D_1A_LOCKED_SEEDS
 from transfer_4d_1a import finalize_transfer_report
 
@@ -619,7 +620,15 @@ def handler(job):
                 if content_repair_report.get("applied"):
                     cleaned_sha = sha256_file(cleaned_path)
 
-            quality = quality_check(input_path, cleaned_path)
+            matched_reference, geometry_reference_required = pop_quality_reference(
+                engine_report
+            )
+            quality = quality_check(
+                input_path,
+                cleaned_path,
+                matched_reference=matched_reference,
+                geometry_reference_required=geometry_reference_required,
+            )
             if not quality["ok"]:
                 raise RuntimeError(quality["reason"])
 
@@ -1065,26 +1074,6 @@ def env_int(name):
     if value in (None, ""):
         return None
     return int(value)
-
-
-def quality_check(input_path, output_path):
-    source = Image.open(input_path).convert("RGB")
-    output = Image.open(output_path).convert("RGB")
-    if output.width < 256 or output.height < 256:
-        return {"ok": False, "reason": "Output image is too small."}
-
-    resized_source = source.resize(output.size, Image.Resampling.LANCZOS)
-    source_arr = np.asarray(resized_source).astype(np.float32)
-    output_arr = np.asarray(output).astype(np.float32)
-    mse = float(np.mean((source_arr - output_arr) ** 2))
-    psnr = 99.0 if mse == 0 else float(20 * np.log10(255.0 / np.sqrt(mse)))
-    variance = float(np.var(output_arr))
-
-    if variance < 12:
-        return {"ok": False, "reason": "Output appears blank.", "psnr": psnr}
-    if psnr < 18:
-        return {"ok": False, "reason": "Output drift exceeded quality gate.", "psnr": psnr}
-    return {"ok": True, "psnr": psnr, "variance": variance}
 
 
 def finalize_output(

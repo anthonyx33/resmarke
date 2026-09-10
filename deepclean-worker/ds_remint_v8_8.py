@@ -242,7 +242,9 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
     coherent EXIF when enabled) to output_path and returns a report.
     return_buffer=True additionally attaches the PRE-ENCODE RGB array as
     report["_pre_encode_rgb"] so a chained stage can consume the high-
-    precision buffer instead of decoding the intermediate JPEG (C8 v4)."""
+    precision buffer instead of decoding the intermediate JPEG (C8 v4).
+    Geometry jobs also attach their existing post-geometry, pre-camera PIL
+    reference privately for the worker's outer quality gate."""
     cfg = normalize_ds_remint_v8_8_settings(settings)
     auxiliary_checkpoint_errors = []
     report = {
@@ -348,6 +350,12 @@ def apply_ds_remint_v8_8(input_path, output_path, creator_id, settings=None, see
                 "output_size": [base.width, base.height],
             }
     reference = base  # all fidelity metrics measure against this, not the source
+    if cfg["geometry"] is not None:
+        # C8 v4.5: hand the OUTER gate these exact existing pixels.  Do not
+        # reconstruct them later: that would risk a second resize/warp and a
+        # subtly different coordinate frame.  The worker pops this private
+        # object before constructing either the public report or JSON body.
+        report["_quality_reference_image"] = reference
     auxiliary_error = save_auxiliary_checkpoint(
         checkpoint_dir, "OR_postresample.png", reference
     )
