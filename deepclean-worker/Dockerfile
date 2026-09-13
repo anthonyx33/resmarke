@@ -165,7 +165,8 @@ RUN chmod +x /app/start.sh
 RUN cd /app && python /app/build_gate.py
 RUN cd /app && python -m unittest \
     tools/test_geometry_ladder.py \
-    tools/test_geometry_quality_gate.py
+    tools/test_geometry_quality_gate.py \
+    tools/test_worker_notifications.py
 RUN python /app/workflows/validate_api_workflow.py
 RUN python -m pip check
 

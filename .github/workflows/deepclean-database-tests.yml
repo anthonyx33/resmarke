@@ -1,0 +1,79 @@
+name: DeepClean Database Gates
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/functions/deepclean-webhook/**"
+      - "supabase/tests/**"
+      - "supabase/preflight/**"
+      - ".github/workflows/deepclean-database-tests.yml"
+  push:
+    branches-ignore: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/functions/deepclean-webhook/**"
+      - "supabase/tests/**"
+      - "supabase/preflight/**"
+      - ".github/workflows/deepclean-database-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  terminal-finalization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # Supabase CLI's disposable local default. Never replace this with a
+      # hosted or production URL in this non-deploying verification job.
+      SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.108.0
+          github-token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Guard disposable database identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          test "$SUPABASE_DB_URL" = "$expected"
+
+      - name: Start disposable local Postgres
+        run: supabase db start
+
+      - name: Rebuild from repository migrations
+        run: supabase db reset --local --no-seed
+
+      - name: Run pgTAP database tests
+        run: supabase test db
+
+      - name: Install isolated psycopg 3 runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/deepclean-db-tests"
+          "$RUNNER_TEMP/deepclean-db-tests/bin/python" -m pip install \
+            --disable-pip-version-check "psycopg[binary]==3.2.13"
+
+      - name: Run two-transaction terminal concurrency test
+        run: >-
+          $RUNNER_TEMP/deepclean-db-tests/bin/python
+          supabase/tests/deepclean_terminal_concurrency.py
+
+      - name: Tear down disposable database
+        if: always()
+        run: supabase stop --no-backup || true

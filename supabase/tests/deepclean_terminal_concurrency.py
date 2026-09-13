@@ -9,14 +9,26 @@ from __future__ import annotations
 
 import os
 import threading
+from urllib.parse import urlparse
 import uuid
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 
 DATABASE_URL = os.environ.get("SUPABASE_DB_URL")
 if not DATABASE_URL:
     raise SystemExit("SUPABASE_DB_URL is required")
+database_target = urlparse(DATABASE_URL)
+if database_target.hostname not in {"127.0.0.1", "localhost", "::1"}:
+    raise SystemExit("SUPABASE_DB_URL must target a disposable loopback database")
+
+OUTPUT_SHA256 = "a" * 64
+INPUT_SHA256 = "b" * 64
+ENGINE_VERSION = "concurrency-test-v1"
+RUNTIME_MS = 12
+GPU_TYPE = "disposable-db"
+REPORT = {"concurrency": True, "public": True}
 
 user_id = uuid.uuid4()
 job_id = uuid.uuid4()
@@ -31,8 +43,22 @@ def finalize() -> None:
             barrier.wait()
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "select public.finalize_deepclean_job_terminal(%s, %s, %s)",
-                    (job_id, "completed", "concurrent-output-sha"),
+                    """
+                    select public.finalize_deepclean_job_terminal(
+                      %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    """,
+                    (
+                        job_id,
+                        "completed",
+                        OUTPUT_SHA256,
+                        INPUT_SHA256,
+                        ENGINE_VERSION,
+                        RUNTIME_MS,
+                        GPU_TYPE,
+                        None,
+                        Jsonb(REPORT),
+                    ),
                 )
                 outcomes.append(cursor.fetchone()[0]["outcome"])
     except BaseException as exc:  # surface failures after both threads join
@@ -70,7 +96,7 @@ try:
                 "select status, output_sha256 from public.deepclean_jobs where id = %s",
                 (job_id,),
             )
-            if cursor.fetchone() != ("completed", "concurrent-output-sha"):
+            if cursor.fetchone() != ("completed", OUTPUT_SHA256):
                 raise AssertionError("concurrent callback terminal mutation drifted")
             cursor.execute(
                 """

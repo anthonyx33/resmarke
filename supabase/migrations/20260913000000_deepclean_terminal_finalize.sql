@@ -24,9 +24,35 @@ as $$
 declare
   v_job public.deepclean_jobs%rowtype;
   v_balance integer;
+  v_normalized_failure_reason text;
+  v_normalized_report jsonb := coalesce(p_report, '{}'::jsonb);
+  v_payload_matches boolean := false;
 begin
+  if p_job_id is null then
+    raise exception 'Invalid job ID.' using errcode = '22023';
+  end if;
   if p_terminal_status is null or p_terminal_status not in ('completed', 'failed') then
     raise exception 'Invalid terminal status.' using errcode = '22023';
+  end if;
+  if p_runtime_ms is not null and p_runtime_ms < 0 then
+    raise exception 'Invalid runtime.' using errcode = '22023';
+  end if;
+  if jsonb_typeof(v_normalized_report) <> 'object' then
+    raise exception 'Invalid public report.' using errcode = '22023';
+  end if;
+
+  if p_terminal_status = 'completed' then
+    if p_output_sha256 is null or p_output_sha256 !~ '^[0-9a-f]{64}$' then
+      raise exception 'Invalid output SHA-256.' using errcode = '22023';
+    end if;
+    if p_input_sha256 is null or p_input_sha256 !~ '^[0-9a-f]{64}$' then
+      raise exception 'Invalid input SHA-256.' using errcode = '22023';
+    end if;
+  else
+    v_normalized_failure_reason := btrim(coalesce(p_failure_reason, ''));
+    if v_normalized_failure_reason = '' or char_length(v_normalized_failure_reason) > 2000 then
+      raise exception 'Invalid failure reason.' using errcode = '22023';
+    end if;
   end if;
 
   select *
@@ -45,6 +71,33 @@ begin
 
   if v_job.status in ('completed', 'failed') then
     if v_job.status = p_terminal_status then
+      if p_terminal_status = 'completed' then
+        v_payload_matches :=
+          v_job.output_sha256 is not distinct from p_output_sha256 and
+          v_job.input_sha256 is not distinct from p_input_sha256 and
+          v_job.engine_version is not distinct from p_engine_version and
+          v_job.runtime_ms is not distinct from p_runtime_ms and
+          v_job.gpu_type is not distinct from p_gpu_type and
+          v_job.report is not distinct from v_normalized_report;
+      else
+        v_payload_matches :=
+          v_job.engine_version is not distinct from p_engine_version and
+          v_job.runtime_ms is not distinct from p_runtime_ms and
+          v_job.gpu_type is not distinct from p_gpu_type and
+          v_job.failure_reason is not distinct from v_normalized_failure_reason and
+          v_job.report is not distinct from v_normalized_report;
+      end if;
+
+      if not v_payload_matches then
+        return jsonb_build_object(
+          'outcome', 'conflict',
+          'conflict', true,
+          'conflict_kind', 'payload',
+          'job_id', p_job_id,
+          'existing_status', v_job.status,
+          'attempted_status', p_terminal_status
+        );
+      end if;
       return jsonb_build_object(
         'outcome', 'duplicate',
         'duplicate', true,
@@ -55,6 +108,7 @@ begin
     return jsonb_build_object(
       'outcome', 'conflict',
       'conflict', true,
+      'conflict_kind', 'status',
       'job_id', p_job_id,
       'existing_status', v_job.status,
       'attempted_status', p_terminal_status
@@ -71,7 +125,7 @@ begin
           runtime_ms = p_runtime_ms,
           gpu_type = p_gpu_type,
           failure_reason = null,
-          report = coalesce(p_report, '{}'::jsonb),
+          report = v_normalized_report,
           updated_at = now(),
           completed_at = now()
       where id = v_job.id;
@@ -95,11 +149,11 @@ begin
     update public.deepclean_jobs
       set status = 'failed',
           credits_charged = 0,
-          failure_reason = coalesce(p_failure_reason, 'Worker failed.'),
+          failure_reason = v_normalized_failure_reason,
           engine_version = p_engine_version,
           runtime_ms = p_runtime_ms,
           gpu_type = p_gpu_type,
-          report = coalesce(p_report, '{}'::jsonb),
+          report = v_normalized_report,
           updated_at = now(),
           completed_at = now()
       where id = v_job.id;
@@ -109,7 +163,7 @@ begin
     values
       (v_job.user_id, v_job.id, 'deepclean_release', v_job.credits_reserved,
        v_balance, jsonb_build_object(
-         'failure_reason', coalesce(p_failure_reason, 'Worker failed.')
+         'failure_reason', v_normalized_failure_reason
        ));
   end if;
 
