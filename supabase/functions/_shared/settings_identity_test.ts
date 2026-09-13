@@ -49,6 +49,9 @@ const GEOMETRY_GOLDENS: Record<string, { unseeded: string; labCtla1: string }> =
   "geom-r4": { unseeded: "SEQ-G4-4ozjt4hh6xd3", labCtla1: "SEQ-G4-6qdn22oroob2" },
   "geom-r5": { unseeded: "SEQ-G5-3dg2guf3xbub", labCtla1: "SEQ-G5-dxcvkvndsy33" },
   "geom-r6": { unseeded: "SEQ-G6-fbo7bz7ovtus", labCtla1: "SEQ-G6-jzvg3zezpltk" },
+  "geom-j1": { unseeded: "SEQ-GJ1-qks572z33hqd", labCtla1: "SEQ-GJ1-2uzzelp2iovu" },
+  "geom-j2": { unseeded: "SEQ-GJ2-dl4e3jxyjy5b", labCtla1: "SEQ-GJ2-l7qwsawpj7on" },
+  "geom-j3": { unseeded: "SEQ-GJ3-egdcdf4jeqs4", labCtla1: "SEQ-GJ3-gih34nuhhjao" },
 };
 
 Deno.test("identity predicates are exclusive over every frozen tuple", () => {
@@ -185,7 +188,7 @@ Deno.test("optics PSF request boundary accepts only absent, 1.00, or 0.50", () =
   }
 });
 
-Deno.test("geometry Phase-A identities are exclusive, reconstructable, and golden", () => {
+Deno.test("frozen geometry identities are exclusive, reconstructable, and golden", () => {
   for (const id of GEOMETRY_PRESET_IDS) {
     const input = settingsForPreset(GEOMETRY_PRESET_DEFINITIONS[id]);
     assert(isGeometryPreset(input), `${id}: geometry predicate rejected its frozen tuple`);
@@ -193,6 +196,13 @@ Deno.test("geometry Phase-A identities are exclusive, reconstructable, and golde
     assert(configIdentity(input).label === "CUSTOM", `${id}: must use the CUSTOM ledger label`);
     const unseededCode = buildSettingsCode(input);
     assert(unseededCode === GEOMETRY_GOLDENS[id].unseeded, `${id}: unseeded golden drifted: ${unseededCode}`);
+    const unseededReconstruction = presetFromRequested(input);
+    assert(unseededReconstruction?.id === id, `${id}: unseeded reconstruction failed`);
+    assert(unseededReconstruction.remint.seed === undefined, `${id}: unseeded reconstruction gained a seed`);
+    assert(
+      buildSettingsCode(settingsForPreset(unseededReconstruction)) === unseededCode,
+      `${id}: unseeded round-trip code drifted`,
+    );
 
     input.remint.seed = "lab-ctla1";
     const seededCode = buildSettingsCode(input);
@@ -201,6 +211,49 @@ Deno.test("geometry Phase-A identities are exclusive, reconstructable, and golde
     assert(reconstructed?.id === id, `${id}: reconstruction failed`);
     assert(reconstructed.remint.seed === "lab-ctla1", `${id}: seed was lost`);
     assert(buildSettingsCode(settingsForPreset(reconstructed)) === seededCode, `${id}: round-trip code drifted`);
+  }
+});
+
+Deno.test("Phase-B registry contains exactly J1-J3 as unique frozen tuples", () => {
+  const expected = {
+    "geom-j1": { resampleMode: "affine", resizeTarget: 800, tiltDegrees: 1.2, microWarp: "shift" },
+    "geom-j2": { resampleMode: "affine", resizeTarget: 800, tiltDegrees: 0.6, microWarp: "shift" },
+    "geom-j3": { resampleMode: "affine", resizeTarget: 800, tiltDegrees: 1.2, microWarp: "none" },
+  } as const;
+  const labels = {
+    "geom-j1": "Geometry J1 — 800 px + tilt 1.2° + shift",
+    "geom-j2": "Geometry J2 — 800 px + tilt 0.6° + shift",
+    "geom-j3": "Geometry J3 — 800 px + tilt 1.2°",
+  } as const;
+  const jointIds = GEOMETRY_PRESET_IDS.filter((id) => id.startsWith("geom-j"));
+  assert(canonicalJson(jointIds) === canonicalJson(Object.keys(expected)), "joint ID registry drifted");
+  const tupleKeys = new Set<string>();
+  for (const id of GEOMETRY_PRESET_IDS) {
+    const geometry = GEOMETRY_PRESET_DEFINITIONS[id].remint.geometry!;
+    const key = canonicalJson(geometry);
+    assert(!tupleKeys.has(key), `${id}: tuple is not unique`);
+    tupleKeys.add(key);
+    if (id in expected) {
+      assert(key === canonicalJson(expected[id as keyof typeof expected]), `${id}: tuple drifted`);
+      assert(
+        canonicalJson(validateGeometrySettings(geometry, true)) === key,
+        `${id}: canonical validation boundary drifted`,
+      );
+      const wire = {
+        resample_mode: geometry.resampleMode,
+        resize_target: geometry.resizeTarget,
+        tilt_degrees: geometry.tiltDegrees,
+        micro_warp: geometry.microWarp,
+      };
+      assert(
+        canonicalJson(validateGeometryWire(wire, true, 800)) === key,
+        `${id}: worker-wire validation boundary drifted`,
+      );
+      assert(
+        GEOMETRY_PRESET_DEFINITIONS[id].label === labels[id as keyof typeof labels],
+        `${id}: display label drifted`,
+      );
+    }
   }
 });
 

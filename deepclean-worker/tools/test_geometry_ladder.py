@@ -1,4 +1,4 @@
-"""Offline C8 v4.4 build gate for the Phase-A geometry module."""
+"""Offline C8 v4.4 algebra gate for frozen Phase-A and Phase-B geometry."""
 
 from __future__ import annotations
 
@@ -45,6 +45,86 @@ PINNED_TILT_MATRICES = {
     (703, 1250, "geom-r4"): [[0.9529882431839676, -0.019962257985717, 28.967556754507587], [0.019962257985717, 0.9529882431839676, 22.352089578625534]],
 }
 
+PHASE_A_IDS = (
+    "geom-r0", "geom-x0", "geom-r1", "geom-r2",
+    "geom-r3", "geom-r4", "geom-r5", "geom-r6",
+)
+PHASE_B_IDS = ("geom-j1", "geom-j2", "geom-j3")
+PHASE_B_PINNED_INVERSE_800_SQUARE = {
+    "geom-j1": [[0.9683529534097216, -0.020284102784533766, 21.24649417523747], [0.020284102784533766, 0.9683529534097216, 4.839496050394966]],
+    "geom-j2": [[0.9783909951141114, -0.01024606108014389, 13.226098853429953], [0.01024606108014389, 0.9783909951141114, 4.8394960503949935]],
+    "geom-j3": [[0.9695787166418858, -0.02030977886400786, 20.267059357737782], [0.02030977886400786, 0.9695787166418858, 4.039546045395511]],
+}
+PHASE_A_PIXEL_SHA256 = {
+    "geom-r0": "51f7b3ec57be8ae386b3f3d5a4c0505743ffc0f01042f629aa95a2a4d75535a4",
+    "geom-x0": "51f7b3ec57be8ae386b3f3d5a4c0505743ffc0f01042f629aa95a2a4d75535a4",
+    "geom-r1": "51f7b3ec57be8ae386b3f3d5a4c0505743ffc0f01042f629aa95a2a4d75535a4",
+    "geom-r2": "51f7b3ec57be8ae386b3f3d5a4c0505743ffc0f01042f629aa95a2a4d75535a4",
+    "geom-r3": "d51fb349fad7f47cabbd74b5ffe4394ec9a004c3ae629e54750d73b8bca5e9ca",
+    "geom-r4": "ac132349efc0f1a133ccabfd7ad55bfaaae9bbcb41a79e1b5876664d7d90c94f",
+    "geom-r5": "8d51735363d5ce1a2a143bd52de82965f7c6c2d235401ab266e1258ddd9eec89",
+    "geom-r6": "3536f181ac532606b7b0bd01dc196153b0278dd832a896aa2f630765819dbd37",
+}
+# Frozen round-4d-cam-1/roi-manifest.json boxes consumed by Geometry Phase A.
+# Manifest SHA-256: 5b0d73779e2855e5deafff5534d01aca647342e2b21370bf8664f9571ad3d329.
+FROZEN_CORPUS_ROIS = {
+    "IMG-1": {
+        "protected": ((0.65, 0.19, 0.84, 0.61),),
+        "smooth": ((0.50, 0.56, 0.63, 0.72),),
+        "texture": ((0.10, 0.72, 0.46, 0.92),),
+    },
+    "IMG-2": {
+        "protected": ((0.34, 0.35, 0.48, 0.66),),
+        "smooth": ((0.69, 0.13, 0.92, 0.30),),
+        "texture": ((0.18, 0.68, 0.34, 0.90),),
+    },
+    "IMG-3": {
+        "protected": ((0.63, 0.24, 0.75, 0.52),),
+        "smooth": ((0.37, 0.03, 0.70, 0.17),),
+        "texture": ((0.45, 0.72, 0.62, 0.90),),
+    },
+    "IMG-4": {
+        "protected": ((0.68, 0.36, 0.79, 0.59),),
+        "smooth": ((0.42, 0.04, 0.72, 0.20),),
+        "texture": ((0.52, 0.60, 0.65, 0.75),),
+    },
+    "IMG-5": {
+        "protected": ((0.44, 0.21, 0.56, 0.32),),
+        "smooth": ((0.31, 0.04, 0.65, 0.17),),
+        "texture": ((0.40, 0.46, 0.64, 0.69),),
+    },
+    "IMG-6": {
+        "protected": ((0.38, 0.18, 0.57, 0.31),),
+        "smooth": ((0.31, 0.02, 0.68, 0.14),),
+        "texture": ((0.36, 0.48, 0.63, 0.75),),
+    },
+    "IMG-7": {
+        "protected": ((0.44, 0.51, 0.62, 0.68),),
+        "smooth": ((0.32, 0.05, 0.68, 0.22),),
+        "texture": ((0.53, 0.70, 0.71, 0.83),),
+    },
+    "IMG-8": {
+        "protected": ((0.42, 0.56, 0.82, 0.89),),
+        "smooth": ((0.64, 0.05, 0.90, 0.20),),
+        "texture": ((0.10, 0.79, 0.38, 0.96),),
+    },
+    "IMG-9": {
+        "protected": ((0.44, 0.69, 0.57, 0.91),),
+        "smooth": ((0.63, 0.02, 0.88, 0.16),),
+        "texture": ((0.05, 0.58, 0.39, 0.76),),
+    },
+    "IMG-10": {
+        "protected": ((0.69, 0.14, 0.84, 0.31),),
+        "smooth": ((0.39, 0.04, 0.63, 0.20),),
+        "texture": ((0.60, 0.52, 0.84, 0.77),),
+    },
+    "IMG-11": {
+        "protected": ((0.24, 0.55, 0.46, 0.82),),
+        "smooth": ((0.46, 0.04, 0.71, 0.18),),
+        "texture": ((0.48, 0.55, 0.80, 0.72),),
+    },
+}
+
 
 def pinned_postwash_fixture() -> Image.Image:
     width, height = 127, 83
@@ -79,7 +159,7 @@ def encoded_bytes(image: Image.Image) -> bytes:
 
 
 class GeometryLadderTests(unittest.TestCase):
-    def test_phase_a_allowlist_and_vector_fixture(self):
+    def test_frozen_allowlist_and_vector_fixture(self):
         vectors_path = Path(__file__).with_name("geometry_settings_vectors.json")
         vectors = json.loads(vectors_path.read_text(encoding="utf-8"))
         self.assertEqual([row["preset_id"] for row in vectors], list(GEOMETRY_PRESETS))
@@ -89,6 +169,23 @@ class GeometryLadderTests(unittest.TestCase):
             self.assertEqual(geometry_preset_id(geometry), row["preset_id"])
             self.assertTrue(row["unseeded_code"].startswith("SEQ-G"))
             self.assertTrue(row["lab_ctla1_code"].startswith("SEQ-G"))
+
+    def test_phase_b_registry_is_exact_and_all_tuples_are_unique(self):
+        expected = {
+            "geom-j1": {"resample_mode": "affine", "resize_target": 800, "tilt_degrees": 1.2, "micro_warp": "shift"},
+            "geom-j2": {"resample_mode": "affine", "resize_target": 800, "tilt_degrees": 0.6, "micro_warp": "shift"},
+            "geom-j3": {"resample_mode": "affine", "resize_target": 800, "tilt_degrees": 1.2, "micro_warp": "none"},
+        }
+        self.assertEqual(tuple(GEOMETRY_PRESETS)[-3:], PHASE_B_IDS)
+        self.assertEqual({key: GEOMETRY_PRESETS[key] for key in PHASE_B_IDS}, expected)
+        tuple_keys = {
+            (
+                value["resample_mode"], value["resize_target"],
+                value["tilt_degrees"], value["micro_warp"],
+            )
+            for value in GEOMETRY_PRESETS.values()
+        }
+        self.assertEqual(len(tuple_keys), len(GEOMETRY_PRESETS))
 
     def test_boundary_rejects_partial_arbitrary_extra_and_conflicting_blocks(self):
         base = dict(GEOMETRY_PRESETS["geom-r3"])
@@ -198,6 +295,16 @@ class GeometryLadderTests(unittest.TestCase):
                 self.assertEqual(first.tobytes(), second.tobytes())
                 self.assertEqual(first_report["inverse_matrix"], second_report["inverse_matrix"])
 
+    def test_phase_a_pixel_goldens_remain_byte_exact(self):
+        fixture = pinned_postwash_fixture()
+        for preset_id in PHASE_A_IDS:
+            with self.subTest(preset_id=preset_id):
+                output, _ = apply_geometry(fixture, GEOMETRY_PRESETS[preset_id])
+                self.assertEqual(
+                    hashlib.sha256(output.tobytes()).hexdigest(),
+                    PHASE_A_PIXEL_SHA256[preset_id],
+                )
+
     def test_replicated_kernel_strip_thresholds(self):
         thresholds = {
             "geom-r5": {"horizontal": 6, "vertical": 6},
@@ -236,37 +343,48 @@ class GeometryLadderTests(unittest.TestCase):
                 self.assertAlmostEqual(retained, retained_expected, places=14)
                 self.assertGreaterEqual(retained, 0.90)
 
-    JOINT_SIZES = (
-        (1250, 1250), (1250, 703), (703, 1250),
-        (1000, 1000), (1000, 562), (562, 1000),
-        (800, 800), (800, 450), (450, 800),
-    )
+    JOINT_SIZES = ((800, 800), (800, 450), (450, 800))
 
-    def test_prospective_joint_tuples_keep_the_lanczos_margin_all_caps(self):
-        # v4.4 §5 conservative construction: every permitted tuple, including
-        # the Phase-B J joints, must hold margin >= LANCZOS4_SUPPORT by
-        # construction on ALL resize caps and orientations.  The Phase-A
-        # allow-list still rejects these tuples; these fixtures pin the
-        # transform math the Phase-B build must reuse.  (The superseded v4.3
-        # form under-scaled on 800/1000-cap portrait joints: measured
-        # 3.9891-3.9974 px.)
-        base = {
-            "resample_mode": "affine",
-            "resize_target": 1250,
-            "tilt_degrees": 0.6,
-            "micro_warp": "shift_squash",
-        }
-        for width, height in self.JOINT_SIZES:
-            for tilt in (0.6, 1.2):
-                for micro_warp in ("shift", "shift_squash"):
-                    with self.subTest(width=width, height=height, tilt=tilt, micro_warp=micro_warp):
-                        geometry = {**base, "tilt_degrees": tilt, "micro_warp": micro_warp}
-                        _, inverse, _, _ = build_affine_matrices(width, height, geometry)
-                        self.assertGreaterEqual(
-                            source_coordinate_margin(width, height, inverse),
-                            LANCZOS4_SUPPORT,
+    def test_registered_phase_b_joints_pin_matrices_margin_and_coverage(self):
+        for preset_id in PHASE_B_IDS:
+            geometry = GEOMETRY_PRESETS[preset_id]
+            for width, height in self.JOINT_SIZES:
+                with self.subTest(preset_id=preset_id, width=width, height=height):
+                    forward, inverse, scale, border_mode = build_affine_matrices(
+                        width, height, geometry
+                    )
+                    self.assertEqual(forward.dtype, np.float64)
+                    self.assertEqual(inverse.dtype, np.float64)
+                    self.assertGreaterEqual(
+                        source_coordinate_margin(width, height, inverse),
+                        LANCZOS4_SUPPORT,
+                    )
+                    self.assertEqual(border_mode, cv2.BORDER_CONSTANT)
+                    self.assertEqual(int(diagnostic_mask(width, height, inverse).min()), 255)
+                    if (width, height) == (800, 800):
+                        np.testing.assert_allclose(
+                            inverse,
+                            np.asarray(PHASE_B_PINNED_INVERSE_800_SQUARE[preset_id]),
+                            rtol=0.0,
+                            atol=1e-12,
                         )
-                        self.assertEqual(int(diagnostic_mask(width, height, inverse).min()), 255)
+                        self.assertLessEqual(scale, 1.05)
+                        self.assertGreaterEqual(retained_source_area_fraction(forward), 0.90)
+                        for image_id, roi_classes in FROZEN_CORPUS_ROIS.items():
+                            for roi_class, boxes in roi_classes.items():
+                                for box in boxes:
+                                    with self.subTest(
+                                        preset_id=preset_id,
+                                        image_id=image_id,
+                                        roi_class=roi_class,
+                                    ):
+                                        analysis = analyze_normalized_box(
+                                            box, width, height, forward
+                                        )
+                                        self.assertTrue(analysis["valid"])
+                                        if roi_class == "protected":
+                                            self.assertFalse(analysis["clipped"])
+                                        self.assertLessEqual(analysis["area_ratio"], 1.5)
 
     def test_v43_joint_formula_underscales_on_small_portrait_regression(self):
         # Pin the measured defect that forced v4.4: the v4.3 form

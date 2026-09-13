@@ -6,5 +6,8 @@
   {"preset_id":"geom-r3","geometry":{"resample_mode":"affine","resize_target":1250,"tilt_degrees":0.6,"micro_warp":"none"},"unseeded_code":"SEQ-G3-xx7n6rnwqr3r","lab_ctla1_code":"SEQ-G3-hdhzzbffurlt"},
   {"preset_id":"geom-r4","geometry":{"resample_mode":"affine","resize_target":1250,"tilt_degrees":1.2,"micro_warp":"none"},"unseeded_code":"SEQ-G4-4ozjt4hh6xd3","lab_ctla1_code":"SEQ-G4-6qdn22oroob2"},
   {"preset_id":"geom-r5","geometry":{"resample_mode":"affine","resize_target":1250,"tilt_degrees":0,"micro_warp":"shift"},"unseeded_code":"SEQ-G5-3dg2guf3xbub","lab_ctla1_code":"SEQ-G5-dxcvkvndsy33"},
-  {"preset_id":"geom-r6","geometry":{"resample_mode":"affine","resize_target":1250,"tilt_degrees":0,"micro_warp":"shift_squash"},"unseeded_code":"SEQ-G6-fbo7bz7ovtus","lab_ctla1_code":"SEQ-G6-jzvg3zezpltk"}
+  {"preset_id":"geom-r6","geometry":{"resample_mode":"affine","resize_target":1250,"tilt_degrees":0,"micro_warp":"shift_squash"},"unseeded_code":"SEQ-G6-fbo7bz7ovtus","lab_ctla1_code":"SEQ-G6-jzvg3zezpltk"},
+  {"preset_id":"geom-j1","geometry":{"resample_mode":"affine","resize_target":800,"tilt_degrees":1.2,"micro_warp":"shift"},"unseeded_code":"SEQ-GJ1-qks572z33hqd","lab_ctla1_code":"SEQ-GJ1-2uzzelp2iovu"},
+  {"preset_id":"geom-j2","geometry":{"resample_mode":"affine","resize_target":800,"tilt_degrees":0.6,"micro_warp":"shift"},"unseeded_code":"SEQ-GJ2-dl4e3jxyjy5b","lab_ctla1_code":"SEQ-GJ2-l7qwsawpj7on"},
+  {"preset_id":"geom-j3","geometry":{"resample_mode":"affine","resize_target":800,"tilt_degrees":1.2,"micro_warp":"none"},"unseeded_code":"SEQ-GJ3-egdcdf4jeqs4","lab_ctla1_code":"SEQ-GJ3-gih34nuhhjao"}
 ]
