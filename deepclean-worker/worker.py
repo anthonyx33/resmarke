@@ -53,6 +53,17 @@ LAB_SEED_PATTERN = re.compile(r"^lab-[a-z0-9]{1,32}$")
 class InvalidLabSeedError(ValueError):
     pass
 
+
+class TerminalDeliveryError(RuntimeError):
+    """Sanitized terminal-webhook exhaustion or permanent rejection."""
+
+    def __init__(self, error_class, attempts, status_code=None):
+        self.error_class = str(error_class)
+        self.attempts = int(attempts)
+        self.status_code = status_code
+        detail = f"HTTP {status_code}" if status_code is not None else self.error_class
+        super().__init__(f"{detail} after {self.attempts} notification attempt(s)")
+
 # Profiles drive the python-side optimizations (resolution cap + restore-to-
 # original + timeout) plus small graph mutations before /prompt submission.
 # Standard skips the Z-Image/SAM/MediaPipe/RES4LYF face subgraph by rewiring
@@ -143,6 +154,9 @@ def handler(job):
         lab_seed = None
         checkpoint_dir = None
         capture_errors = []
+        output_uploaded = False
+        output_sha = None
+        completed_body = None
 
         try:
             download(payload["input_url"], input_path)
@@ -681,38 +695,43 @@ def handler(job):
             after_report = identify_image(final_path)
             output_sha = sha256_file(final_path)
             upload_output(payload["output_path"], final_path)
+            output_uploaded = True
             runtime_ms = int((time.time() - started) * 1000)
-
-            notify(
-                webhook_url,
-                webhook_secret,
-                {
-                    "job_id": job_id,
-                    "status": "completed",
-                    "input_sha256": input_sha,
-                    "output_sha256": output_sha,
-                    "engine_version": engine_version(),
-                    "runtime_ms": runtime_ms,
-                    "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
-                    "report": {
-                        "profile": profile,
-                        "output_mode": payload.get("output_mode", "sealed"),
-                        "creator_id_hash": short_hash(creator_id),
-                        "engine": engine_report,
-                        "quality": quality,
-                        "neural_texture": neural_texture_report,
-                        "content_repair": content_repair_report,
-                        "photo_naturalization": naturalization_report["photo_naturalization"],
-                        "expert_refinement": naturalization_report["expert_refinement"],
-                        "identify_before": before_report,
-                        "identify_after": after_report,
-                        "checkpoints": checkpoint_manifest,
-                    },
+            completed_body = {
+                "job_id": job_id,
+                "status": "completed",
+                "input_sha256": input_sha,
+                "output_sha256": output_sha,
+                "engine_version": engine_version(),
+                "runtime_ms": runtime_ms,
+                "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
+                "report": {
+                    "profile": profile,
+                    "output_mode": payload.get("output_mode", "sealed"),
+                    "creator_id_hash": short_hash(creator_id),
+                    "engine": engine_report,
+                    "quality": quality,
+                    "neural_texture": neural_texture_report,
+                    "content_repair": content_repair_report,
+                    "photo_naturalization": naturalization_report["photo_naturalization"],
+                    "expert_refinement": naturalization_report["expert_refinement"],
+                    "identify_before": before_report,
+                    "identify_after": after_report,
+                    "checkpoints": checkpoint_manifest,
                 },
-            )
-            return {"ok": True, "job_id": job_id, "runtime_ms": runtime_ms}
+            }
         except Exception as exc:
             runtime_ms = int((time.time() - started) * 1000)
+            if output_uploaded:
+                return {
+                    "ok": True,
+                    "processing_status": "completed",
+                    "delivery_status": "pending",
+                    "job_id": job_id,
+                    "output_sha256": output_sha,
+                    "runtime_ms": runtime_ms,
+                    "delivery_error": f"{type(exc).__name__} while constructing completed notification",
+                }
             invalid_seed = isinstance(exc, InvalidLabSeedError)
             checkpoint_manifest = build_checkpoint_manifest(
                 checkpoint_dir,
@@ -726,23 +745,56 @@ def handler(job):
             }
             if invalid_seed:
                 failure_report["seed"] = "invalid"
-            notify(
-                webhook_url,
-                webhook_secret,
-                {
-                    "job_id": job_id,
-                    "status": "failed",
-                    "engine_version": engine_version(),
-                    "runtime_ms": runtime_ms,
-                    "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
-                    "failure_reason": str(exc),
-                    "report": failure_report,
-                },
-            )
-            result = {"ok": False, "job_id": job_id, "error": str(exc)}
+            failed_body = {
+                "job_id": job_id,
+                "status": "failed",
+                "engine_version": engine_version(),
+                "runtime_ms": runtime_ms,
+                "gpu_type": os.environ.get("RUNPOD_GPU_TYPE", "unknown"),
+                "failure_reason": str(exc),
+                "report": failure_report,
+            }
+            try:
+                notify(webhook_url, webhook_secret, failed_body)
+                delivery_status = "acknowledged"
+                delivery_error = None
+            except TerminalDeliveryError as delivery_exc:
+                delivery_status = "pending"
+                delivery_error = str(delivery_exc)
+            result = {
+                "ok": False,
+                "processing_status": "failed",
+                "delivery_status": delivery_status,
+                "job_id": job_id,
+                "error": str(exc),
+                "runtime_ms": runtime_ms,
+            }
+            if delivery_error is not None:
+                result["delivery_error"] = delivery_error
             if invalid_seed:
                 result["seed"] = "invalid"
             return result
+        else:
+            try:
+                notify(webhook_url, webhook_secret, completed_body)
+            except TerminalDeliveryError as delivery_exc:
+                return {
+                    "ok": True,
+                    "processing_status": "completed",
+                    "delivery_status": "pending",
+                    "job_id": job_id,
+                    "output_sha256": output_sha,
+                    "runtime_ms": runtime_ms,
+                    "delivery_error": str(delivery_exc),
+                }
+            return {
+                "ok": True,
+                "processing_status": "completed",
+                "delivery_status": "acknowledged",
+                "job_id": job_id,
+                "output_sha256": output_sha,
+                "runtime_ms": runtime_ms,
+            }
         finally:
             if payload.get("input_path"):
                 delete_storage_object("deepclean-inputs", payload["input_path"])
@@ -1323,14 +1375,62 @@ def _json_safe(value):
     return value
 
 
-def notify(webhook_url, secret, body):
-    response = requests.post(
-        webhook_url,
-        data=json.dumps({**_json_safe(body), "signature": secret}),
-        headers={"content-type": "application/json"},
-        timeout=30,
+def notify(webhook_url, secret, body, *, sleeper=None):
+    """Deliver one immutable terminal body with the frozen retry policy."""
+    if sleeper is None:
+        sleeper = time.sleep
+    delays = (0.5, 1.0, 2.0, 4.0)
+    serialized = json.dumps(
+        {**_json_safe(body), "signature": secret},
+        separators=(",", ":"),
     )
-    response.raise_for_status()
+    job_id = body.get("job_id", "unknown")
+    terminal_status = body.get("status", "unknown")
+    last_error = None
+
+    for attempt in range(1, 6):
+        retryable = False
+        try:
+            response = requests.post(
+                webhook_url,
+                data=serialized,
+                headers={"content-type": "application/json"},
+                timeout=30,
+            )
+            response_status = int(response.status_code)
+            if 200 <= response_status < 300:
+                print(
+                    f"[deepclean:terminal] job={job_id} status={terminal_status} "
+                    f"attempt={attempt} response={response_status}",
+                    flush=True,
+                )
+                return {"attempts": attempt, "status_code": response_status}
+            retryable = response_status in (408, 425, 429) or response_status >= 500
+            last_error = TerminalDeliveryError("HTTPError", attempt, response_status)
+            print(
+                f"[deepclean:terminal] job={job_id} status={terminal_status} "
+                f"attempt={attempt} response={response_status} error=HTTPError",
+                flush=True,
+            )
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+            retryable = True
+            last_error = TerminalDeliveryError(type(exc).__name__, attempt)
+            print(
+                f"[deepclean:terminal] job={job_id} status={terminal_status} "
+                f"attempt={attempt} error={type(exc).__name__}",
+                flush=True,
+            )
+        except requests.exceptions.RequestException as exc:
+            last_error = TerminalDeliveryError(type(exc).__name__, attempt)
+            print(
+                f"[deepclean:terminal] job={job_id} status={terminal_status} "
+                f"attempt={attempt} error={type(exc).__name__}",
+                flush=True,
+            )
+
+        if not retryable or attempt == 5:
+            raise last_error
+        sleeper(delays[attempt - 1])
 
 
 def log_cache_env():
