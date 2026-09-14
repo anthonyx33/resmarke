@@ -15,7 +15,10 @@ export type GeometryPresetId =
   | "geom-r3"
   | "geom-r4"
   | "geom-r5"
-  | "geom-r6";
+  | "geom-r6"
+  | "geom-j1"
+  | "geom-j2"
+  | "geom-j3";
 export type PresetId = FrozenPresetId | "remint-1-01" | "4d-cam-1" | "4d-1a" | GeometryPresetId;
 export type OpticsPsfScale = 0.5 | 1;
 export type GeometryResampleMode = "bypass" | "affine";
@@ -185,6 +188,9 @@ export const GEOMETRY_PRESET_IDS: readonly GeometryPresetId[] = [
   "geom-r4",
   "geom-r5",
   "geom-r6",
+  "geom-j1",
+  "geom-j2",
+  "geom-j3",
 ] as const;
 
 const GEOMETRY_PRESET_GEOMETRY: Record<GeometryPresetId, GeometrySettings> = {
@@ -196,6 +202,9 @@ const GEOMETRY_PRESET_GEOMETRY: Record<GeometryPresetId, GeometrySettings> = {
   "geom-r4": { resampleMode: "affine", resizeTarget: 1250, tiltDegrees: 1.2, microWarp: "none" },
   "geom-r5": { resampleMode: "affine", resizeTarget: 1250, tiltDegrees: 0, microWarp: "shift" },
   "geom-r6": { resampleMode: "affine", resizeTarget: 1250, tiltDegrees: 0, microWarp: "shift_squash" },
+  "geom-j1": { resampleMode: "affine", resizeTarget: 800, tiltDegrees: 1.2, microWarp: "shift" },
+  "geom-j2": { resampleMode: "affine", resizeTarget: 800, tiltDegrees: 0.6, microWarp: "shift" },
+  "geom-j3": { resampleMode: "affine", resizeTarget: 800, tiltDegrees: 1.2, microWarp: "none" },
 };
 
 function geometryDefinition(
@@ -220,7 +229,7 @@ function geometryDefinition(
   };
 }
 
-/** Phase-A geometry presets. Joint Phase-B tuples require a separate build. */
+/** Frozen Phase-A presets plus exactly three mechanically selected Phase-B joints. */
 export const GEOMETRY_PRESET_DEFINITIONS: Record<GeometryPresetId, PresetDefinition> = {
   "geom-r0": geometryDefinition("geom-r0", "Geometry R0 — bypass control", "Config A with geometry bypassed"),
   "geom-x0": geometryDefinition("geom-x0", "Geometry X0 — identity", "1250 cap · identity affine resample"),
@@ -230,6 +239,9 @@ export const GEOMETRY_PRESET_DEFINITIONS: Record<GeometryPresetId, PresetDefinit
   "geom-r4": geometryDefinition("geom-r4", "Geometry R4 — tilt 1.2°", "1250 cap · 1.2° displayed CCW tilt"),
   "geom-r5": geometryDefinition("geom-r5", "Geometry R5 — micro shift", "1250 cap · +0.5/+0.3 px source shift"),
   "geom-r6": geometryDefinition("geom-r6", "Geometry R6 — shift + squash", "1250 cap · 0.988 horizontal squash + shift"),
+  "geom-j1": geometryDefinition("geom-j1", "Geometry J1 — 800 px + tilt 1.2° + shift", "800 cap · 1.2° displayed CCW tilt · +0.5/+0.3 px source shift"),
+  "geom-j2": geometryDefinition("geom-j2", "Geometry J2 — 800 px + tilt 0.6° + shift", "800 cap · 0.6° displayed CCW tilt · +0.5/+0.3 px source shift"),
+  "geom-j3": geometryDefinition("geom-j3", "Geometry J3 — 800 px + tilt 1.2°", "800 cap · 1.2° displayed CCW tilt"),
 };
 
 /** Kept separate so shared consumers still enumerate exactly four frozen configs. */
@@ -312,7 +324,7 @@ export function geometryPresetIdForGeometry(value: GeometrySettings): GeometryPr
   return null;
 }
 
-/** Strict canonical parser: only one of the eight registered Phase-A tuples is valid. */
+/** Strict canonical parser: only a frozen registered geometry tuple is valid. */
 export function validateGeometrySettings(value: unknown, supplied: boolean): GeometrySettings | undefined {
   if (!supplied) return undefined;
   if (!isRecord(value)) {
@@ -332,7 +344,7 @@ export function validateGeometrySettings(value: unknown, supplied: boolean): Geo
     (geometry.microWarp !== "none" && geometry.microWarp !== "shift" && geometry.microWarp !== "shift_squash") ||
     geometryPresetIdForGeometry(geometry) === null
   ) {
-    throw new SettingsValidationError("geometry must exactly match one registered Phase-A preset.");
+    throw new SettingsValidationError("geometry must exactly match one registered geometry preset.");
   }
   return { ...geometry };
 }
@@ -474,6 +486,9 @@ export function buildSettingsCode(input: SettingsCodeInput): string {
       "geom-r4": "G4",
       "geom-r5": "G5",
       "geom-r6": "G6",
+      "geom-j1": "GJ1",
+      "geom-j2": "GJ2",
+      "geom-j3": "GJ3",
     };
     return `${marker}-${geometryMarker[geometryId]}-${hash}`;
   }

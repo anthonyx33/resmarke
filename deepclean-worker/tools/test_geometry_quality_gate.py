@@ -64,6 +64,19 @@ def geometry_settings(preset_id: str) -> dict:
     }
 
 
+def geometry_hd_settings(preset_id: str) -> dict:
+    settings = geometry_settings(preset_id)
+    return {
+        "mode": "ds-remint-v8.9-hd",
+        "ds_remint_v8_9": settings["ds_remint_v8_9"],
+        "quality_finish": {
+            "preset": "standard",
+            "finish_mode": "template",
+            "scale": 1.0,
+        },
+    }
+
+
 def load_worker_without_server_start():
     existing = sys.modules.get("worker")
     if existing is not None:
@@ -221,6 +234,48 @@ class GeometryQualityGateTests(unittest.TestCase):
         self.assertIs(private_reference, geometry_outputs[0])
         self.assertIs(private_reference, observed_references[0])
 
+    def test_phase_b_direct_v89_uses_exact_geometry_matched_reference(self):
+        source = detailed_image(320, 288)
+        for preset_id in ("geom-j1", "geom-j2", "geom-j3"):
+            observed_references = []
+            geometry_outputs = []
+
+            def camera_passthrough(reference, *_args, **_kwargs):
+                observed_references.append(reference)
+                return reference.copy(), {"test_passthrough": True}
+
+            def tracked_geometry(image, geometry):
+                result = apply_geometry(image, geometry)
+                geometry_outputs.append(result[0])
+                return result
+
+            with self.subTest(preset_id=preset_id), tempfile.TemporaryDirectory() as tmpdir:
+                source_path = Path(tmpdir) / "source.png"
+                output_path = Path(tmpdir) / "output.jpg"
+                source.save(source_path, format="PNG")
+                with patch(
+                    "ds_remint_v8_8._v88_candidate", side_effect=camera_passthrough
+                ), patch(
+                    "ds_remint_v8_8.apply_geometry", side_effect=tracked_geometry
+                ) as geometry_call:
+                    report = apply_ds_remint_v8_9(
+                        source_path,
+                        output_path,
+                        creator_id=f"phase-b-{preset_id}",
+                        settings=geometry_settings(preset_id),
+                    )
+
+            private_reference = report[PRIVATE_GEOMETRY_REFERENCE_KEY]
+            self.assertEqual(geometry_call.call_count, 1)
+            self.assertEqual(report["layers"]["geometry"]["warp_affine_calls"], 1)
+            self.assertIs(private_reference, geometry_outputs[0])
+            self.assertIs(private_reference, observed_references[0])
+            consumed, required = pop_quality_reference(report)
+            self.assertIs(consumed, private_reference)
+            self.assertTrue(required)
+            self.assertNotIn(PRIVATE_GEOMETRY_REFERENCE_KEY, report)
+            json.dumps(report)
+
     def test_r0_pipeline_returns_post_resize_reference_with_zero_transforms(self):
         source = detailed_image(320, 288)
         observed_references = []
@@ -359,6 +414,90 @@ class GeometryQualityGateTests(unittest.TestCase):
         public_engine = public_bodies[-1]["report"]["engine"]
         self.assertNotIn(PRIVATE_GEOMETRY_REFERENCE_KEY, public_engine)
         json.dumps(worker._json_safe(public_bodies[-1]))
+
+    def test_phase_b_hd_handoff_uses_matched_reference_and_serializes_no_private_object(self):
+        worker = load_worker_without_server_start()
+        source = detailed_image(300, 300)
+
+        for preset_id in ("geom-j1", "geom-j2", "geom-j3"):
+            matched_reference = source.copy()
+            public_bodies = []
+            quality_arguments = {}
+
+            def fake_download(_url, path):
+                source.save(path, format="PNG")
+
+            def fake_engine(**kwargs):
+                matched_reference.save(kwargs["output_path"], format="PNG")
+                return {
+                    "settings": {"geometry": dict(GEOMETRY_PRESETS[preset_id])},
+                    PRIVATE_GEOMETRY_REFERENCE_KEY: matched_reference,
+                    "layers": {},
+                    "checkpoint_errors": [],
+                }
+
+            def fake_finish(input_path, output_path, **_kwargs):
+                shutil.copyfile(input_path, output_path)
+                return {"applied": True, "checkpoint_errors": []}
+
+            def fake_quality(_input_path, _output_path, **kwargs):
+                quality_arguments.update(kwargs)
+                return {
+                    "ok": True,
+                    "reference_mode": GEOMETRY_REFERENCE_MODE,
+                    "psnr": 99.0,
+                    "variance": float(np.var(np.asarray(matched_reference))),
+                    "min_psnr_db": 18.0,
+                }
+
+            def fake_finalize(cleaned_path, output_path, **_kwargs):
+                shutil.copyfile(cleaned_path, output_path)
+                return {
+                    "photo_naturalization": {"enabled": False},
+                    "expert_refinement": {"applied": False},
+                }
+
+            payload = {
+                "job_id": f"phase-b-hd-{preset_id}",
+                "webhook_url": "https://example.invalid/webhook",
+                "webhook_secret": "test-secret",
+                "input_url": "https://example.invalid/input.png",
+                "input_path": f"incoming/{preset_id}.png",
+                "output_path": f"outgoing/{preset_id}.jpg",
+                "profile": "standard",
+                "output_mode": "stripped",
+                "expert_refinement": geometry_hd_settings(preset_id),
+            }
+            with self.subTest(preset_id=preset_id), patch.object(
+                worker, "download", side_effect=fake_download
+            ), patch.object(
+                worker, "identify_image", return_value={}
+            ), patch.object(
+                worker, "apply_ds_remint_v8_9", side_effect=fake_engine
+            ), patch.object(
+                worker, "apply_quality_finish", side_effect=fake_finish
+            ), patch.object(
+                worker, "make_detector", return_value=None
+            ), patch.object(
+                worker, "quality_check", side_effect=fake_quality
+            ), patch.object(
+                worker, "finalize_output", side_effect=fake_finalize
+            ), patch.object(
+                worker, "upload_output"
+            ), patch.object(
+                worker, "delete_storage_object"
+            ), patch.object(
+                worker, "notify", side_effect=lambda _url, _secret, body: public_bodies.append(body)
+            ):
+                result = worker.handler({"input": payload})
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["delivery_status"], "acknowledged")
+            self.assertIs(quality_arguments["matched_reference"], matched_reference)
+            self.assertTrue(quality_arguments["geometry_reference_required"])
+            public_engine = public_bodies[-1]["report"]["engine"]
+            self.assertNotIn(PRIVATE_GEOMETRY_REFERENCE_KEY, public_engine)
+            json.dumps(worker._json_safe(public_bodies[-1]))
 
 
 if __name__ == "__main__":

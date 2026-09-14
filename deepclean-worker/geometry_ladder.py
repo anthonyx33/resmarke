@@ -1,9 +1,9 @@
 """Frozen C8 v4.4 geometry-ladder contract.
 
 Conservative shift-aware overscan margin (§5 of the v4.4 master brief)
-and the aspect-safe 0.90 retained-area floor.  The Phase-A allow-list is
-deliberately closed.  A future Phase-B build may extend the tuple table,
-but it must reuse the transform construction here.
+and the aspect-safe 0.90 retained-area floor.  The allow-list contains the
+eight frozen Phase-A cells plus exactly three mechanically selected Phase-B
+joints, all using the same transform construction.
 """
 
 from __future__ import annotations
@@ -30,6 +30,9 @@ GEOMETRY_PRESETS: dict[str, dict[str, Any]] = {
     "geom-r4": {"resample_mode": "affine", "resize_target": 1250, "tilt_degrees": 1.2, "micro_warp": "none"},
     "geom-r5": {"resample_mode": "affine", "resize_target": 1250, "tilt_degrees": 0.0, "micro_warp": "shift"},
     "geom-r6": {"resample_mode": "affine", "resize_target": 1250, "tilt_degrees": 0.0, "micro_warp": "shift_squash"},
+    "geom-j1": {"resample_mode": "affine", "resize_target": 800, "tilt_degrees": 1.2, "micro_warp": "shift"},
+    "geom-j2": {"resample_mode": "affine", "resize_target": 800, "tilt_degrees": 0.6, "micro_warp": "shift"},
+    "geom-j3": {"resample_mode": "affine", "resize_target": 800, "tilt_degrees": 1.2, "micro_warp": "none"},
 }
 
 _GEOMETRY_KEYS = frozenset(("resample_mode", "resize_target", "tilt_degrees", "micro_warp"))
@@ -58,7 +61,7 @@ def normalize_geometry_settings(
     supplied: bool,
     output_target: Any = None,
 ) -> dict[str, Any] | None:
-    """Validate a complete wire-format block against the eight Phase-A cells."""
+    """Validate a complete wire-format block against the frozen tuple registry."""
     if not supplied:
         return None
     if not isinstance(value, dict):
@@ -85,7 +88,7 @@ def normalize_geometry_settings(
         "micro_warp": value["micro_warp"],
     }
     if _tuple_key(normalized) not in _ALLOWED_TUPLES:
-        raise ValueError("geometry must exactly match one registered Phase-A preset")
+        raise ValueError("geometry must exactly match one registered geometry preset")
 
     if output_target is not None:
         if not _numeric(output_target) or float(output_target) != float(normalized["resize_target"]):
@@ -98,7 +101,7 @@ def geometry_preset_id(geometry: dict[str, Any]) -> str:
     for preset_id, frozen in GEOMETRY_PRESETS.items():
         if _tuple_key(frozen) == key:
             return preset_id
-    raise ValueError("geometry tuple is not a registered Phase-A preset")
+    raise ValueError("geometry tuple is not a registered geometry preset")
 
 
 def _transform_components(geometry: dict[str, Any]) -> tuple[float, float, float, float]:
